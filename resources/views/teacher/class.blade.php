@@ -1,0 +1,53 @@
+@extends('layouts.portal', ['title' => $class->subject . ' Students'])
+
+@section('content')
+<a href="{{ route('teacher.classes') }}" class="text-sm font-bold text-violet-700 hover:underline">Back to classes</a>
+
+<div class="mt-4 mb-6">
+    <h1 class="text-2xl font-black text-slate-900">{{ $class->subject }}</h1>
+    <p class="mt-1 text-sm text-slate-500">Grade {{ $class->grade_level }} - {{ $class->section }} · {{ $class->room ?: 'No room' }} · {{ $class->schedule ?: 'No schedule' }} · {{ $isCollege ? 'College 1–5 scale (1 is highest)' : 'SHS 1–100 scale' }}</p>
+</div>
+
+<div class="mb-5 flex flex-wrap gap-2">
+    <a href="{{ route('teacher.grades', $class) }}" class="portal-button-primary">Enter grades</a>
+    <a href="{{ route('teacher.attendance', $class) }}" class="portal-button-secondary">Mark attendance</a>
+</div>
+
+<section class="portal-card overflow-hidden">
+    <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+                <th class="px-5 py-3 text-left">Student</th>
+                <th class="px-5 py-3 text-center">Q1</th>
+                <th class="px-5 py-3 text-center">Q2</th>
+                <th class="px-5 py-3 text-center">Q3</th>
+                <th class="px-5 py-3 text-center">Q4</th>
+                <th class="px-5 py-3 text-center">Average</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+            @forelse($students as $student)
+                @php
+                    $sg  = $grades[$student->id] ?? collect();
+                    $avg = $sg->count() ? round($sg->avg('score'), 1) : null;
+                @endphp
+                <tr>
+                    <td class="px-5 py-3">
+                        <p class="font-bold text-slate-800">{{ $student->first_name }} {{ $student->last_name }}</p>
+                        <p class="text-xs text-slate-500">{{ $student->student_id }}</p>
+                    </td>
+                    @foreach([1,2,3,4] as $q)
+                        @php($g = $sg->firstWhere('quarter', $q))
+                        <td class="px-5 py-3 text-center font-bold {{ $g && ($isCollege ? $g->score <= 2 : $g->score >= 90) ? 'text-emerald-700' : ($g && ($isCollege ? $g->score <= 3 : $g->score >= 75) ? 'text-blue-700' : 'text-slate-400') }}">
+                            {{ $g?->score ?? '-' }}
+                        </td>
+                    @endforeach
+                    <td class="px-5 py-3 text-center font-black {{ $avg !== null && ($isCollege ? $avg <= 2 : $avg >= 90) ? 'text-emerald-700' : ($avg !== null && ($isCollege ? $avg <= 3 : $avg >= 75) ? 'text-blue-700' : 'text-slate-400') }}">{{ $avg ?? '-' }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="6" class="px-5 py-10 text-center text-slate-500">No students found.</td></tr>
+            @endforelse
+        </tbody>
+    </table>
+</section>
+@endsection
