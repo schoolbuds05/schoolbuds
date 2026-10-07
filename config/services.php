@@ -40,14 +40,6 @@ return [
     'ca_bundle' => env('GROQ_CA_BUNDLE'),
 ],
 
-    'paymongo' => [
-        'secret_key' => env('PAYMONGO_SECRET_KEY'),
-        'public_key' => env('PAYMONGO_PUBLIC_KEY'),
-        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
-        'success_url' => env('PAYMONGO_SUCCESS_URL', env('APP_URL') . '/payment/success'),
-        'cancel_url' => env('PAYMONGO_CANCEL_URL', env('APP_URL') . '/payment/cancelled'),
-    ],
-
     'qrph' => [
         'account_name' => env('QRPH_ACCOUNT_NAME', 'School Marketplace'),
         'account_number' => env('QRPH_ACCOUNT_NUMBER'),

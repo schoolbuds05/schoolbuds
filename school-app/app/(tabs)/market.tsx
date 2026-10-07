@@ -85,9 +85,6 @@ function buildMarketplaceReceiptHtml(receipt) {
   const receiptDescription = item.size ? `${item.title || 'Marketplace item'} - Size ${item.size}` : (item.title || 'Marketplace item');
   const issuedAt = receipt.issued_at ? new Date(receipt.issued_at).toLocaleString('en-PH') : new Date().toLocaleString('en-PH');
   const paidAt = receipt.paid_at ? new Date(receipt.paid_at).toLocaleString('en-PH') : issuedAt;
-  const paymentId = receipt.paymongo_payment_id
-    ? `<tr><td>Payment ID</td><td>${escapeHtml(receipt.paymongo_payment_id)}</td></tr>`
-    : '';
   const discount = Number(receipt.points_discount ?? 0) > 0
     ? `<tr><td>Points Discount</td><td>-PHP ${money(receipt.points_discount)}</td></tr>`
     : '';
@@ -154,7 +151,6 @@ function buildMarketplaceReceiptHtml(receipt) {
     <table>
       <tr><td>Method</td><td>${escapeHtml(receipt.payment_method || '')}</td></tr>
       <tr><td>Paid At</td><td>${escapeHtml(paidAt)}</td></tr>
-      ${paymentId}
       <tr><td>Subtotal</td><td>PHP ${money(receipt.subtotal)}</td></tr>
       ${discount}
       <tr class="total"><td>Total Paid</td><td>PHP ${money(receipt.total)}</td></tr>
@@ -872,7 +868,7 @@ export default function Market() {
     const isCancelled = order.status === 'cancelled';
     const isRefunded  = order.status === 'refunded';
     const isCompleted = order.status === 'completed';
-    const isPaid      = !isRefunded && (order.status === 'paid' || order.status === 'completed' || !!order.paid_at || order.paymongo_status === 'paid');
+    const isPaid      = !isRefunded && (order.status === 'paid' || order.status === 'completed' || !!order.paid_at);
     const canCancel   = ['reserved', 'pending_verification'].includes(order.status);
     const hasRefundRequest = order.refund_status === 'pending';
     const canRefund   = isPaid && !hasRefundRequest;
@@ -880,7 +876,6 @@ export default function Market() {
       order.status === 'reserved'
       || order.status === 'paid'
       || !!order.paid_at
-      || order.paymongo_status === 'paid'
     );
 
     return (

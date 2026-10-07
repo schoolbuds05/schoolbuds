@@ -15,7 +15,6 @@ use App\Models\User;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class MarketplaceController extends Controller
@@ -231,151 +230,6 @@ class MarketplaceController extends Controller
         return response()->json([
             'item'  => $item->load('seller'),
             'order' => $order->load(['item.seller', 'seller']),
-        ]);
-    }
-
-    // POST /api/marketplace/{item}/paymongo-checkout — create hosted GCash checkout
-    public function paymongoCheckout(Request $request, MarketplaceItem $item)
-    {
-        $request->validate([
-            'quantity' => 'required|integer|min:1',
-            'size' => 'nullable|string|max:30',
-            'points_to_redeem' => 'nullable|integer|min:0',
-        ]);
-
-        if ($item->user_id === $request->user()->id) {
-            return response()->json(['message' => 'You cannot buy your own listing.'], 422);
-        }
-
-        if (!$item->accepts_gcash) {
-            return response()->json(['message' => 'This item does not accept GCash.'], 422);
-        }
-
-        if ($item->approval_status !== 'approved') {
-            return response()->json(['message' => 'This item is still waiting for school approval.'], 422);
-        }
-
-        if ($item->status !== 'available' || $item->stock < 1) {
-            return response()->json(['message' => 'This item is no longer available.'], 422);
-        }
-
-        $quantity = (int) $request->quantity;
-        if ($quantity > $item->stock) {
-            return response()->json(['message' => "Only {$item->stock} item(s) are available."], 422);
-        }
-
-        $size = $this->validatedOrderSize($request, $item);
-        if ($size instanceof \Illuminate\Http\JsonResponse) {
-            return $size;
-        }
-
-        $secretKey = config('services.paymongo.secret_key');
-        if (!$secretKey) {
-            return response()->json(['message' => 'PayMongo is not configured. Add PAYMONGO_SECRET_KEY to your .env file.'], 503);
-        }
-
-        $subtotal = (float) $item->price * $quantity;
-        $redemption = $this->redemptionFor($request, $subtotal);
-        $total = max(0, $subtotal - $redemption['discount']);
-
-        $newStock = max(0, $item->stock - $quantity);
-        $item->update([
-            'stock'  => $newStock,
-            'status' => $newStock === 0 ? 'reserved' : 'available',
-        ]);
-
-        $order = MarketplaceOrder::create([
-            'marketplace_item_id' => $item->id,
-            'buyer_id'            => $request->user()->id,
-            'seller_id'           => $item->user_id,
-            'quantity'            => $quantity,
-            'size'                => $size,
-            'unit_price'          => $item->price,
-            'original_amount'     => $subtotal,
-            'total_amount'        => $total,
-            'points_redeemed'     => $redemption['points'],
-            'points_discount'     => $redemption['discount'],
-            'payment_method'      => 'gcash',
-            'status'              => 'reserved',
-            'paymongo_status'     => 'pending',
-        ]);
-        $this->recordRedemption($order, $redemption);
-
-        ActivityLog::record($request, 'marketplace_checkout_started', "{$request->user()->name} started PayMongo checkout #{$order->id}.", [
-            'subject_type' => MarketplaceOrder::class,
-            'subject_id' => $order->id,
-            'meta' => [
-                'item_id' => $item->id,
-                'quantity' => $quantity,
-                'total_amount' => (float) $total,
-                'payment_method' => 'gcash',
-                'provider' => 'paymongo',
-            ],
-        ]);
-
-        $response = Http::withBasicAuth($secretKey, '')
-            ->acceptJson()
-            ->post('https://api.paymongo.com/v1/checkout_sessions', [
-                'data' => [
-                    'attributes' => [
-                        'description'          => "Marketplace order #{$order->id}",
-                        'reference_number'     => "MKT-{$order->id}",
-                        'line_items'           => [[
-                            'currency' => 'PHP',
-                            'amount'   => (int) round($total * 100),
-                            'name'     => trim(($redemption['points'] > 0 ? "{$item->title} after points discount" : $item->title) . ($size ? " - Size {$size}" : '')),
-                            'quantity' => 1,
-                        ]],
-                        'payment_method_types' => ['gcash'],
-                        'send_email_receipt'   => false,
-                        'show_description'     => true,
-                        'show_line_items'      => true,
-                        'success_url'          => config('services.paymongo.success_url'),
-                        'cancel_url'           => config('services.paymongo.cancel_url'),
-                        'metadata'             => [
-                            'marketplace_order_id' => (string) $order->id,
-                            'marketplace_item_id'  => (string) $item->id,
-                            'buyer_id'             => (string) $request->user()->id,
-                        ],
-                    ],
-                ],
-            ]);
-
-        if (!$response->successful()) {
-            $item->update([
-                'stock'  => $item->stock + $quantity,
-                'status' => 'available',
-            ]);
-            $order->update([
-                'status'          => 'cancelled',
-                'paymongo_status' => 'checkout_failed',
-                'notes'           => $response->json('errors.0.detail') ?? 'PayMongo checkout session could not be created.',
-            ]);
-            $this->refundRedemption($order, 'PayMongo checkout failed.');
-
-            return response()->json(['message' => $order->notes], 422);
-        }
-
-        $session      = $response->json('data');
-        $attributes   = $session['attributes'] ?? [];
-        $checkoutUrl  = $attributes['checkout_url'] ?? $attributes['url'] ?? null;
-
-        $order->update([
-            'paymongo_checkout_id' => $session['id'] ?? null,
-            'checkout_url'         => $checkoutUrl,
-        ]);
-
-        MarketplaceMessage::create([
-            'item_id'     => $item->id,
-            'sender_id'   => $request->user()->id,
-            'receiver_id' => $item->user_id,
-            'message'     => "I started GCash checkout for {$quantity} x {$item->title}" . ($size ? " (size {$size})" : '') . ". Order #{$order->id}.",
-        ]);
-
-        return response()->json([
-            'checkout_url' => $checkoutUrl,
-            'item'         => $item->fresh()->load('seller'),
-            'order'        => $order->fresh()->load(['item.seller', 'seller']),
         ]);
     }
 
@@ -633,7 +487,7 @@ class MarketplaceController extends Controller
             return response()->json(['message' => 'Only the buyer can request a refund.'], 403);
         }
 
-        if (!in_array($order->status, ['paid', 'completed'], true) && !$order->paid_at && $order->paymongo_status !== 'paid') {
+        if (!in_array($order->status, ['paid', 'completed'], true) && !$order->paid_at) {
             return response()->json(['message' => 'Only paid or completed orders can be submitted for refund.'], 422);
         }
 
@@ -760,7 +614,7 @@ class MarketplaceController extends Controller
             return response()->json($order->load(['item.seller', 'seller']));
         }
 
-        if (!in_array($order->status, ['reserved', 'paid'], true) && !$order->paid_at && $order->paymongo_status !== 'paid') {
+        if (!in_array($order->status, ['reserved', 'paid'], true) && !$order->paid_at) {
             return response()->json(['message' => 'This order is not ready to be marked as received.'], 422);
         }
 
@@ -800,7 +654,7 @@ class MarketplaceController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        if (!in_array($order->status, ['paid', 'completed'], true) && !$order->paid_at && $order->paymongo_status !== 'paid') {
+        if (!in_array($order->status, ['paid', 'completed'], true) && !$order->paid_at) {
             return response()->json(['message' => 'Receipts are only available for paid orders.'], 422);
         }
 
@@ -812,7 +666,6 @@ class MarketplaceController extends Controller
             'paid_at' => $order->paid_at,
             'status' => $order->status,
             'payment_method' => strtoupper((string) $order->payment_method),
-            'paymongo_payment_id' => $order->paymongo_payment_id,
             'buyer' => [
                 'name' => $order->buyer?->name,
                 'email' => $order->buyer?->email,
@@ -850,7 +703,7 @@ class MarketplaceController extends Controller
             return response()->json(['message' => 'This checkout is already refunded.'], 422);
         }
 
-        if (in_array($order->status, ['paid', 'completed'], true) || $order->paid_at || $order->paymongo_status === 'paid') {
+        if (in_array($order->status, ['paid', 'completed'], true) || $order->paid_at) {
             return response()->json(['message' => 'Paid orders cannot be cancelled.'], 422);
         }
 
@@ -890,77 +743,6 @@ class MarketplaceController extends Controller
         ]);
 
         return response()->json($order->load(['item.seller', 'seller']));
-    }
-
-    // POST /api/paymongo/webhook — PayMongo payment confirmation
-    public function paymongoWebhook(Request $request)
-    {
-        // TODO: Add your PayMongo webhook signing secret to config/services.php as 'paymongo.webhook_secret'
-        $secret = config('services.paymongo.webhook_secret');
-        if ($secret) {
-            $signature = $request->header('Paymongo-Signature');
-            // Verify HMAC signature
-            if (!$signature || !hash_equals(hash_hmac('sha256', $request->getContent(), $secret), $signature)) {
-                return response()->json(['error' => 'Invalid signature'], 403);
-            }
-        }
-
-        $payload        = $request->all();
-        $attributes     = $payload['data']['attributes'] ?? [];
-        $eventType      = $attributes['type'] ?? null;
-        $eventData      = $attributes['data'] ?? [];
-        $eventAttributes= $eventData['attributes'] ?? [];
-        $metadata       = $eventAttributes['metadata'] ?? [];
-
-        $orderId         = $metadata['marketplace_order_id'] ?? null;
-        $referenceNumber = $eventAttributes['reference_number'] ?? $eventAttributes['external_reference_number'] ?? null;
-        $checkoutId      = $eventData['id'] ?? null;
-
-        $order = $orderId
-            ? MarketplaceOrder::find($orderId)
-            : MarketplaceOrder::where('paymongo_checkout_id', $checkoutId)->first();
-
-        if (!$order && is_string($referenceNumber) && str_starts_with($referenceNumber, 'MKT-')) {
-            $order = MarketplaceOrder::find((int) str_replace('MKT-', '', $referenceNumber));
-        }
-
-        if (!$order) {
-            return response()->json(['received' => true]);
-        }
-
-        if (in_array($order->status, ['cancelled', 'refunded'], true)) {
-            return response()->json(['received' => true]);
-        }
-
-        if (in_array($eventType, ['payment.paid', 'checkout_session.payment.paid', 'checkout_session.completed'], true)) {
-            $order->update([
-                'status'               => 'paid',
-                'paymongo_status'      => 'paid',
-                'paymongo_payment_id'  => $eventAttributes['payment_intent_id'] ?? $eventData['id'] ?? $order->paymongo_payment_id,
-                'paid_at'              => now(),
-            ]);
-            $this->notifyUser(
-                $order->buyer_id,
-                'payment_verified',
-                'Payment received',
-                "Your payment for {$order->item?->title} has been received.",
-                ['order_id' => $order->id]
-            );
-        } elseif (in_array($eventType, ['payment.failed', 'checkout_session.payment.failed'], true)) {
-            $order->update([
-                'paymongo_status' => 'failed',
-                'notes'           => $eventAttributes['failed_message'] ?? 'PayMongo payment failed.',
-            ]);
-            $this->notifyUser(
-                $order->buyer_id,
-                'payment_failed',
-                'Payment failed',
-                $eventAttributes['failed_message'] ?? 'Your marketplace payment failed.',
-                ['order_id' => $order->id]
-            );
-        }
-
-        return response()->json(['received' => true]);
     }
 
     // ── MESSAGES ────────────────────────────────────────────────

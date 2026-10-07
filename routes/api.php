@@ -38,7 +38,6 @@ Route::get('/sections',          [SubjectSectionController::class, 'sectionIndex
 Route::get('/sections/{id}',     [SubjectSectionController::class, 'sectionShow']);
 Route::get('/subjects',          [SubjectSectionController::class, 'subjectIndex']);
 Route::get('/courses',           [CourseController::class, 'index']);
-Route::post('/paymongo/webhook', [MarketplaceController::class, 'paymongoWebhook']);
 
 // ── Protected routes (login required) ────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
@@ -187,7 +186,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/marketplace',                [MarketplaceController::class, 'store']);
     Route::get('/marketplace/{item}',          [MarketplaceController::class, 'show']);
     Route::post('/marketplace/{item}/buy',     [MarketplaceController::class, 'buy']);
-    Route::post('/marketplace/{item}/paymongo-checkout', [MarketplaceController::class, 'paymongoCheckout']);
     Route::put('/marketplace/{item}',          [MarketplaceController::class, 'update']);
     Route::delete('/marketplace/{item}',       [MarketplaceController::class, 'destroy']);
     Route::post('/marketplace/{item}/message', [MarketplaceController::class, 'sendMessage']);

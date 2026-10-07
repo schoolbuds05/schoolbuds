@@ -17,11 +17,11 @@ C:\xampp\htdocs\school-system\school-app\src\api.js
 
 Example:
 
-baseURL: 'http://192.168.16.215:8000/api'
+baseURL: 'http://192.168.16.182:8000/api'
 
 2nd: Expo app
 
-cd C:\xampp\htdocs\school-systems\school-app
+cd C:\xampp\htdocs\school-system\school-app
 npm install
 npm install babel-preset-expo --save-dev
 npx expo start --clear
@@ -31,3 +31,4 @@ Notes:
 - Your phone and PC must be connected to the same Wi-Fi/network.
 - Do not use localhost in the Expo app API URL because localhost means the phone itself, not your PC.
 - If your PC IP changes, update school-app\src\api.js with the new IP.
+- This app is named SchoolBuds and uses the API URL configured in school-app\app.json or .env.local.

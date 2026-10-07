@@ -47,7 +47,7 @@ QUEUE_CONNECTION=database
 FILESYSTEM_DISK=public
 ```
 
-Also copy the real payment and mail values from your local configuration into Cloud's secret environment variables when those features are ready. In particular, set `PAYMONGO_SUCCESS_URL` and `PAYMONGO_CANCEL_URL` to the deployed `APP_URL` paths.
+Configure production mail values in Cloud's secret environment variables when email features are ready.
 
 After deploying, open `https://YOUR-APP.laravel.cloud` and confirm `https://YOUR-APP.laravel.cloud/api/courses` responds. Configure the database and seed accounts before sharing the app.
 
@@ -66,7 +66,7 @@ After deploying, open `https://YOUR-APP.laravel.cloud` and confirm `https://YOUR
 
 3. When prompted, let EAS create and store the Android signing key. Download the resulting APK from the EAS build page and install it on your Android phone.
 
-The `preview` profile produces an installable APK. Do not put passwords, PayMongo secret keys, or other private values in `EXPO_PUBLIC_*` variables; they are embedded in the app.
+The `preview` profile produces an installable APK. Do not put passwords or other private values in `EXPO_PUBLIC_*` variables; they are embedded in the app.
 
 ## 4. Publish to Google Play
 
@@ -88,4 +88,4 @@ The Android package identifier is `com.schoolbuds.app`. It is permanent once pub
 
 ## Custom domain later
 
-When you buy a domain, attach it in Laravel Cloud, change `APP_URL`, update the PayMongo callback URLs, and create a new Android build with `EXPO_PUBLIC_API_URL` set to the new HTTPS origin. Existing installed Android builds will continue to call the old Cloud address until updated.
+When you buy a domain, attach it in Laravel Cloud, change `APP_URL`, and create a new Android build with `EXPO_PUBLIC_API_URL` set to the new HTTPS origin. Existing installed Android builds will continue to call the old Cloud address until updated.

@@ -51,4 +51,14 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
         $response->assertRedirect('/');
     }
+
+    public function test_admins_can_logout(): void
+    {
+        $admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        $response = $this->actingAs($admin)->post('/logout');
+
+        $this->assertGuest();
+        $response->assertRedirect('/');
+    }
 }
