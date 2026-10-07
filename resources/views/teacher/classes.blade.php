@@ -74,6 +74,9 @@
                                         <p class="truncate text-sm font-black text-slate-900">{{ $student->first_name }} {{ $student->last_name }}</p>
                                         <p class="text-xs font-semibold text-slate-500">{{ $student->student_id }} - {{ $student->email }}</p>
                                     </div>
+                                    @if($student->is_irregular)
+                                        <span class="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-amber-800">Irregular</span>
+                                    @endif
                                 </div>
                             @empty
                                 <p class="rounded-xl bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">No students found for this class.</p>

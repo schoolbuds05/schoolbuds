@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\GradeWorkflowService;
 use Illuminate\Http\Request;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
@@ -92,27 +93,47 @@ class AssignmentController extends Controller
         }
 
         $count = (int) ($data['question_count'] ?? 10);
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $key,
-            'Content-Type' => 'application/json',
-        ])->post('https://api.groq.com/openai/v1/chat/completions', [
-            'model' => 'llama-3.3-70b-versatile',
-            'max_tokens' => 1800,
-            'temperature' => 0.4,
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => 'Return only valid JSON. Generate multiple-choice quiz questions from teacher module content.',
+        try {
+            $response = Http::withOptions([
+                'verify' => config('services.groq.ca_bundle') ?: true,
+            ])->withHeaders([
+                'Authorization' => 'Bearer ' . $key,
+                'Content-Type' => 'application/json',
+            ])->timeout(60)->post('https://api.groq.com/openai/v1/chat/completions', [
+                'model' => 'openai/gpt-oss-20b',
+                'max_tokens' => 4096,
+                'temperature' => 0.4,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'Return only valid JSON. Generate multiple-choice quiz questions from teacher module content.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => "Generate {$count} multiple-choice questions. JSON shape: [{\"question\":\"...\",\"choices\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"correct choice\",\"explanation\":\"...\"}]. Module:\n" . mb_substr($content, 0, 24000),
+                    ],
                 ],
-                [
-                    'role' => 'user',
-                    'content' => "Generate {$count} multiple-choice questions. JSON shape: [{\"question\":\"...\",\"choices\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"correct choice\",\"explanation\":\"...\"}]. Module:\n" . mb_substr($content, 0, 24000),
-                ],
-            ],
-        ]);
+            ]);
+        } catch (ConnectionException $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => "PHP could not verify Groq's TLS certificate. If your antivirus or network inspects HTTPS, configure PHP with that trusted root certificate using GROQ_CA_BUNDLE.",
+            ], 503);
+        }
 
         if (!$response->successful()) {
-            return response()->json(['message' => 'AI quiz generation failed.'], 503);
+            $errorMessage = $response->json('error.message');
+            logger()->error('Groq quiz generation request failed.', [
+                'status' => $response->status(),
+                'error' => $errorMessage,
+            ]);
+
+            return response()->json([
+                'message' => $response->status() === 429
+                    ? 'Groq is temporarily rate-limited. Please wait a moment and try again.'
+                    : ($errorMessage ?: 'Groq could not generate the quiz. Please try again.'),
+            ], $response->status() === 429 ? 429 : 503);
         }
 
         $raw = preg_replace('/```json|```/', '', (string) $response->json('choices.0.message.content'));
@@ -133,7 +154,23 @@ class AssignmentController extends Controller
     {
         $this->authorizeAssignmentAccess($request, $assignment);
 
-        $assignment->load(['sectionSubject.section', 'sectionSubject.subject', 'submissions.student']);
+        $assignment->load(['sectionSubject.section', 'sectionSubject.subject']);
+
+        if ($this->isFaculty($request->user()) && (int) $assignment->teacher_id === (int) $request->user()->id) {
+            $assignment->load('submissions.student');
+            return response()->json($assignment);
+        }
+
+        $student = $this->studentFor($request->user());
+        $submission = $student
+            ? AssignmentSubmission::query()
+                ->where('class_assignment_id', $assignment->id)
+                ->where('student_id', $student->id)
+                ->first()
+            : null;
+
+        $assignment->setAttribute('submission', $submission);
+        $assignment->setAttribute('questions', $this->questionsForStudent($assignment, $submission));
 
         return response()->json($assignment);
     }
@@ -178,13 +215,38 @@ class AssignmentController extends Controller
             return response()->json([]);
         }
 
-        $sectionSubjectIds = DB::table('section_students')
-            ->join('section_subjects', 'section_students.section_id', '=', 'section_subjects.section_id')
-            ->where('section_students.user_id', $request->user()->id)
-            ->where('section_students.status', 'enrolled')
-            ->pluck('section_subjects.id')
-            ->unique()
-            ->values();
+        $sectionSubjectIds = SectionSubject::query()
+            ->where(function ($query) use ($request) {
+                $query->whereExists(function ($enrollment) use ($request) {
+                    $enrollment->selectRaw('1')
+                        ->from('section_students')
+                        ->whereColumn('section_students.section_id', 'section_subjects.section_id')
+                        ->where('section_students.user_id', $request->user()->id)
+                        ->where('section_students.status', 'enrolled');
+                })->orWhereExists(function ($enrollment) use ($request) {
+                    $enrollment->selectRaw('1')
+                        ->from('student_subjects')
+                        ->whereColumn('student_subjects.subject_id', 'section_subjects.subject_id')
+                        ->where('student_subjects.user_id', $request->user()->id)
+                        ->where('student_subjects.status', 'enrolled')
+                        ->where(function ($section) {
+                            $section->whereColumn('student_subjects.section_id', 'section_subjects.section_id')
+                                ->orWhereNull('student_subjects.section_id');
+                        });
+                });
+            })
+            ->whereNotExists(function ($dropped) use ($request) {
+                $dropped->selectRaw('1')
+                    ->from('student_subjects')
+                    ->whereColumn('student_subjects.subject_id', 'section_subjects.subject_id')
+                    ->where('student_subjects.user_id', $request->user()->id)
+                    ->where('student_subjects.status', 'dropped')
+                    ->where(function ($section) {
+                        $section->whereColumn('student_subjects.section_id', 'section_subjects.section_id')
+                            ->orWhereNull('student_subjects.section_id');
+                    });
+            })
+            ->pluck('id');
 
         $assignments = ClassAssignment::query()
             ->whereIn('section_subject_id', $sectionSubjectIds)
@@ -198,6 +260,7 @@ class AssignmentController extends Controller
                 $submission = $assignment->submissions->first();
                 unset($assignment->submissions);
                 $assignment->submission = $submission;
+                $assignment->questions = $this->questionsForStudent($assignment, $submission);
                 return $assignment;
             });
 
@@ -219,12 +282,18 @@ class AssignmentController extends Controller
             'answer_text' => ['nullable', 'string', 'max:10000'],
             'file_url' => ['nullable', 'string', 'max:1000'],
             'answers' => ['nullable', 'array'],
+            'answers.*' => ['nullable', 'string', 'max:1000'],
             'violation_count' => ['nullable', 'integer', 'min:0'],
             'violations' => ['nullable', 'array'],
             'auto_submit' => ['nullable', 'boolean'],
         ]);
 
-        if (blank($data['answer_text'] ?? null) && blank($data['file_url'] ?? null) && empty($data['answers'] ?? [])) {
+        $hasTextAnswer = trim((string) ($data['answer_text'] ?? '')) !== '';
+        $hasFileAnswer = trim((string) ($data['file_url'] ?? '')) !== '';
+        $hasQuizAnswer = collect($data['answers'] ?? [])
+            ->contains(fn ($answer) => trim((string) $answer) !== '');
+
+        if (!$hasTextAnswer && !$hasFileAnswer && !$hasQuizAnswer) {
             return response()->json(['message' => 'Please add an answer before submitting.'], 422);
         }
 
@@ -444,10 +513,43 @@ class AssignmentController extends Controller
 
     private function studentCanAccess(User $user, ClassAssignment $assignment): bool
     {
-        return DB::table('section_students')
-            ->where('section_id', $assignment->sectionSubject?->section_id ?? $assignment->sectionSubject()->value('section_id'))
+        $sectionSubject = $assignment->sectionSubject;
+        if (!$sectionSubject) {
+            return false;
+        }
+
+        $hasDroppedSubject = DB::table('student_subjects')
+            ->where('user_id', $user->id)
+            ->where('subject_id', $sectionSubject->subject_id)
+            ->where('status', 'dropped')
+            ->where(function ($query) use ($sectionSubject) {
+                $query->where('section_id', $sectionSubject->section_id)
+                    ->orWhereNull('section_id');
+            })
+            ->exists();
+
+        if ($hasDroppedSubject) {
+            return false;
+        }
+
+        $hasSectionEnrollment = DB::table('section_students')
+            ->where('section_id', $sectionSubject->section_id)
             ->where('user_id', $user->id)
             ->where('status', 'enrolled')
+            ->exists();
+
+        if ($hasSectionEnrollment) {
+            return true;
+        }
+
+        return DB::table('student_subjects')
+            ->where('user_id', $user->id)
+            ->where('subject_id', $sectionSubject->subject_id)
+            ->where('status', 'enrolled')
+            ->where(function ($query) use ($sectionSubject) {
+                $query->where('section_id', $sectionSubject->section_id)
+                    ->orWhereNull('section_id');
+            })
             ->exists();
     }
 
@@ -506,6 +608,24 @@ class AssignmentController extends Controller
         }
 
         return round(($correct / max(1, $questions->count())) * (float) $assignment->points_possible, 2);
+    }
+
+    private function questionsForStudent(ClassAssignment $assignment, ?AssignmentSubmission $submission): array
+    {
+        $canReviewAnswers = $submission
+            && $submission->status === 'graded'
+            && $submission->score !== null;
+
+        return collect($assignment->questions ?? [])
+            ->map(function ($question) use ($canReviewAnswers) {
+                if (is_array($question) && !$canReviewAnswers) {
+                    unset($question['answer']);
+                }
+
+                return $question;
+            })
+            ->values()
+            ->all();
     }
 
     private function saveAssignmentScoreToDraft(ClassAssignment $assignment, AssignmentSubmission $submission, string $quarter, User $teacher, GradeWorkflowService $workflow): void

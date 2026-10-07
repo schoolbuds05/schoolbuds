@@ -26,20 +26,43 @@ class GradeWorkflowService
         $sectionSubject = $this->sectionSubjectForClass($class);
 
         if ($sectionSubject) {
-            $userIds = $sectionSubject->section->students()
+            $sectionUserIds = $sectionSubject->section->students()
                 ->wherePivot('status', 'enrolled')
                 ->pluck('users.id');
             $droppedIds = StudentSubject::query()
-                ->where('section_id', $sectionSubject->section_id)
                 ->where('subject_id', $sectionSubject->subject_id)
                 ->where('status', 'dropped')
+                ->where(function ($query) use ($sectionSubject) {
+                    $query->where('section_id', $sectionSubject->section_id)
+                        ->orWhereNull('section_id');
+                })
                 ->pluck('user_id');
+            $subjectUserIds = StudentSubject::query()
+                ->where('subject_id', $sectionSubject->subject_id)
+                ->where('status', 'enrolled')
+                ->where(function ($query) use ($sectionSubject) {
+                    $query->where('section_id', $sectionSubject->section_id)
+                        ->orWhereNull('section_id');
+                })
+                ->pluck('user_id');
+            $userIds = $sectionUserIds
+                ->merge($subjectUserIds)
+                ->unique()
+                ->diff($droppedIds);
+            $irregularUserIds = $subjectUserIds
+                ->diff($sectionUserIds)
+                ->diff($droppedIds);
 
             return Student::query()
-                ->whereIn('user_id', $userIds->diff($droppedIds))
+                ->whereIn('user_id', $userIds)
                 ->orderBy('last_name')
                 ->orderBy('first_name')
-                ->get();
+                ->get()
+                ->each(fn (Student $student) => $student->setAttribute(
+                    'is_irregular',
+                    strcasecmp((string) $student->academic_status, 'Irregular') === 0
+                        || $irregularUserIds->contains($student->user_id)
+                ));
         }
 
         return Student::query()

@@ -20,7 +20,7 @@ class TeacherChatController extends Controller
 
         $contacts = User::whereIn('id', $contactIds)
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'role'])
+            ->get(['id', 'name', 'email', 'role', 'profile_photo_path'])
             ->map(fn($contact) => $this->formatContact($user, $contact));
 
         return response()->json($contacts);
@@ -99,6 +99,7 @@ class TeacherChatController extends Controller
             'name' => $contact->name,
             'email' => $contact->email,
             'role' => $contact->role,
+            'profile_photo_url' => $contact->profile_photo_url,
             'student_info' => $this->studentInfoFor($user, $contact),
             'last_message' => $last?->message,
             'last_message_at' => $last?->created_at,
@@ -147,6 +148,29 @@ class TeacherChatController extends Controller
                 ->where('section_students.status', 'enrolled')
                 ->pluck('section_students.user_id');
 
+            $individualStudentIds = DB::table('student_subjects')
+                ->join('section_subjects', function ($join) {
+                    $join->on('student_subjects.subject_id', '=', 'section_subjects.subject_id')
+                        ->where(function ($section) {
+                            $section->whereColumn('student_subjects.section_id', 'section_subjects.section_id')
+                                ->orWhereNull('student_subjects.section_id');
+                        });
+                })
+                ->where('section_subjects.teacher_id', $user->id)
+                ->where('student_subjects.status', 'enrolled')
+                ->whereNotExists(function ($dropped) {
+                    $dropped->selectRaw('1')
+                        ->from('student_subjects as dropped_subjects')
+                        ->whereColumn('dropped_subjects.user_id', 'student_subjects.user_id')
+                        ->whereColumn('dropped_subjects.subject_id', 'student_subjects.subject_id')
+                        ->where('dropped_subjects.status', 'dropped')
+                        ->where(function ($section) {
+                            $section->whereColumn('dropped_subjects.section_id', 'section_subjects.section_id')
+                                ->orWhereNull('dropped_subjects.section_id');
+                        });
+                })
+                ->pluck('student_subjects.user_id');
+
             $legacyStudentIds = DB::table('students')
                 ->join('school_classes', function ($join) use ($user) {
                     $join->on('students.grade_level', '=', 'school_classes.grade_level')
@@ -157,6 +181,7 @@ class TeacherChatController extends Controller
                 ->pluck('students.user_id');
 
             return $sectionStudentIds
+                ->merge($individualStudentIds)
                 ->merge($legacyStudentIds)
                 ->unique()
                 ->values()
@@ -172,6 +197,30 @@ class TeacherChatController extends Controller
                 ->whereNotNull('section_subjects.teacher_id')
                 ->pluck('section_subjects.teacher_id');
 
+            $individualTeacherIds = DB::table('student_subjects')
+                ->join('section_subjects', function ($join) {
+                    $join->on('student_subjects.subject_id', '=', 'section_subjects.subject_id')
+                        ->where(function ($section) {
+                            $section->whereColumn('student_subjects.section_id', 'section_subjects.section_id')
+                                ->orWhereNull('student_subjects.section_id');
+                        });
+                })
+                ->where('student_subjects.user_id', $user->id)
+                ->where('student_subjects.status', 'enrolled')
+                ->whereNotNull('section_subjects.teacher_id')
+                ->whereNotExists(function ($dropped) use ($user) {
+                    $dropped->selectRaw('1')
+                        ->from('student_subjects as dropped_subjects')
+                        ->where('dropped_subjects.user_id', $user->id)
+                        ->whereColumn('dropped_subjects.subject_id', 'student_subjects.subject_id')
+                        ->where('dropped_subjects.status', 'dropped')
+                        ->where(function ($section) {
+                            $section->whereColumn('dropped_subjects.section_id', 'section_subjects.section_id')
+                                ->orWhereNull('dropped_subjects.section_id');
+                        });
+                })
+                ->pluck('section_subjects.teacher_id');
+
             $student = Student::where('user_id', $user->id)->first();
             $legacyTeacherIds = collect();
 
@@ -185,6 +234,7 @@ class TeacherChatController extends Controller
             }
 
             return $sectionTeacherIds
+                ->merge($individualTeacherIds)
                 ->merge($legacyTeacherIds)
                 ->unique()
                 ->values()
@@ -219,7 +269,7 @@ class TeacherChatController extends Controller
 
         $profile = Student::where('user_id', $contact->id)->first();
 
-        $subjects = DB::table('section_students')
+        $sectionSubjects = DB::table('section_students')
             ->join('section_subjects', 'section_students.section_id', '=', 'section_subjects.section_id')
             ->join('subjects', 'subjects.id', '=', 'section_subjects.subject_id')
             ->where('section_subjects.teacher_id', $user->id)
@@ -231,7 +281,45 @@ class TeacherChatController extends Controller
                 'id' => $subject->id,
                 'code' => $subject->code,
                 'name' => $subject->name,
+                'is_irregular' => false,
             ])
+            ->values();
+
+        $individualSubjects = DB::table('student_subjects')
+            ->join('section_subjects', function ($join) {
+                $join->on('student_subjects.subject_id', '=', 'section_subjects.subject_id')
+                    ->where(function ($section) {
+                        $section->whereColumn('student_subjects.section_id', 'section_subjects.section_id')
+                            ->orWhereNull('student_subjects.section_id');
+                    });
+            })
+            ->join('subjects', 'subjects.id', '=', 'section_subjects.subject_id')
+            ->where('section_subjects.teacher_id', $user->id)
+            ->where('student_subjects.user_id', $contact->id)
+            ->where('student_subjects.status', 'enrolled')
+            ->whereNotExists(function ($dropped) use ($contact) {
+                $dropped->selectRaw('1')
+                    ->from('student_subjects as dropped_subjects')
+                    ->where('dropped_subjects.user_id', $contact->id)
+                    ->whereColumn('dropped_subjects.subject_id', 'student_subjects.subject_id')
+                    ->where('dropped_subjects.status', 'dropped')
+                    ->where(function ($section) {
+                        $section->whereColumn('dropped_subjects.section_id', 'section_subjects.section_id')
+                            ->orWhereNull('dropped_subjects.section_id');
+                    });
+            })
+            ->orderBy('subjects.code')
+            ->get(['subjects.id', 'subjects.code', 'subjects.name'])
+            ->map(fn ($subject) => [
+                'id' => $subject->id,
+                'code' => $subject->code,
+                'name' => $subject->name,
+                'is_irregular' => true,
+            ])
+            ->values();
+        $subjects = $sectionSubjects
+            ->concat($individualSubjects)
+            ->unique('id')
             ->values();
 
         $profileFallback = DB::table('students')
@@ -251,6 +339,8 @@ class TeacherChatController extends Controller
             'year' => $year,
             'program' => $section?->course ?? $section?->strand,
             'school_year' => $section?->school_year ?? $profileFallback?->school_year,
+            'is_irregular' => strcasecmp((string) $profile?->academic_status, 'Irregular') === 0
+                || ($section === null && $individualSubjects->isNotEmpty()),
             'subjects' => $subjects,
         ];
     }

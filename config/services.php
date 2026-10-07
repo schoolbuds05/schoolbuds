@@ -37,6 +37,7 @@ return [
 
 'groq' => [
     'key' => env('GROQ_API_KEY'),
+    'ca_bundle' => env('GROQ_CA_BUNDLE'),
 ],
 
     'paymongo' => [

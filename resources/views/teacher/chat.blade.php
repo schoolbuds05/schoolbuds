@@ -43,12 +43,19 @@
                 @endphp
                 <a href="{{ route('teacher.chat', ['contact' => $contact->id]) }}"
                     class="mb-1 flex items-center gap-3 rounded-2xl px-3 py-3 transition {{ $active ? 'bg-violet-50 text-slate-950' : 'text-slate-700 hover:bg-slate-50' }}">
-                    <span class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-black {{ $active ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500' }}">
-                        {{ strtoupper(substr($contact->name, 0, 2)) }}
+                    <span class="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-black {{ $active ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500' }}">
+                        @if($contact->profile_photo_url)
+                            <img src="{{ $contact->profile_photo_url }}" alt="{{ $contact->name }}" class="h-full w-full object-cover">
+                        @else
+                            {{ strtoupper(substr($contact->name, 0, 2)) }}
+                        @endif
                         <span class="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400"></span>
                     </span>
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm font-black">{{ $contact->name }}</span>
+                        @if($contact->is_irregular)
+                            <span class="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">Irregular student</span>
+                        @endif
                         <span class="mt-0.5 block truncate text-xs font-semibold text-slate-400">
                             {{ $last?->message ?? $contact->email }}
                         </span>
@@ -67,8 +74,12 @@
         @if($selectedContact)
             <header class="flex items-center justify-between border-b border-violet-100 bg-white px-5 py-3">
                 <div class="flex items-center gap-3">
-                    <span class="relative flex h-11 w-11 items-center justify-center rounded-full bg-violet-600 text-sm font-black text-white">
-                        {{ strtoupper(substr($selectedContact->name, 0, 2)) }}
+                    <span class="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-sm font-black text-white">
+                        @if($selectedContact->profile_photo_url)
+                            <img src="{{ $selectedContact->profile_photo_url }}" alt="{{ $selectedContact->name }}" class="h-full w-full object-cover">
+                        @else
+                            {{ strtoupper(substr($selectedContact->name, 0, 2)) }}
+                        @endif
                         <span class="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-400"></span>
                     </span>
                     <div>

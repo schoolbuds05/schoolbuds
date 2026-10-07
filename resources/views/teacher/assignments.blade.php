@@ -6,10 +6,31 @@
     <p class="mt-1 text-sm text-slate-500">Create assignments and quizzes for assigned section subjects.</p>
 </div>
 
-<div class="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
     <section class="portal-card h-fit p-5">
         <h2 class="font-black text-slate-800">New Work</h2>
-        <form method="POST" action="{{ route('teacher.assignments.store') }}" class="mt-4 space-y-3">
+
+        <div class="mt-4 rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+            <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-black text-slate-800">AI Quiz Generator</h3>
+                <span class="rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-violet-700">Groq</span>
+            </div>
+            <div class="mt-3 space-y-3">
+                <textarea id="ai-module-text" rows="3" class="portal-field w-full" placeholder="Paste lesson notes or module content here..."></textarea>
+                <input id="ai-module-file" type="file" accept=".txt,.pdf,.doc,.docx" class="portal-field w-full text-sm">
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                    <select id="ai-question-count" class="portal-field w-full">
+                        <option value="5">5 questions</option>
+                        <option value="10" selected>10 questions</option>
+                        <option value="15">15 questions</option>
+                    </select>
+                    <button type="button" id="generate-ai-quiz" class="portal-button-primary whitespace-nowrap">Generate</button>
+                </div>
+                <p id="ai-quiz-status" class="text-xs text-slate-500">Use AI to generate quiz questions from notes or uploaded modules.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('teacher.assignments.store') }}" class="mt-5 space-y-3">
             @csrf
             <select name="section_subject_id" class="portal-field w-full" required>
                 <option value="">Choose class subject</option>
@@ -19,7 +40,7 @@
                     </option>
                 @endforeach
             </select>
-            <select name="type" class="portal-field w-full" required>
+            <select name="type" id="work-type" class="portal-field w-full" required>
                 <option value="assignment">Assignment</option>
                 <option value="quiz">Quiz</option>
             </select>
@@ -38,6 +59,15 @@
                 <input name="allow_file_upload" type="checkbox" value="1" class="rounded border-violet-200">
                 Allow file upload
             </label>
+
+            <div id="quiz-question-builder" class="hidden space-y-3 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-black text-slate-800">Quiz Questions</h3>
+                    <button type="button" id="add-quiz-question" class="text-xs font-black text-violet-700">+ Add question</button>
+                </div>
+                <div id="quiz-questions-container" class="space-y-3"></div>
+            </div>
+
             <button class="portal-button-primary w-full">Create work</button>
         </form>
     </section>
@@ -62,6 +92,44 @@
                     <p class="mt-3 text-xs font-bold text-slate-400">
                         {{ (float) $assignment->points_possible }} points · {{ $assignment->submissions_count }} submissions · Due {{ $assignment->due_at?->format('Y-m-d H:i') ?? 'anytime' }}
                     </p>
+                    @if($assignment->submissions->isNotEmpty())
+                        <details class="mt-4 rounded-lg border border-violet-100 bg-violet-50/40">
+                            <summary class="cursor-pointer px-3 py-2 text-sm font-black text-violet-800">Review student submissions</summary>
+                            <div class="divide-y divide-violet-100 border-t border-violet-100">
+                                @foreach($assignment->submissions as $submission)
+                                    <div class="space-y-2 p-3">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <p class="text-sm font-black text-slate-800">
+                                                {{ $submission->student?->first_name }} {{ $submission->student?->last_name }}
+                                            </p>
+                                            <p class="text-xs font-bold text-slate-500">
+                                                {{ ucfirst($submission->status) }}
+                                                @if($submission->score !== null)
+                                                    · {{ (float) $submission->score }}/{{ (float) $assignment->points_possible }} points
+                                                @endif
+                                            </p>
+                                        </div>
+                                        @if($assignment->type === 'quiz')
+                                            <ol class="space-y-2">
+                                                @foreach($assignment->questions ?? [] as $index => $question)
+                                                    <li class="rounded-md bg-white p-2 text-xs text-slate-600">
+                                                        <p class="font-bold text-slate-800">{{ $index + 1 }}. {{ $question['question'] ?? '' }}</p>
+                                                        <p class="mt-1">Student answer: {{ data_get($submission->answers, $index) ?: 'Not answered' }}</p>
+                                                        <p class="mt-1 font-bold text-emerald-700">Correct answer: {{ $question['answer'] ?? 'Not set' }}</p>
+                                                    </li>
+                                                @endforeach
+                                            </ol>
+                                        @else
+                                            <p class="whitespace-pre-wrap text-sm text-slate-600">{{ $submission->answer_text ?: 'No text answer provided.' }}</p>
+                                        @endif
+                                        @if($submission->feedback)
+                                            <p class="text-xs text-slate-500">Feedback: {{ $submission->feedback }}</p>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        </details>
+                    @endif
                 </div>
             @empty
                 <p class="p-10 text-center text-sm text-slate-500">No class work posted yet.</p>
@@ -69,4 +137,148 @@
         </div>
     </section>
 </div>
+@push('scripts')
+<script>
+    (() => {
+        const typeSelect = document.getElementById('work-type');
+        const quizBuilder = document.getElementById('quiz-question-builder');
+        const quizContainer = document.getElementById('quiz-questions-container');
+        const addQuestionButton = document.getElementById('add-quiz-question');
+        const aiModuleText = document.getElementById('ai-module-text');
+        const aiModuleFile = document.getElementById('ai-module-file');
+        const aiQuestionCount = document.getElementById('ai-question-count');
+        const generateAiButton = document.getElementById('generate-ai-quiz');
+        const aiStatus = document.getElementById('ai-quiz-status');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        const generateQuizUrl = @json(route('teacher.assignments.generate-quiz'));
+
+        const createQuestionRow = (data = null) => {
+            const index = quizContainer.children.length;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'rounded-lg border border-violet-200 bg-white p-3 space-y-2';
+
+            const questionText = data?.question ?? '';
+            const choices = Array.isArray(data?.choices) ? data.choices : ['', '', '', ''];
+            const answerText = data?.answer ?? '';
+
+            wrapper.innerHTML = `
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-xs font-black uppercase tracking-wide text-violet-700">Question ${index + 1}</span>
+                    <button type="button" data-remove-question class="text-xs font-bold text-rose-600">Remove</button>
+                </div>
+                <input type="text" name="questions[${index}][question]" class="portal-field w-full" value="${escapeHtml(questionText)}" placeholder="Question text" required>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" name="questions[${index}][choices][]" class="portal-field w-full" value="${escapeHtml(choices[0] ?? '')}" placeholder="Choice A" required>
+                    <input type="text" name="questions[${index}][choices][]" class="portal-field w-full" value="${escapeHtml(choices[1] ?? '')}" placeholder="Choice B" required>
+                    <input type="text" name="questions[${index}][choices][]" class="portal-field w-full" value="${escapeHtml(choices[2] ?? '')}" placeholder="Choice C" required>
+                    <input type="text" name="questions[${index}][choices][]" class="portal-field w-full" value="${escapeHtml(choices[3] ?? '')}" placeholder="Choice D" required>
+                </div>
+                <input type="text" name="questions[${index}][answer]" class="portal-field w-full" value="${escapeHtml(answerText)}" placeholder="Correct answer (exact text or A-D)" required>
+            `;
+
+            wrapper.querySelector('[data-remove-question]').addEventListener('click', () => wrapper.remove());
+            quizContainer.appendChild(wrapper);
+        };
+
+        const escapeHtml = (value) => {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        };
+
+        const clearQuizQuestions = () => {
+            quizContainer.innerHTML = '';
+        };
+
+        const populateGeneratedQuestions = (questions) => {
+            clearQuizQuestions();
+            if (!Array.isArray(questions) || questions.length === 0) {
+                aiStatus.textContent = 'No quiz questions were generated. Try a longer lesson summary.';
+                aiStatus.className = 'text-xs text-amber-600';
+                return;
+            }
+
+            questions.forEach((question) => createQuestionRow(question));
+            typeSelect.value = 'quiz';
+            syncQuizBuilder();
+            aiStatus.textContent = `${questions.length} quiz question(s) added to the form.`;
+            aiStatus.className = 'text-xs text-emerald-700';
+        };
+
+        const syncQuizBuilder = () => {
+            const isQuiz = typeSelect.value === 'quiz';
+            quizBuilder.classList.toggle('hidden', !isQuiz);
+
+            if (isQuiz && quizContainer.children.length === 0) {
+                createQuestionRow();
+            }
+        };
+
+        typeSelect.addEventListener('change', syncQuizBuilder);
+        addQuestionButton.addEventListener('click', () => createQuestionRow());
+
+        generateAiButton.addEventListener('click', async () => {
+            const formData = new FormData();
+            const text = aiModuleText.value.trim();
+            const file = aiModuleFile.files[0];
+
+            if (!text && !file) {
+                aiStatus.textContent = 'Enter lesson text or upload a file before generating.';
+                aiStatus.className = 'text-xs text-amber-600';
+                return;
+            }
+
+            if (text) {
+                formData.append('module_text', text);
+            }
+
+            if (file) {
+                formData.append('module_file', file);
+            }
+
+            formData.append('question_count', aiQuestionCount.value);
+
+            try {
+                aiStatus.textContent = 'Generating questions...';
+                aiStatus.className = 'text-xs text-slate-500';
+                typeSelect.value = 'quiz';
+                syncQuizBuilder();
+
+                const response = await fetch(generateQuizUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken || '',
+                    },
+                    credentials: 'same-origin',
+                    body: formData,
+                });
+
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch {
+                    throw new Error(`Quiz generation request failed (${response.status}). The server returned an unexpected response.`);
+                }
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'AI quiz generation failed.');
+                }
+
+                populateGeneratedQuestions(data.questions || []);
+            } catch (error) {
+                aiStatus.textContent = error.message || 'AI quiz generation failed.';
+                aiStatus.className = 'text-xs text-rose-600';
+            }
+        });
+
+        syncQuizBuilder();
+    })();
+</script>
+@endpush
+
 @endsection

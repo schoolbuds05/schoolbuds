@@ -21,7 +21,7 @@ use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(GradeWorkflowService $workflow)
     {
         $teacher = auth()->user();
 
@@ -31,7 +31,7 @@ class DashboardController extends Controller
 
         $classes = $this->teacherClasses();
 
-        $totalStudents = $this->teacherStudents()->count();
+        $totalStudents = $this->teacherStudents($workflow)->count();
 
         $recentGrades = Grade::whereHas('schoolClass', fn($q) =>
             $q->where('teacher_id', $teacher->id)
@@ -46,18 +46,10 @@ class DashboardController extends Controller
         ));
     }
 
-    public function classes()
+    public function classes(GradeWorkflowService $workflow)
     {
         $classes = $this->teacherClasses();
-        $rosters = $classes->mapWithKeys(fn (SchoolClass $class) => [
-            $class->id => Student::query()
-                ->where('grade_level', $class->grade_level)
-                ->where('section', $class->section)
-                ->where('school_year', $class->school_year)
-                ->orderBy('last_name')
-                ->orderBy('first_name')
-                ->get(),
-        ]);
+        $rosters = $classes->mapWithKeys(fn (SchoolClass $class) => [$class->id => $workflow->classStudents($class)]);
 
         return view('teacher.classes', compact('classes', 'rosters'));
     }
@@ -68,6 +60,7 @@ class DashboardController extends Controller
         $assignments = ClassAssignment::query()
             ->where('teacher_id', $teacher->id)
             ->with(['sectionSubject.section', 'sectionSubject.subject'])
+            ->with('submissions.student')
             ->withCount('submissions')
             ->latest()
             ->get();
@@ -90,13 +83,26 @@ class DashboardController extends Controller
             'instructions' => ['nullable', 'string', 'max:5000'],
             'points_possible' => ['required', 'numeric', 'min:1', 'max:1000'],
             'due_at' => ['nullable', 'date'],
+            'allow_file_upload' => ['nullable', 'boolean'],
+            'questions' => ['nullable', 'array'],
+            'questions.*.question' => ['required_with:questions', 'string', 'max:1000'],
+            'questions.*.choices' => ['nullable', 'array'],
+            'questions.*.choices.*' => ['nullable', 'string', 'max:500'],
+            'questions.*.answer' => ['nullable', 'string', 'max:500'],
             'status' => ['required', Rule::in(['draft', 'published', 'closed'])],
         ]);
+
+        $questions = $this->normalizeQuizQuestions($data['type'], $data['questions'] ?? []);
+
+        if ($data['type'] === 'quiz' && $questions === []) {
+            return back()->withErrors(['questions' => 'Add at least one question for this quiz.'])->withInput();
+        }
 
         ClassAssignment::create([
             ...$data,
             'teacher_id' => $request->user()->id,
             'allow_file_upload' => $request->boolean('allow_file_upload'),
+            'questions' => $questions,
         ]);
 
         return back()->with('status', 'Class work created.');
@@ -193,6 +199,64 @@ class DashboardController extends Controller
         return back()->with('status', "Checkout started for {$item->title}. Order #{$order->id}.");
     }
 
+    private function normalizeQuizQuestions(string $type, array $questions): array
+    {
+        if ($type !== 'quiz') {
+            return [];
+        }
+
+        return collect($questions)
+            ->map(function ($item) {
+                if (!is_array($item)) {
+                    return null;
+                }
+
+                $question = trim((string) ($item['question'] ?? ''));
+                $choices = collect($item['choices'] ?? [])
+                    ->map(fn ($choice) => trim((string) $choice))
+                    ->filter(fn ($choice) => $choice !== '')
+                    ->values()
+                    ->all();
+
+                if ($question === '' || count($choices) < 2) {
+                    return null;
+                }
+
+                $answer = trim((string) ($item['answer'] ?? ''));
+                $answerIndex = null;
+
+                if ($answer !== '') {
+                    $choicesLower = array_map('mb_strtolower', $choices);
+                    $normalized = mb_strtolower($answer);
+
+                    $index = array_search($normalized, $choicesLower, true);
+                    if ($index !== false) {
+                        $answerIndex = $index;
+                    }
+
+                    if ($answerIndex === null) {
+                        $letterIndex = strtoupper($answer);
+                        if (preg_match('/^[A-D]$/', $letterIndex)) {
+                            $answerIndex = ord($letterIndex) - 65;
+                        }
+                    }
+                }
+
+                if ($answerIndex === null || !isset($choices[$answerIndex])) {
+                    $answerIndex = 0;
+                }
+
+                return [
+                    'question' => $question,
+                    'choices' => array_values($choices),
+                    'answer' => $choices[$answerIndex],
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     private function validatedMarketplaceSize(MarketplaceItem $item, ?string $requestedSize): string|false|null
     {
         $options = collect($item->size_options ?? [])
@@ -212,11 +276,18 @@ class DashboardController extends Controller
         return $options->first(fn ($size) => mb_strtolower($size) === mb_strtolower($requestedSize)) ?: false;
     }
 
-    public function chat()
+    public function chat(GradeWorkflowService $workflow)
     {
         $teacher = auth()->user();
-        $contacts = $this->teacherStudents()
-            ->map(fn (Student $student) => $student->user)
+        $contacts = $this->teacherStudents($workflow)
+            ->map(function (Student $student) {
+                $contact = $student->user;
+                if ($contact) {
+                    $contact->setAttribute('is_irregular', (bool) $student->is_irregular);
+                }
+
+                return $contact;
+            })
             ->filter()
             ->unique('id')
             ->values();
@@ -234,14 +305,14 @@ class DashboardController extends Controller
         return view('teacher.chat', compact('contacts', 'messages'));
     }
 
-    public function sendChat(Request $request)
+    public function sendChat(Request $request, GradeWorkflowService $workflow)
     {
         $data = $request->validate([
             'receiver_id' => ['required', 'integer', 'exists:users,id'],
             'message' => ['required', 'string', 'max:1000'],
         ]);
 
-        $allowedContactIds = $this->teacherStudents()
+        $allowedContactIds = $this->teacherStudents($workflow)
             ->pluck('user_id')
             ->filter()
             ->map(fn ($id) => (int) $id)
@@ -338,7 +409,7 @@ class DashboardController extends Controller
         return $schoolClass;
     }
 
-    private function teacherStudents()
+    private function teacherStudents(GradeWorkflowService $workflow)
     {
         $classes = $this->teacherClasses();
 
@@ -346,19 +417,25 @@ class DashboardController extends Controller
             return collect();
         }
 
-        return Student::query()
-            ->with('user:id,name,email')
-            ->where(function ($query) use ($classes) {
-                foreach ($classes as $class) {
-                    $query->orWhere(function ($inner) use ($class) {
-                        $inner->where('grade_level', $class->grade_level)
-                            ->where('section', $class->section)
-                            ->where('school_year', $class->school_year);
-                    });
-                }
+        $students = $classes
+            ->flatMap(fn (SchoolClass $class) => $workflow->classStudents($class))
+            ->unique('id')
+            ->values();
+        $loadedStudents = Student::query()
+            ->with('user:id,name,email,profile_photo_path')
+            ->whereIn('id', $students->pluck('id'))
+            ->get()
+            ->keyBy('id');
+
+        return $students
+            ->map(function (Student $student) use ($loadedStudents) {
+                $loadedStudent = $loadedStudents->get($student->id);
+                $loadedStudent?->setAttribute('is_irregular', (bool) $student->is_irregular);
+
+                return $loadedStudent;
             })
-            ->orderBy('last_name')
-            ->orderBy('first_name')
-            ->get();
+            ->filter()
+            ->sortBy([['last_name', 'asc'], ['first_name', 'asc']])
+            ->values();
     }
 }

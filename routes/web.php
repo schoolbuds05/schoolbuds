@@ -24,6 +24,7 @@ use App\Http\Controllers\Teacher\DashboardController as TeacherDashboard;
 use App\Http\Controllers\Teacher\GradeEntryController;
 use App\Http\Controllers\Teacher\GradeChangeRequestController as TeacherGradeChangeRequestController;
 use App\Http\Controllers\Teacher\AttendanceController as TeacherAttendance;
+use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\DepartmentChairController;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -186,6 +187,7 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
     Route::get('/dashboard',                    [TeacherDashboard::class, 'index'])->name('dashboard');
     Route::get('/classes',                      [TeacherDashboard::class, 'classes'])->name('classes');
     Route::get('/assignments',                  [TeacherDashboard::class, 'assignments'])->name('assignments');
+    Route::post('/assignments/generate-quiz', [AssignmentController::class, 'generateQuiz'])->name('assignments.generate-quiz');
     Route::post('/assignments',                 [TeacherDashboard::class, 'storeAssignment'])->name('assignments.store');
     Route::get('/market',                       [TeacherDashboard::class, 'market'])->name('market');
     Route::post('/market/{item}/buy',           [TeacherDashboard::class, 'buyMarketItem'])->name('market.buy');

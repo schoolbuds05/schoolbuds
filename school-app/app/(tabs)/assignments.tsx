@@ -59,21 +59,54 @@ export default function StudentAssignments() {
 
   const submit = async (overrideViolations = null) => {
     if (!selected) return;
-    const activeViolations = overrideViolations ?? violations;
+    const activeViolations = Array.isArray(overrideViolations)
+      ? overrideViolations
+      : Array.isArray(violations) ? violations : [];
+    const questions = Array.isArray(selected.questions) ? selected.questions : [];
+    const quizAnswers = questions.map((_, index) =>
+      String(answers[index] ?? '').trim()
+    );
+    const quizViolations = activeViolations.map(violation => ({
+      type: String(violation?.type ?? 'unknown'),
+      details: {
+        app_state: String(violation?.details?.app_state ?? ''),
+      },
+      recorded_at: String(violation?.recorded_at ?? ''),
+    }));
+    const hasAnswer = selected.type === 'quiz'
+      ? quizAnswers.some(answer => answer !== '')
+      : answerText.trim() !== '';
+
+    if (!hasAnswer) {
+      Alert.alert(
+        'Answer required',
+        selected.type === 'quiz'
+          ? 'Select an answer for at least one quiz question before submitting.'
+          : 'Write your answer before submitting.'
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       await api.post(`/assignments/${selected.id}/submit`, {
-        answer_text: selected.type === 'quiz' ? null : answerText,
-        answers: selected.type === 'quiz' ? Object.keys(answers).sort().map(key => answers[key]) : null,
+        answer_text: selected.type === 'quiz' ? null : answerText.trim(),
+        answers: selected.type === 'quiz' ? quizAnswers : null,
         violation_count: activeViolations.length,
-        violations: activeViolations,
+        violations: quizViolations,
         auto_submit: selected.type === 'quiz' && activeViolations.length >= 3,
       });
       setSelected(null);
       await load();
       Alert.alert('Submitted', 'Your work has been submitted.');
     } catch (e) {
-      Alert.alert('Could not submit', e.response?.data?.message || 'Please add your answer and try again.');
+      const responseMessage = e.response?.data?.message;
+      const failureMessage = responseMessage
+        || (e.response
+          ? `The server returned an error (${e.response.status}). Please try again or contact your teacher.`
+          : `Could not reach the server (${e.message}). Check that the app and server are on the same network, then try again.`);
+      console.log('Assignment submission error:', e.response?.data ?? e.message);
+      Alert.alert('Could not submit', failureMessage);
     } finally {
       setSubmitting(false);
     }
@@ -122,6 +155,9 @@ export default function StudentAssignments() {
   }
 
   const submitted = items.filter(item => item.submission).length;
+  const quizReviewReady = selected?.submission?.status === 'graded'
+    && selected?.submission?.score !== null
+    && selected?.submission?.score !== undefined;
 
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
@@ -193,29 +229,55 @@ export default function StudentAssignments() {
             ) : null}
 
             {selected?.type === 'quiz' ? (
-              (selected?.questions ?? []).map((question, index) => (
-                <View key={index} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[s.title, { color: theme.text }]}>{index + 1}. {question.question}</Text>
-                  {(question.choices ?? []).map(choice => (
-                    <TouchableOpacity
-                      key={choice}
-                      style={[s.choice, { borderColor: answers[index] === choice ? theme.primary : theme.border, backgroundColor: answers[index] === choice ? theme.primaryLight : theme.bg }]}
-                      onPress={() => setAnswers(current => ({ ...current, [index]: choice }))}
-                    >
-                      <Text style={[s.choiceText, { color: answers[index] === choice ? theme.primary : theme.textSub }]}>{choice}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  {(question.choices ?? []).length === 0 ? (
-                    <TextInput
-                      style={[s.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
-                      value={answers[index] ?? ''}
-                      onChangeText={value => setAnswers(current => ({ ...current, [index]: value }))}
-                      placeholder="Your answer"
-                      placeholderTextColor={theme.textMuted}
-                    />
-                  ) : null}
-                </View>
-              ))
+              (selected?.questions ?? []).map((question, index) => {
+                const questionChoices = Array.isArray(question.choices) ? question.choices : [];
+                const studentAnswer = String(selected?.submission?.answers?.[index] ?? '').trim();
+                const correctAnswer = String(question.answer ?? '').trim();
+                const isCorrect = studentAnswer.toLowerCase() === correctAnswer.toLowerCase();
+
+                return (
+                  <View key={index} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Text style={[s.title, { color: theme.text }]}>{index + 1}. {question.question}</Text>
+                    {questionChoices.map(choice => {
+                      const isSelected = answers[index] === choice;
+                      const isCorrectChoice = quizReviewReady
+                        && String(choice).trim().toLowerCase() === correctAnswer.toLowerCase();
+                      const borderColor = quizReviewReady
+                        ? isCorrectChoice ? theme.success : isSelected ? theme.danger : theme.border
+                        : isSelected ? theme.primary : theme.border;
+                      const choiceColor = quizReviewReady
+                        ? isCorrectChoice ? theme.success : isSelected ? theme.danger : theme.textSub
+                        : isSelected ? theme.primary : theme.textSub;
+
+                      return (
+                        <TouchableOpacity
+                          key={choice}
+                          style={[s.choice, { borderColor, backgroundColor: isSelected ? theme.primaryLight : theme.bg }]}
+                          onPress={() => !quizReviewReady && setAnswers(current => ({ ...current, [index]: choice }))}
+                          disabled={quizReviewReady}
+                        >
+                          <Text style={[s.choiceText, { color: choiceColor }]}>{choice}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {questionChoices.length === 0 ? (
+                      <TextInput
+                        style={[s.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
+                        value={answers[index] ?? ''}
+                        onChangeText={value => setAnswers(current => ({ ...current, [index]: value }))}
+                        placeholder="Your answer"
+                        placeholderTextColor={theme.textMuted}
+                        editable={!quizReviewReady}
+                      />
+                    ) : null}
+                    {quizReviewReady ? (
+                      <Text style={[s.sub, { color: isCorrect ? theme.success : theme.danger }]}>
+                        {isCorrect ? 'Correct' : `Incorrect · Correct answer: ${correctAnswer || 'Not provided'}`}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })
             ) : (
               <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Text style={[s.title, { color: theme.text }]}>Your answer</Text>

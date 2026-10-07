@@ -33,7 +33,12 @@
                 @endphp
                 <tr>
                     <td class="px-5 py-3">
-                        <p class="font-bold text-slate-800">{{ $student->first_name }} {{ $student->last_name }}</p>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <p class="font-bold text-slate-800">{{ $student->first_name }} {{ $student->last_name }}</p>
+                            @if($student->is_irregular)
+                                <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">Irregular</span>
+                            @endif
+                        </div>
                         <p class="text-xs text-slate-500">{{ $student->student_id }}</p>
                     </td>
                     @foreach([1,2,3,4] as $q)

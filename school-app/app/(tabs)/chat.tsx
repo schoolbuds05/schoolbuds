@@ -3,7 +3,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView,
+  ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
   Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -146,7 +146,11 @@ export default function Chat() {
                 })}
               >
                 <View style={[s.avatar, { backgroundColor: theme.primaryLight }]}> 
-                  <Text style={[s.avatarText, { color: theme.primary }]}>{(item.name ?? 'T')[0].toUpperCase()}</Text>
+                  {item.profile_photo_url ? (
+                    <Image source={{ uri: item.profile_photo_url }} style={s.avatarImage} />
+                  ) : (
+                    <Text style={[s.avatarText, { color: theme.primary }]}>{(item.name ?? 'T')[0].toUpperCase()}</Text>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.contactName, { color: theme.text }]}>{item.name}</Text>
@@ -259,7 +263,9 @@ const s = StyleSheet.create({
   avatar: {
     width: 46, height: 46, borderRadius: 23,
     backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImage: { width: '100%', height: '100%' },
   avatarText: { color: C.blue, fontSize: 18, fontWeight: '800' },
   contactName: { color: C.text, fontSize: 15, fontWeight: '700' },
   contactRole: { color: C.sub, fontSize: 12, marginTop: 2 },

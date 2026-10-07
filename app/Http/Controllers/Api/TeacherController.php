@@ -93,6 +93,16 @@ class TeacherController extends Controller
                 $student->reward_points = (int) StudentReward::where('student_id', $student->id)->sum('points');
                 return $student;
             });
+        if ($sectionSubject) {
+            $sectionUserIds = $sectionSubject->section->students()
+                ->wherePivot('status', 'enrolled')
+                ->pluck('users.id');
+            $students->each(fn (Student $student) => $student->setAttribute(
+                'is_irregular',
+                strcasecmp((string) $student->academic_status, 'Irregular') === 0
+                    || !$sectionUserIds->contains($student->user_id)
+            ));
+        }
 
         $grades = Grade::where('school_class_id', $schoolClass->id)
             ->get()
@@ -341,17 +351,32 @@ class TeacherController extends Controller
 
     private function enrolledUserIdsForSectionSubject(SectionSubject $sectionSubject)
     {
-        $userIds = $sectionSubject->section->students()
+        $sectionUserIds = $sectionSubject->section->students()
             ->wherePivot('status', 'enrolled')
             ->pluck('users.id');
 
+        $subjectUserIds = StudentSubject::query()
+            ->where('subject_id', $sectionSubject->subject_id)
+            ->where('status', 'enrolled')
+            ->where(function ($query) use ($sectionSubject) {
+                $query->where('section_id', $sectionSubject->section_id)
+                    ->orWhereNull('section_id');
+            })
+            ->pluck('user_id');
         $droppedUserIds = StudentSubject::query()
-            ->where('section_id', $sectionSubject->section_id)
             ->where('subject_id', $sectionSubject->subject_id)
             ->where('status', 'dropped')
+            ->where(function ($query) use ($sectionSubject) {
+                $query->where('section_id', $sectionSubject->section_id)
+                    ->orWhereNull('section_id');
+            })
             ->pluck('user_id');
 
-        return $userIds->diff($droppedUserIds)->values();
+        return $sectionUserIds
+            ->merge($subjectUserIds)
+            ->unique()
+            ->diff($droppedUserIds)
+            ->values();
     }
 
     private function enrolledUserIdsForSchoolClass(?SchoolClass $schoolClass)

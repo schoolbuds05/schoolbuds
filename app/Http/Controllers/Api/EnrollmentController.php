@@ -321,15 +321,13 @@ class EnrollmentController extends Controller
         return response()->json([
             'subjects' => $subjects->map(fn (Subject $subject) => [
                 'subject_id' => $subject->id,
-                'unmet_prerequisites' => $student
-                    ? $subject->prerequisites
-                        ->reject(fn (Subject $prerequisite) => $progression->studentPassedSubject($student, $prerequisite))
-                        ->map(fn (Subject $prerequisite) => [
-                            'code' => $prerequisite->code,
-                            'name' => $prerequisite->name,
-                        ])
-                        ->values()
-                    : [],
+                'unmet_prerequisites' => $subject->prerequisites
+                    ->filter(fn (Subject $prerequisite) => !$student || !$progression->studentPassedSubject($student, $prerequisite))
+                    ->map(fn (Subject $prerequisite) => [
+                        'code' => $prerequisite->code,
+                        'name' => $prerequisite->name,
+                    ])
+                    ->values(),
             ])->values(),
         ]);
     }
@@ -1113,10 +1111,6 @@ class EnrollmentController extends Controller
         }
 
         $student = Student::where('user_id', $userId)->first();
-        if (!$student) {
-            return null;
-        }
-
         $subjects = Subject::whereIn('id', $subjectIds)
             ->with('prerequisites')
             ->get();
@@ -1124,10 +1118,14 @@ class EnrollmentController extends Controller
         $missing = [];
         foreach ($subjects as $subject) {
             foreach ($subject->prerequisites as $prerequisite) {
-                if (!$progression->studentPassedSubject($student, $prerequisite)) {
+                if (!$student || !$progression->studentPassedSubject($student, $prerequisite)) {
                     $missing[] = "{$subject->code} requires {$prerequisite->code}";
                 }
             }
+        }
+
+        if ($missing && !$student) {
+            return 'Prerequisite completion cannot be verified because your student record is unavailable. Please contact the Registrar.';
         }
 
         return empty($missing)

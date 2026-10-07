@@ -6,15 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\Attendance;
+use App\Services\GradeWorkflowService;
 use Illuminate\Http\Request;
 
 class AttendanceController extends Controller
 {
-    public function index(SchoolClass $class)
+    public function index(SchoolClass $class, GradeWorkflowService $workflow)
     {
-        $students = Student::where('grade_level', $class->grade_level)
-            ->where('section', $class->section)
-            ->get();
+        abort_unless((int) $class->teacher_id === (int) auth()->id(), 403);
+        $students = $workflow->classStudents($class);
 
         $today = today()->toDateString();
 
@@ -28,6 +28,8 @@ class AttendanceController extends Controller
 
     public function store(Request $request, SchoolClass $class)
     {
+        abort_unless((int) $class->teacher_id === (int) $request->user()->id, 403);
+
         $request->validate([
             'date'               => 'required|date',
             'attendance'         => 'required|array',

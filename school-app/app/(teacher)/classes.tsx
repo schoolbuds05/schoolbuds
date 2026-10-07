@@ -232,6 +232,9 @@ export default function Classes() {
                     <Text style={[styles.modalStudentMeta, { color: theme.textSub }]}>
                       {student.student_id} - {student.reward_points ?? 0} pts
                     </Text>
+                    {student.is_irregular ? (
+                      <Text style={[styles.irregularLabel, { color: theme.warning }]}>Irregular enrollment</Text>
+                    ) : null}
                   </View>
                 </View>
               ))}
@@ -400,5 +403,6 @@ const styles = StyleSheet.create({
   modalAvatarText: { fontSize: Font.xs, fontWeight: '900' },
   modalStudentName:{ fontSize: Font.sm, fontWeight: '800' },
   modalStudentMeta:{ fontSize: Font.xs, marginTop: 3 },
+  irregularLabel: { fontSize: Font.xs, fontWeight: '700', marginTop: 4 },
   modalEmpty:      { textAlign: 'center', paddingVertical: 28, fontSize: Font.sm },
 });

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView,
-  Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -131,7 +131,11 @@ export default function TeacherChat() {
                 })}
               >
                 <View style={s.avatar}>
-                  <Text style={s.avatarText}>{(item.name ?? 'S')[0].toUpperCase()}</Text>
+                  {item.profile_photo_url ? (
+                    <Image source={{ uri: item.profile_photo_url }} style={s.avatarImage} />
+                  ) : (
+                    <Text style={s.avatarText}>{(item.name ?? 'S')[0].toUpperCase()}</Text>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.contactName}>{item.name}</Text>
@@ -230,6 +234,14 @@ export default function TeacherChat() {
 
 function studentMeta(item) {
   const info = item.student_info ?? {};
+  const subjects = (info.subjects ?? [])
+    .map(subject => subject.code || subject.name)
+    .filter(Boolean)
+    .join(', ');
+  if (info.is_irregular) {
+    return subjects ? `Irregular · ${subjects}` : 'Irregular student';
+  }
+
   const parts = [info.year, info.section, info.program, info.school_year].filter(Boolean);
   return parts.length ? parts.join(' • ') : 'Student';
 }
@@ -250,7 +262,9 @@ const s = StyleSheet.create({
   avatar: {
     width: 46, height: 46, borderRadius: 23,
     backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
+  avatarImage: { width: '100%', height: '100%' },
   avatarText: { color: C.green, fontSize: 18, fontWeight: '800' },
   contactName: { color: C.text, fontSize: 15, fontWeight: '700' },
   contactRole: { color: C.sub, fontSize: 12, marginTop: 2 },
