@@ -38,7 +38,7 @@
                     </select>
                     <button type="button" id="generate-ai-quiz" class="portal-button-primary whitespace-nowrap">Generate</button>
                 </div>
-                <p id="ai-quiz-status" class="text-xs text-slate-500">Use AI to generate quiz questions from notes or uploaded modules.</p>
+                <p id="ai-quiz-status" class="text-xs text-slate-500">Generate questions from notes or uploaded modules. Generate again to append more questions.</p>
             </div>
         </div>
 
@@ -46,11 +46,13 @@
             @csrf
             <select name="section_subject_id" class="portal-field w-full" required>
                 <option value="">Choose class subject</option>
-                @foreach($sectionSubjects as $sectionSubject)
+                @forelse($sectionSubjects as $sectionSubject)
                     <option value="{{ $sectionSubject->id }}">
                         {{ $sectionSubject->section?->name }} - {{ $sectionSubject->subject?->name }}
                     </option>
-                @endforeach
+                @empty
+                    <option value="" disabled>No current classes available</option>
+                @endforelse
             </select>
             <select name="type" id="work-type" class="portal-field w-full" required>
                 <option value="assignment">Assignment</option>
@@ -94,50 +96,65 @@
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <p class="font-black text-slate-900">{{ $assignment->title }}</p>
-                            <p class="mt-1 text-sm text-slate-500">
+                            <p class="mt-1 text-sm font-medium text-slate-600">
                                 {{ ucfirst($assignment->type) }} · {{ $assignment->sectionSubject?->section?->name }} - {{ $assignment->sectionSubject?->subject?->name }}
                             </p>
                         </div>
                         <span class="rounded-full bg-violet-50 px-3 py-1 text-xs font-black text-violet-700">{{ ucfirst($assignment->status) }}</span>
                     </div>
                     <p class="mt-3 text-sm text-slate-600">{{ $assignment->instructions ?: 'No instructions.' }}</p>
-                    <p class="mt-3 text-xs font-bold text-slate-400">
+                    <p class="mt-3 text-sm font-semibold text-slate-600">
                         {{ (float) $assignment->points_possible }} points · {{ $assignment->submissions_count }} submissions · Due {{ $assignment->due_at?->format('Y-m-d H:i') ?? 'anytime' }}
                     </p>
                     @if($assignment->submissions->isNotEmpty())
                         <details class="mt-4 rounded-lg border border-violet-100 bg-violet-50/40">
-                            <summary class="cursor-pointer px-3 py-2 text-sm font-black text-violet-800">Review student submissions</summary>
+                            <summary class="cursor-pointer px-3 py-3 text-sm font-black text-violet-900">Review student submissions</summary>
                             <div class="divide-y divide-violet-100 border-t border-violet-100">
                                 @foreach($assignment->submissions as $submission)
-                                    <div class="space-y-2 p-3">
-                                        <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <p class="text-sm font-black text-slate-800">
+                                    <details class="group border-b border-violet-100 last:border-b-0">
+                                        <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-3 hover:bg-violet-50">
+                                            <span class="text-sm font-black text-slate-800">
                                                 {{ $submission->student?->first_name }} {{ $submission->student?->last_name }}
-                                            </p>
-                                            <p class="text-xs font-bold text-slate-500">
-                                                {{ ucfirst($submission->status) }}
+                                            </span>
+                                            <span class="text-sm font-bold text-slate-700">{{ ucfirst($submission->status) }}</span>
+                                        </summary>
+                                        <div class="space-y-2 px-3 pb-3">
+                                            @if($assignment->type === 'quiz')
+                                                @php
+                                                    $questionCount = count($assignment->questions ?? []);
+                                                    $correctCount = $assignment->correctAnswersCount($submission->answers ?? []);
+                                                    $mistakeCount = $questionCount - $correctCount;
+                                                @endphp
+                                                <p class="text-sm font-black text-rose-700">
+                                                    Correct: {{ $correctCount }}/{{ $questionCount }} · Mistakes: {{ $mistakeCount }}
+                                                </p>
+                                            @endif
+                                            <p class="text-sm font-black text-slate-700">
+                                                Score:
                                                 @if($submission->score !== null)
-                                                    · {{ (float) $submission->score }}/{{ (float) $assignment->points_possible }} points
+                                                    {{ (float) $submission->score }}/{{ (float) $assignment->points_possible }} points
+                                                @else
+                                                    Not graded
                                                 @endif
                                             </p>
+                                            @if($assignment->type === 'quiz')
+                                                <ol class="space-y-2">
+                                                    @foreach($assignment->questions ?? [] as $index => $question)
+                                                        <li class="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
+                                                            <p class="font-bold text-slate-900">{{ $index + 1 }}. {{ $question['question'] ?? '' }}</p>
+                                                            <p class="mt-2"><span class="font-semibold text-slate-600">Student answer:</span> <span class="font-medium text-slate-800">{{ data_get($submission->answers, $index) ?: 'Not answered' }}</span></p>
+                                                            <p class="mt-1 font-bold text-emerald-800">Correct answer: {{ $question['answer'] ?? 'Not set' }}</p>
+                                                        </li>
+                                                    @endforeach
+                                                </ol>
+                                            @else
+                                                <p class="whitespace-pre-wrap text-sm text-slate-600">{{ $submission->answer_text ?: 'No text answer provided.' }}</p>
+                                            @endif
+                                            @if($submission->feedback)
+                                                <p class="text-xs text-slate-500">Feedback: {{ $submission->feedback }}</p>
+                                            @endif
                                         </div>
-                                        @if($assignment->type === 'quiz')
-                                            <ol class="space-y-2">
-                                                @foreach($assignment->questions ?? [] as $index => $question)
-                                                    <li class="rounded-md bg-white p-2 text-xs text-slate-600">
-                                                        <p class="font-bold text-slate-800">{{ $index + 1 }}. {{ $question['question'] ?? '' }}</p>
-                                                        <p class="mt-1">Student answer: {{ data_get($submission->answers, $index) ?: 'Not answered' }}</p>
-                                                        <p class="mt-1 font-bold text-emerald-700">Correct answer: {{ $question['answer'] ?? 'Not set' }}</p>
-                                                    </li>
-                                                @endforeach
-                                            </ol>
-                                        @else
-                                            <p class="whitespace-pre-wrap text-sm text-slate-600">{{ $submission->answer_text ?: 'No text answer provided.' }}</p>
-                                        @endif
-                                        @if($submission->feedback)
-                                            <p class="text-xs text-slate-500">Feedback: {{ $submission->feedback }}</p>
-                                        @endif
-                                    </div>
+                                    </details>
                                 @endforeach
                             </div>
                         </details>
@@ -172,6 +189,15 @@
             aiModuleFileName.classList.toggle('text-slate-800', Boolean(aiModuleFile.files.length));
         });
 
+        const reindexQuestionRows = () => {
+            Array.from(quizContainer.children).forEach((wrapper, index) => {
+                wrapper.querySelector('span').textContent = `Question ${index + 1}`;
+                wrapper.querySelectorAll('input[name^="questions["]').forEach((input) => {
+                    input.name = input.name.replace(/^questions\[\d+\]/, `questions[${index}]`);
+                });
+            });
+        };
+
         const createQuestionRow = (data = null) => {
             const index = quizContainer.children.length;
             const wrapper = document.createElement('div');
@@ -196,8 +222,12 @@
                 <input type="text" name="questions[${index}][answer]" class="portal-field w-full" value="${escapeHtml(answerText)}" placeholder="Correct answer (exact text or A-D)" required>
             `;
 
-            wrapper.querySelector('[data-remove-question]').addEventListener('click', () => wrapper.remove());
+            wrapper.querySelector('[data-remove-question]').addEventListener('click', () => {
+                wrapper.remove();
+                reindexQuestionRows();
+            });
             quizContainer.appendChild(wrapper);
+            reindexQuestionRows();
         };
 
         const escapeHtml = (value) => {
@@ -209,12 +239,7 @@
                 .replace(/'/g, '&#039;');
         };
 
-        const clearQuizQuestions = () => {
-            quizContainer.innerHTML = '';
-        };
-
-        const populateGeneratedQuestions = (questions) => {
-            clearQuizQuestions();
+        const appendGeneratedQuestions = (questions) => {
             if (!Array.isArray(questions) || questions.length === 0) {
                 aiStatus.textContent = 'No quiz questions were generated. Try a longer lesson summary.';
                 aiStatus.className = 'text-xs text-amber-600';
@@ -224,15 +249,15 @@
             questions.forEach((question) => createQuestionRow(question));
             typeSelect.value = 'quiz';
             syncQuizBuilder();
-            aiStatus.textContent = `${questions.length} quiz question(s) added to the form.`;
+            aiStatus.textContent = `${questions.length} question(s) added. ${quizContainer.children.length} question(s) in the quiz.`;
             aiStatus.className = 'text-xs text-emerald-700';
         };
 
-        const syncQuizBuilder = () => {
+        const syncQuizBuilder = (addInitialQuestion = true) => {
             const isQuiz = typeSelect.value === 'quiz';
             quizBuilder.classList.toggle('hidden', !isQuiz);
 
-            if (isQuiz && quizContainer.children.length === 0) {
+            if (isQuiz && addInitialQuestion && quizContainer.children.length === 0) {
                 createQuestionRow();
             }
         };
@@ -265,7 +290,7 @@
                 aiStatus.textContent = 'Generating questions...';
                 aiStatus.className = 'text-xs text-slate-500';
                 typeSelect.value = 'quiz';
-                syncQuizBuilder();
+                syncQuizBuilder(false);
 
                 const response = await fetch(generateQuizUrl, {
                     method: 'POST',
@@ -289,7 +314,7 @@
                     throw new Error(data.message || 'AI quiz generation failed.');
                 }
 
-                populateGeneratedQuestions(data.questions || []);
+                appendGeneratedQuestions(data.questions || []);
             } catch (error) {
                 aiStatus.textContent = error.message || 'AI quiz generation failed.';
                 aiStatus.className = 'text-xs text-rose-600';

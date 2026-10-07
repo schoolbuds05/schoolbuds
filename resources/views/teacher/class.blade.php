@@ -1,16 +1,34 @@
 @extends('layouts.portal', ['title' => $class->subject . ' Students'])
 
 @section('content')
-<a href="{{ route('teacher.classes') }}" class="text-sm font-bold text-violet-700 hover:underline">Back to classes</a>
+@php
+    $fromPastClasses = request('view') === 'past';
+@endphp
+<nav aria-label="Breadcrumb" class="mb-4 text-sm">
+    <ol class="flex flex-wrap items-center gap-2">
+        <li><a href="{{ route('teacher.dashboard') }}" class="font-bold text-rose-700 hover:underline">Teacher Dashboard</a></li>
+        <li aria-hidden="true" class="text-slate-400">/</li>
+        <li>
+            <a
+                href="{{ route('teacher.classes', $fromPastClasses ? ['view' => 'past'] : ['view' => 'current']) }}"
+                class="font-bold text-rose-700 hover:underline"
+            >{{ $fromPastClasses ? 'Past Classes' : 'Classes' }}</a>
+        </li>
+        <li aria-hidden="true" class="text-slate-400">/</li>
+        <li aria-current="page" class="font-semibold text-slate-600">{{ $class->subject }}</li>
+    </ol>
+</nav>
 
-<div class="mt-4 mb-6">
+<div class="mb-6">
     <h1 class="text-2xl font-black text-slate-900">{{ $class->subject }}</h1>
     <p class="mt-1 text-sm text-slate-500">Grade {{ $class->grade_level }} - {{ $class->section }} · {{ $class->room ?: 'No room' }} · {{ $class->schedule ?: 'No schedule' }} · {{ $isCollege ? 'College 1–5 scale (1 is highest)' : 'SHS 1–100 scale' }}</p>
 </div>
 
 <div class="mb-5 flex flex-wrap gap-2">
-    <a href="{{ route('teacher.grades', $class) }}" class="portal-button-primary">Enter grades</a>
-    <a href="{{ route('teacher.attendance', $class) }}" class="portal-button-secondary">Mark attendance</a>
+    <a href="{{ route('teacher.grades', ['class' => $class, 'view' => $fromPastClasses ? 'past' : 'current']) }}" class="portal-button-primary">Enter grades</a>
+    @unless($fromPastClasses)
+        <a href="{{ route('teacher.attendance', $class) }}" class="portal-button-secondary">Mark attendance</a>
+    @endunless
 </div>
 
 <section class="portal-card overflow-hidden">

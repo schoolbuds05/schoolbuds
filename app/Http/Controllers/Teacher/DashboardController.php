@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicTerm;
 use App\Models\ClassAssignment;
 use App\Models\MarketplaceItem;
 use App\Models\MarketplaceMessage;
@@ -14,7 +15,6 @@ use App\Models\Student;
 use App\Models\Grade;
 use App\Models\Attendance;
 use App\Models\TeacherMessage;
-use App\Models\User;
 use App\Services\GradeWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -25,16 +25,15 @@ class DashboardController extends Controller
     {
         $teacher = auth()->user();
 
-        if ($teacher?->position === User::POSITION_HEAD_DEPARTMENT) {
-            return redirect()->route('department-chair.teachers');
-        }
-
-        $classes = $this->teacherClasses();
-
-        $totalStudents = $this->teacherStudents($workflow)->count();
+        [$activeTerm, $classes] = $this->currentTermTeacherClasses();
+        $totalStudents = $classes
+            ->flatMap(fn (SchoolClass $class) => $workflow->classStudents($class))
+            ->unique('id')
+            ->count();
 
         $recentGrades = Grade::whereHas('schoolClass', fn($q) =>
             $q->where('teacher_id', $teacher->id)
+                ->whereIn('id', $classes->modelKeys())
         )->with(['student', 'schoolClass'])->latest()->take(5)->get();
 
         $todayAttendance = Attendance::whereHas('schoolClass', fn($q) =>
@@ -42,16 +41,61 @@ class DashboardController extends Controller
         )->whereDate('date', today())->count();
 
         return view('teacher.dashboard', compact(
-            'classes', 'totalStudents', 'recentGrades', 'todayAttendance'
+            'activeTerm', 'classes', 'totalStudents', 'recentGrades', 'todayAttendance'
         ));
     }
 
-    public function classes(GradeWorkflowService $workflow)
+    public function classes(Request $request, GradeWorkflowService $workflow)
     {
-        $classes = $this->teacherClasses();
+        $view = $request->query('view') === 'past' ? 'past' : 'current';
+        [$activeTerm, $classes] = $this->currentTermTeacherClasses($view);
+
         $rosters = $classes->mapWithKeys(fn (SchoolClass $class) => [$class->id => $workflow->classStudents($class)]);
 
-        return view('teacher.classes', compact('classes', 'rosters'));
+        return view('teacher.classes', compact('activeTerm', 'classes', 'rosters', 'view'));
+    }
+
+    private function currentTermTeacherClasses(string $view = 'current'): array
+    {
+        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        $sectionSubjects = collect();
+
+        if ($activeTerm || $view === 'past') {
+            $query = SectionSubject::query()
+                ->where('teacher_id', auth()->id())
+                ->with(['section', 'subject']);
+
+            if ($activeTerm) {
+                $query->whereHas('section', function ($sectionQuery) use ($activeTerm, $view) {
+                    if ($view === 'past') {
+                        $sectionQuery->where(function ($termQuery) use ($activeTerm) {
+                            $termQuery->where('school_year', '!=', $activeTerm->school_year)
+                                ->orWhere('semester', '!=', $activeTerm->semester);
+                        });
+                    } else {
+                        $sectionQuery
+                            ->where('school_year', $activeTerm->school_year)
+                            ->where('semester', $activeTerm->semester);
+                    }
+                });
+            }
+
+            $sectionSubjects = $query->get();
+        }
+
+        $classIds = $sectionSubjects
+            ->map(fn (SectionSubject $sectionSubject) => $this->schoolClassForSectionSubject($sectionSubject)->id)
+            ->unique();
+
+        $classes = SchoolClass::query()
+            ->where('teacher_id', auth()->id())
+            ->whereIn('id', $classIds)
+            ->orderBy('grade_level')
+            ->orderBy('section')
+            ->orderBy('subject')
+            ->get();
+
+        return [$activeTerm, $classes];
     }
 
     public function assignments()
@@ -65,19 +109,32 @@ class DashboardController extends Controller
             ->latest()
             ->get();
 
-        $sectionSubjects = SectionSubject::query()
-            ->where('teacher_id', $teacher->id)
+        $sectionSubjects = $this->currentTermSectionSubjects((int) $teacher->id);
+
+        return view('teacher.assignments', compact('assignments', 'sectionSubjects'));
+    }
+
+    private function currentTermSectionSubjects(int $teacherId)
+    {
+        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        if (!$activeTerm) {
+            return collect();
+        }
+
+        return SectionSubject::query()
+            ->where('teacher_id', $teacherId)
+            ->whereHas('section', fn ($query) => $query
+                ->where('school_year', $activeTerm->school_year)
+                ->where('semester', $activeTerm->semester))
             ->with(['section', 'subject'])
             ->orderByDesc('id')
             ->get();
-
-        return view('teacher.assignments', compact('assignments', 'sectionSubjects'));
     }
 
     public function storeAssignment(Request $request)
     {
         $data = $request->validate([
-            'section_subject_id' => ['required', 'integer', Rule::exists('section_subjects', 'id')->where('teacher_id', $request->user()->id)],
+            'section_subject_id' => ['required', 'integer', Rule::in($this->currentTermSectionSubjects((int) $request->user()->id)->pluck('id')->all())],
             'type' => ['required', Rule::in(['assignment', 'quiz'])],
             'title' => ['required', 'string', 'max:160'],
             'instructions' => ['nullable', 'string', 'max:5000'],

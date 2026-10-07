@@ -170,7 +170,7 @@
     .guest-brand-footer { display: flex; align-items: center; gap: 0.65rem; color: var(--portal-text-soft); font-size: 0.78rem; }
     .guest-footer-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--guest-accent); box-shadow: 0 0 0 5px rgb(168 50 61 / 0.14); }
 
-    .guest-form-panel { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 2rem clamp(1.5rem, 8vw, 8rem); background: var(--portal-content); }
+    .guest-form-panel { display: flex; justify-content: center; min-width: 0; padding: 2rem clamp(1.5rem, 8vw, 8rem); background: var(--portal-content); }
     .guest-form-wrap { width: min(100%, 27rem); margin: 0 auto; }
     .guest-legal { width: min(100%, 27rem); margin: 3rem auto 0; color: var(--portal-text-muted); font-size: 0.72rem; text-align: center; }
     .guest-legal span { margin: 0 0.4rem; color: var(--portal-border-strong); }

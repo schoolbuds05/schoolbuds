@@ -28,12 +28,12 @@
             ['label' => 'Profile', 'route' => 'registrar.profile.show', 'match' => 'registrar/profile*', 'roles' => ['admin', 'registrar']],
         ],
         'Teacher' => [
-            ['label' => 'Dashboard', 'route' => 'teacher.dashboard', 'match' => 'teacher/dashboard', 'roles' => ['faculty', 'teacher', 'head_teacher', 'dean']],
-            ['label' => 'Classes', 'route' => 'teacher.classes', 'match' => 'teacher/classes', 'roles' => ['faculty', 'teacher', 'head_teacher', 'dean']],
-            ['label' => 'Work', 'route' => 'teacher.assignments', 'match' => 'teacher/assignments*', 'roles' => ['faculty', 'teacher', 'head_teacher', 'dean']],
-            ['label' => 'Market', 'route' => 'teacher.market', 'match' => 'teacher/market', 'roles' => ['faculty', 'teacher', 'head_teacher', 'dean']],
-            ['label' => 'Chat', 'route' => 'teacher.chat', 'match' => 'teacher/chat', 'roles' => ['faculty', 'teacher', 'head_teacher', 'dean']],
-            ['label' => 'Profile', 'route' => 'teacher.profile', 'match' => 'teacher/profile', 'roles' => ['faculty', 'teacher', 'head_teacher', 'dean']],
+            ['label' => 'Dashboard', 'route' => 'teacher.dashboard', 'match' => 'teacher/dashboard', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
+            ['label' => 'Classes', 'route' => 'teacher.classes', 'match' => 'teacher/classes', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
+            ['label' => 'Work', 'route' => 'teacher.assignments', 'match' => 'teacher/assignments*', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
+            ['label' => 'Market', 'route' => 'teacher.market', 'match' => 'teacher/market', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
+            ['label' => 'Chat', 'route' => 'teacher.chat', 'match' => 'teacher/chat', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
+            ['label' => 'Profile', 'route' => 'teacher.profile', 'match' => 'teacher/profile', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
         ],
         'Department Chair' => [
             ['label' => 'Teacher List', 'route' => 'department-chair.teachers', 'match' => 'department-chair/teachers', 'roles' => ['head_department']],
@@ -57,18 +57,18 @@
         'Teacher List' => 'TL', 'Grade' => 'GD', 'Report' => 'RT', 'Property' => 'PR',
     ];
 
-    $portalGroupForRole = match (true) {
-        $role === 'admin' => 'Admin',
-        $role === 'registrar' => 'Registrar',
-        $user?->position === 'head_department' => 'Department Chair',
+    $portalGroupsForRole = match (true) {
+        $role === 'admin' => ['Admin'],
+        $role === 'registrar' => ['Registrar'],
+        $user?->position === 'head_department' => ['Teacher', 'Department Chair'],
         in_array($role, ['faculty', 'teacher', 'head_teacher', 'dean'], true)
-            || in_array($user?->position, ['teacher', 'head_department', 'head_teacher', 'dean'], true) => 'Teacher',
-        $role === 'property_custodian' || $user?->position === 'property_custodian' => 'Staff',
-        default => null,
+            || in_array($user?->position, ['teacher', 'head_teacher', 'dean'], true) => ['Teacher'],
+        $role === 'property_custodian' || $user?->position === 'property_custodian' => ['Staff'],
+        default => [],
     };
 
     $visibleGroups = collect($navGroups)
-        ->when($portalGroupForRole, fn ($groups) => $groups->only([$portalGroupForRole]))
+        ->when($portalGroupsForRole !== [], fn ($groups) => $groups->only($portalGroupsForRole))
         ->map(fn ($items) => collect($items)->filter(fn ($item) => in_array($role, $item['roles'], true) || in_array($user?->position, $item['roles'], true))->values())
         ->filter(fn ($items) => $items->isNotEmpty());
 @endphp
@@ -87,12 +87,12 @@
     <div class="portal-frame-wrap min-h-screen p-4 lg:h-screen lg:min-h-0 lg:py-5">
         <div class="min-h-[calc(100vh-2rem)] overflow-hidden rounded-[22px] border border-[#e8c4c7] bg-[#f6efee]/80 shadow-[0_26px_48px_rgba(121,84,89,0.12)] backdrop-blur lg:grid lg:h-[calc(100vh-2.5rem)] lg:min-h-0 lg:grid-cols-[330px_1fr]">
             <aside class="hidden border-r border-[#9d7478] bg-[#b58a8d] lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-            <div class="px-6 py-5">
-                <div class="flex items-center gap-3">
-                    <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#d95f64] text-sm font-black text-white shadow-md shadow-rose-200">SB</span>
-                    <div>
-                        <p class="text-base font-black text-[#3f2b2b]">SchoolBuds</p>
-                        <p class="mt-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#b38d8d]">Portal</p>
+            <div class="px-5 pb-5 pt-8">
+                <div class="mx-auto flex w-fit max-w-full items-center gap-3">
+                    <img src="{{ asset('images/schoolbuds-logo.png') }}" alt="SchoolBuds logo" class="h-16 w-16 shrink-0 object-contain">
+                    <div class="min-w-0">
+                        <p class="text-sm font-black leading-tight text-[#3f2b2b]">St. Cecilia College</p>
+                        <p class="mt-1 text-xs font-bold leading-tight text-[#7a5d5d]">Cebu-Inc Portal</p>
                     </div>
                 </div>
             </div>
@@ -100,7 +100,7 @@
             <nav id="portal-sidebar-nav" class="portal-sidebar-scroll min-h-0 flex-1 space-y-6 overflow-y-auto px-3 pb-6">
                 @foreach($visibleGroups as $group => $items)
                     <div>
-                        <p class="px-3 text-[10px] font-black uppercase tracking-[0.18em] text-violet-200">{{ $group }}</p>
+                        <p class="px-3 text-[10px] font-black uppercase tracking-[0.18em] text-[#713f43]">{{ $group }}</p>
                         <div class="mt-2 space-y-1.5">
                             @foreach($items as $item)
                                 @php($active = request()->is($item['match']))

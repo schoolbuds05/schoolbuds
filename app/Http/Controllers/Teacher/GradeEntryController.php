@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicTerm;
 use App\Models\SchoolClass;
+use App\Models\SectionSubject;
 use App\Models\Grade;
 use App\Models\GradeChangeRequest;
 use App\Models\GradeSubmission;
@@ -12,10 +14,13 @@ use Illuminate\Http\Request;
 
 class GradeEntryController extends Controller
 {
-    public function index(SchoolClass $class, GradeWorkflowService $workflow)
+    public function index(Request $request, SchoolClass $class, GradeWorkflowService $workflow)
     {
         abort_unless((int) $class->teacher_id === (int) auth()->id(), 403);
 
+        $view = $request->query('view') === 'past' || !$this->isCurrentClass($class)
+            ? 'past'
+            : 'current';
         $students = $workflow->classStudents($class);
         $isCollege = $workflow->isCollegeClass($class);
 
@@ -37,7 +42,26 @@ class GradeEntryController extends Controller
             ->groupBy('grade_submission_id')
             ->map(fn ($requests) => $requests->first());
 
-        return view('teacher.grades', compact('class', 'students', 'grades', 'quarters', 'submissions', 'changeRequests', 'isCollege'));
+        return view('teacher.grades', compact('class', 'students', 'grades', 'quarters', 'submissions', 'changeRequests', 'isCollege', 'view'));
+    }
+
+    private function isCurrentClass(SchoolClass $class): bool
+    {
+        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        if (!$activeTerm) {
+            return false;
+        }
+
+        return SectionSubject::query()
+            ->where('teacher_id', $class->teacher_id)
+            ->whereHas('section', fn ($query) => $query
+                ->where('name', $class->section)
+                ->where('year_level', $class->grade_level)
+                ->where('school_year', $class->school_year)
+                ->where('school_year', $activeTerm->school_year)
+                ->where('semester', $activeTerm->semester))
+            ->whereHas('subject', fn ($query) => $query->where('name', $class->subject))
+            ->exists();
     }
 
     public function store(Request $request, SchoolClass $class, GradeWorkflowService $workflow)

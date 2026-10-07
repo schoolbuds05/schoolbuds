@@ -598,14 +598,7 @@ class AssignmentController extends Controller
             return null;
         }
 
-        $correct = 0;
-        foreach ($questions as $index => $question) {
-            $expected = trim(strtolower((string) ($question['answer'] ?? '')));
-            $actual = trim(strtolower((string) ($answers[$index] ?? '')));
-            if ($expected !== '' && $actual === $expected) {
-                $correct++;
-            }
-        }
+        $correct = $assignment->correctAnswersCount($answers);
 
         return round(($correct / max(1, $questions->count())) * (float) $assignment->points_possible, 2);
     }

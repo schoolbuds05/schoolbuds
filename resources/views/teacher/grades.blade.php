@@ -1,9 +1,27 @@
 @extends('layouts.portal', ['title' => 'Grade Entry'])
 
 @section('content')
-<a href="{{ route('teacher.classes') }}" class="text-sm font-bold text-violet-700 hover:underline">Back to classes</a>
+<nav aria-label="Breadcrumb" class="mb-4 text-sm">
+    <ol class="flex flex-wrap items-center gap-2">
+        <li><a href="{{ route('teacher.dashboard') }}" class="font-bold text-rose-700 hover:underline">Teacher Dashboard</a></li>
+        <li aria-hidden="true" class="text-slate-400">/</li>
+        <li>
+            <a href="{{ route('teacher.classes', ['view' => $view]) }}" class="font-bold text-rose-700 hover:underline">
+                {{ $view === 'past' ? 'Past Classes' : 'Classes' }}
+            </a>
+        </li>
+        <li aria-hidden="true" class="text-slate-400">/</li>
+        <li>
+            <a href="{{ route('teacher.class', ['class' => $class, 'view' => $view]) }}" class="font-bold text-rose-700 hover:underline">
+                {{ $class->subject }}
+            </a>
+        </li>
+        <li aria-hidden="true" class="text-slate-400">/</li>
+        <li aria-current="page" class="font-semibold text-slate-600">Grade Entry</li>
+    </ol>
+</nav>
 
-<div class="mt-4 mb-6">
+<div class="mb-6">
     <h1 class="text-2xl font-black text-slate-900">Grade Entry</h1>
     <p class="mt-1 text-sm text-slate-500">{{ $class->subject }} · Grade {{ $class->grade_level }} - {{ $class->section }} · {{ $isCollege ? 'College scale: 1.00–5.00 (1 is highest)' : 'SHS scale: 1–100' }}</p>
 </div>
@@ -44,7 +62,7 @@
                 @endif
             </div>
         @endif
-        <form method="POST" action="{{ route('teacher.grades.store', $class) }}">
+        <form method="POST" action="{{ route('teacher.grades.store', ['class' => $class, 'view' => $view]) }}">
             @csrf
             <input type="hidden" name="quarter_display" value="{{ $quarter }}">
             <section class="portal-card overflow-hidden">
@@ -119,7 +137,7 @@
                     @if($hasOpenChangeRequest)
                         <p class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">This quarter already has a change request under review.</p>
                     @else
-                        <form method="POST" action="{{ route('teacher.grades.change-request', [$class, $submission]) }}" class="portal-card mt-4 p-5">
+                        <form method="POST" action="{{ route('teacher.grades.change-request', ['class' => $class, 'submission' => $submission, 'view' => $view]) }}" class="portal-card mt-4 p-5">
                             @csrf
                             <h2 class="font-black text-slate-800">Request a grade change</h2>
                             <p class="mt-1 text-sm text-slate-500">Enter a new score only for students whose published grade needs correction.</p>

@@ -13,12 +13,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HeaderGradient from '../components/ui/HeaderGradient';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 export default function StudentAssignments() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [answerText, setAnswerText] = useState('');
@@ -202,8 +204,8 @@ export default function StudentAssignments() {
 
       <Modal visible={!!selected} animationType="slide">
         <View style={[s.detail, { backgroundColor: theme.bg }]}>
-          <View style={[s.detailHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-            <View style={{ flex: 1 }}>
+          <View style={[s.detailHeader, { paddingTop: insets.top + 10, paddingLeft: Math.max(insets.left, 16), paddingRight: Math.max(insets.right, 16), backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+            <View style={s.detailHeading}>
               <Text style={[s.modalTitle, { color: theme.text }]}>{selected?.title}</Text>
               <Text style={[s.sub, { color: theme.textSub }]}>{selected?.type} · {Number(selected?.points_possible || 0).toFixed(0)} pts</Text>
             </View>
@@ -211,7 +213,10 @@ export default function StudentAssignments() {
               <Text style={[s.closeText, { color: theme.text }]}>X</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={s.body}>
+          <ScrollView
+            contentContainerStyle={[s.detailBody, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
+            keyboardShouldPersistTaps="handled"
+          >
             {selected?.type === 'quiz' && violations.length ? (
               <View style={[s.warningCard, { borderColor: theme.warning }]}>
                 <Text style={[s.warningText, { color: theme.warning }]}>Quiz warnings: {violations.length}/3</Text>
@@ -237,7 +242,7 @@ export default function StudentAssignments() {
 
                 return (
                   <View key={index} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                    <Text style={[s.title, { color: theme.text }]}>{index + 1}. {question.question}</Text>
+                    <Text style={[s.questionTitle, { color: theme.text }]}>{index + 1}. {question.question}</Text>
                     {questionChoices.map(choice => {
                       const isSelected = answers[index] === choice;
                       const isCorrectChoice = quizReviewReady
@@ -318,14 +323,17 @@ const s = StyleSheet.create({
   sub: { fontSize: 12, fontWeight: '600', marginTop: 5, lineHeight: 18 },
   score: { fontSize: 12, fontWeight: '900', marginTop: 10 },
   detail: { flex: 1 },
-  detailHeader: { paddingTop: 48, paddingBottom: 14, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '900', paddingHorizontal: 18 },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+  detailHeader: { minHeight: 76, paddingBottom: 14, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  detailHeading: { flex: 1, minWidth: 0 },
+  detailBody: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '900', flexShrink: 1 },
   closeText: { fontSize: 13, fontWeight: '900' },
+  closeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  questionTitle: { fontSize: 16, fontWeight: '900', lineHeight: 23 },
   input: { borderWidth: 1, borderRadius: 12, minHeight: 46, paddingHorizontal: 12, fontSize: 14, marginTop: 12 },
   textarea: { minHeight: 140, paddingTop: 12 },
-  choice: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
-  choiceText: { fontSize: 13, fontWeight: '800' },
+  choice: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginTop: 10, width: '100%' },
+  choiceText: { fontSize: 14, fontWeight: '700', lineHeight: 20, flexShrink: 1 },
   submitBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   submitText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });

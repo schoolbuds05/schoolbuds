@@ -4,10 +4,16 @@
 <x-portal-dashboard-hero
     eyebrow="Faculty workspace · {{ now()->format('F j, Y') }}"
     title="Your classes, in one place"
-    description="Keep up with your students, attendance, and recent grade activity."
+    description="{{ auth()->user()->position === \App\Models\User::POSITION_HEAD_DEPARTMENT ? 'Manage your classes and students, and access your department review tools.' : 'Keep up with your current classes, students, and recent grade activity.' }}"
     :action-href="route('teacher.classes')"
     action-label="Open my classes"
 />
+
+@if(auth()->user()->position === \App\Models\User::POSITION_HEAD_DEPARTMENT)
+    <div class="mb-6">
+        <a href="{{ route('department-chair.teachers') }}" class="portal-button-secondary">Open department chair tools</a>
+    </div>
+@endif
 
 <div class="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
     <x-stat-card label="My classes" :value="$classes->count()" tone="blue" />
@@ -17,8 +23,18 @@
 
 <section class="portal-card mb-6 p-5">
     <div class="mb-4 flex items-center justify-between gap-3">
-        <h2 class="font-black text-slate-800">My Classes</h2>
-        <a href="{{ route('teacher.classes') }}" class="text-sm font-bold text-violet-700 hover:underline">View all</a>
+        <div>
+            <h2 class="font-black text-slate-800">My Classes</h2>
+            @if($activeTerm)
+                <p class="mt-1 text-xs font-semibold text-slate-500">Showing {{ strtoupper($activeTerm->semester) }} semester · A.Y. {{ $activeTerm->school_year }}</p>
+            @else
+                <p class="mt-1 text-xs font-semibold text-slate-500">No active academic term is configured.</p>
+            @endif
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ route('teacher.classes', ['view' => 'past']) }}" class="text-sm font-bold text-slate-600 hover:text-rose-700">Past classes</a>
+            <a href="{{ route('teacher.classes', ['view' => 'current']) }}" class="text-sm font-bold text-violet-700 hover:underline">View all</a>
+        </div>
     </div>
     <div class="divide-y divide-slate-100">
         @forelse($classes as $class)
@@ -34,7 +50,7 @@
                 </div>
             </div>
         @empty
-            <p class="py-6 text-center text-sm text-slate-500">No classes assigned yet.</p>
+            <p class="py-6 text-center text-sm text-slate-500">No classes assigned for the current academic term.</p>
         @endforelse
     </div>
 </section>

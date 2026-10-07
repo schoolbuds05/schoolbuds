@@ -3,10 +3,47 @@
 @section('content')
 <div class="mb-6">
     <h1 class="text-2xl font-black text-slate-900">Classes</h1>
-    <p class="mt-1 text-sm text-slate-500">Open class rosters, attendance, and grade entry.</p>
+    <p class="mt-1 text-sm text-slate-500">
+        @if($view === 'past')
+            @if($activeTerm)
+                Showing classes outside {{ strtoupper($activeTerm->semester) }} semester, A.Y. {{ $activeTerm->school_year }}.
+            @else
+                No active academic term is configured; showing all assigned classes.
+            @endif
+        @elseif($activeTerm)
+            Showing {{ strtoupper($activeTerm->semester) }} semester classes for A.Y. {{ $activeTerm->school_year }}.
+        @else
+            No active academic term is configured.
+        @endif
+        @if($view === 'past')
+            Review past class rosters and grades.
+        @else
+            Open class rosters, attendance, and grade entry.
+        @endif
+    </p>
 </div>
 
 <section class="portal-card overflow-hidden">
+    <div class="flex gap-2 border-b border-slate-100 p-4">
+        <a
+            href="{{ route('teacher.classes', ['view' => 'current']) }}"
+            @class([
+                'rounded-lg px-4 py-2 text-sm font-bold transition',
+                'bg-rose-100 text-rose-700' => $view === 'current',
+                'text-slate-500 hover:bg-slate-50' => $view !== 'current',
+            ])
+            @if($view === 'current') aria-current="page" @endif
+        >Current Classes</a>
+        <a
+            href="{{ route('teacher.classes', ['view' => 'past']) }}"
+            @class([
+                'rounded-lg px-4 py-2 text-sm font-bold transition',
+                'bg-rose-100 text-rose-700' => $view === 'past',
+                'text-slate-500 hover:bg-slate-50' => $view !== 'past',
+            ])
+            @if($view === 'past') aria-current="page" @endif
+        >Past Classes</a>
+    </div>
     <div class="divide-y divide-slate-100">
         @forelse($classes as $class)
             @php($students = $rosters[$class->id] ?? collect())
@@ -23,9 +60,13 @@
                     <p class="mt-1 text-xs font-semibold text-slate-400">{{ $class->room ?: 'No room' }} - {{ $class->schedule ?: 'No schedule' }}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <a href="{{ route('teacher.class', $class) }}" class="portal-button-secondary">Students</a>
-                    <a href="{{ route('teacher.grades', $class) }}" class="portal-button-secondary">Grades</a>
-                    <a href="{{ route('teacher.attendance', $class) }}" class="portal-button-primary">Attendance</a>
+                    <a href="{{ route('teacher.class', ['class' => $class, 'view' => $view]) }}" class="portal-button-secondary">Students</a>
+                    <a href="{{ route('teacher.grades', ['class' => $class, 'view' => $view]) }}" class="portal-button-secondary">Grades</a>
+                    @if($view === 'current')
+                        <a href="{{ route('teacher.attendance', $class) }}" class="portal-button-primary">Attendance</a>
+                    @else
+                        <a href="{{ route('teacher.attendance', ['class' => $class, 'view' => 'past']) }}" class="portal-button-secondary">Past Attendance</a>
+                    @endif
                 </div>
             </div>
 
@@ -86,7 +127,9 @@
                 </div>
             </div>
         @empty
-            <p class="p-10 text-center text-sm text-slate-500">No classes assigned yet.</p>
+            <p class="p-10 text-center text-sm text-slate-500">
+                {{ $view === 'past' ? 'No past classes found.' : 'No classes assigned for the current academic term.' }}
+            </p>
         @endforelse
     </div>
 </section>

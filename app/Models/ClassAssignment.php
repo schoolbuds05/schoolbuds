@@ -40,4 +40,17 @@ class ClassAssignment extends Model
     {
         return $this->hasMany(AssignmentSubmission::class);
     }
+
+    public function correctAnswersCount(array $answers): int
+    {
+        return collect($this->questions ?? [])
+            ->values()
+            ->filter(function ($question, $index) use ($answers) {
+                $expected = trim(mb_strtolower((string) data_get($question, 'answer', '')));
+                $actual = trim(mb_strtolower((string) ($answers[$index] ?? '')));
+
+                return $expected !== '' && $actual === $expected;
+            })
+            ->count();
+    }
 }
