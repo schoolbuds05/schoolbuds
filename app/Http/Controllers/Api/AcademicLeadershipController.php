@@ -31,7 +31,7 @@ class AcademicLeadershipController extends Controller
         }
 
         $sections = $sectionsQuery
-            ->withCount(['students as enrolled_students_count' => fn ($query) => $query->wherePivot('status', 'enrolled')])
+            ->withCount(['students as enrolled_students_count' => fn ($query) => $query->where('section_students.status', 'enrolled')])
             ->orderBy('year_level')
             ->orderBy('name')
             ->get(['id', 'name', 'program_type', 'course', 'strand', 'year_level', 'semester', 'school_year']);

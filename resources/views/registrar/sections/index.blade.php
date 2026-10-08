@@ -14,7 +14,7 @@
                     <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path stroke-linecap="round" d="M16 16l5 5"/></svg>
                     <input name="search" value="{{ request('search') }}" placeholder="Search section, course, or strand" class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:outline-none">
                 </div>
-                <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">Search</button>
+                <button type="submit" class="shrink-0 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-portal-accent-hover">Search</button>
             </form>
 
             <div class="flex items-center gap-2">
@@ -75,11 +75,11 @@
                         </div>
                         <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
                             <a href="{{ route('registrar.sections.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
-                            <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
+                            <button type="submit" class="rounded-lg bg-portal-accent px-3 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Apply</button>
                         </div>
                     </form>
                 </details>
-                <button type="button" data-modal-open="section-create-modal" class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
+                <button type="button" data-modal-open="section-create-modal" class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                     Add section
                 </button>
@@ -144,7 +144,7 @@
         <input name="max_students" value="40" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
     </label>
     <label class="flex items-center gap-2 text-sm font-bold text-slate-700 md:pt-5"><input type="checkbox" name="is_active" value="1" checked class="rounded border-slate-300"> Active</label>
-    <button class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white md:mt-5 md:col-span-3">Create section</button>
+    <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:mt-5 md:col-span-3">Create section</button>
 </form>
     </section>
 </div>
@@ -280,7 +280,7 @@
                             <input name="max_students" value="{{ $section->max_students }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
                         </label>
                         <label class="flex items-center gap-2 text-sm font-bold text-slate-700 md:pt-5"><input type="checkbox" name="is_active" value="1" @checked($section->is_active) class="rounded border-slate-300"> Active</label>
-                        <button class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white md:mt-5">Save changes</button>
+                        <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:mt-5">Save changes</button>
                         <button
                             type="submit"
                             form="delete-section-{{ $section->id }}"
@@ -303,7 +303,7 @@
                             <p class="text-xs font-black uppercase text-slate-400">Assigned subjects</p>
                             <p class="mt-1 text-sm font-bold text-slate-700">{{ $subjectCount }} subject(s)</p>
                         </div>
-                        <button type="button" data-modal-open="subjects-modal-{{ $section->id }}" class="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-emerald-800">
+                        <button type="button" data-modal-open="subjects-modal-{{ $section->id }}" class="rounded-lg bg-portal-accent px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-portal-accent-hover">
                             Manage subjects
                         </button>
                     </div>
@@ -393,7 +393,7 @@
                                     <input type="time" name="time_end" class="rounded-lg border-slate-300 text-sm">
                                 </div>
                                 <input name="room" placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
-                                <button class="w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50" @disabled($eligibleSubjects->isEmpty())>
+                                <button class="w-full rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-black text-white hover:bg-portal-accent-hover disabled:opacity-50" @disabled($eligibleSubjects->isEmpty())>
                                     Assign subject
                                 </button>
                             </form>
@@ -455,7 +455,7 @@
                                 @if($eligibleStudents->isEmpty())
                                     <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">No available active students match this section level.</p>
                                 @endif
-                                <button class="w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50" @disabled($eligibleStudents->isEmpty())>
+                                <button class="w-full rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-black text-white hover:bg-portal-accent-hover disabled:opacity-50" @disabled($eligibleStudents->isEmpty())>
                                     Add to section
                                 </button>
                             </form>

@@ -12,6 +12,29 @@ export default {
     theme: {
         extend: {
             colors: {
+                portal: {
+                    page: 'var(--portal-page)',
+                    shell: 'var(--portal-shell-bg)',
+                    sidebar: 'var(--portal-sidebar)',
+                    'sidebar-heading': 'var(--portal-sidebar-heading)',
+                    'sidebar-text': 'var(--portal-sidebar-text)',
+                    'sidebar-icon': 'var(--portal-sidebar-icon)',
+                    'sidebar-icon-text': 'var(--portal-sidebar-icon-text)',
+                    content: 'var(--portal-content)',
+                    header: 'var(--portal-header)',
+                    card: 'var(--portal-card)',
+                    input: 'var(--portal-input)',
+                    hover: 'var(--portal-hover)',
+                    'accent-soft': 'var(--portal-accent-soft)',
+                    'accent-border': 'var(--portal-accent-border)',
+                    accent: 'var(--portal-accent)',
+                    'accent-hover': 'var(--portal-accent-hover)',
+                    text: 'var(--portal-text)',
+                    'text-soft': 'var(--portal-text-soft)',
+                    'text-muted': 'var(--portal-text-muted)',
+                    border: 'var(--portal-border)',
+                    'border-strong': 'var(--portal-border-strong)',
+                },
                 violet: {
                     50: '#fef2f2',
                     100: '#fee2e2',

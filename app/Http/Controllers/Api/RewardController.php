@@ -18,9 +18,9 @@ class RewardController extends Controller
 
         if (!$student) {
             return response()->json([
-                'summary' => $this->emptyRewardSummary(),
+                'summary' => $points->emptySummary(),
                 'rewards' => [],
-                'rules' => $this->rewardRules(),
+                'rules' => $this->rewardRules($points),
             ]);
         }
 
@@ -34,7 +34,7 @@ class RewardController extends Controller
         $data = $request->validate([
             'source' => ['required', 'in:donations,events,early_enrollment,early_payment,manual_adjustment'],
             'source_key' => ['nullable', 'string', 'max:160'],
-            'points' => ['required', 'integer', 'min:1', 'max:100'],
+            'points' => ['required', 'integer', 'min:1', 'max:100000'],
             'title' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:500'],
             'school_year' => ['nullable', 'string', 'max:20'],
@@ -43,15 +43,18 @@ class RewardController extends Controller
         ]);
 
         if ($data['source'] === 'early_enrollment') {
-            $data['points'] = 30;
+            $data['points'] = (int) $points->rule('early_enrollment_points');
         }
 
-        if ($data['source'] === 'early_payment' && !in_array((int) $data['points'], [25, 40], true)) {
-            return response()->json(['message' => 'Early payment points must be 25 or 40.'], 422);
+        if ($data['source'] === 'early_payment' && !in_array((int) $data['points'], [
+            (int) $points->rule('early_payment_regular_points'),
+            (int) $points->rule('early_payment_early_points'),
+        ], true)) {
+            return response()->json(['message' => 'Early payment points must match one of the configured payment bonuses.'], 422);
         }
 
-        if ($data['source'] === 'events' && $data['points'] > 25) {
-            return response()->json(['message' => 'Event participation points cannot exceed 25 per event.'], 422);
+        if ($data['source'] === 'events' && $data['points'] > $points->rule('event_points_per_event_max')) {
+            return response()->json(['message' => 'Event points cannot exceed the configured per-event maximum.'], 422);
         }
 
         $sourceKey = $data['source_key'] ?? implode(':', array_filter([
@@ -85,7 +88,7 @@ class RewardController extends Controller
         );
     }
 
-    public function verifyEvent(Request $request)
+    public function verifyEvent(Request $request, PointsService $points)
     {
         $user = $request->user();
         if (!$user || (!$user->hasAnyRole(['faculty', 'teacher', 'head_teacher', 'dean']) && !in_array($user->role, ['faculty', 'teacher', 'head_teacher', 'dean'], true))) {
@@ -96,7 +99,7 @@ class RewardController extends Controller
             'student_id' => ['required', 'exists:students,id'],
             'event_name' => ['required', 'string', 'max:160'],
             'event_date' => ['nullable', 'date'],
-            'points' => ['nullable', 'integer', 'min:1', 'max:25'],
+            'points' => ['nullable', 'integer', 'min:1', 'max:' . $points->rule('event_points_per_event_max')],
             'school_year' => ['nullable', 'string', 'max:20'],
             'semester' => ['nullable', 'string', 'max:20'],
             'remarks' => ['nullable', 'string', 'max:500'],
@@ -104,7 +107,7 @@ class RewardController extends Controller
 
         $participation = EventParticipation::create([
             ...$data,
-            'points' => $data['points'] ?? 10,
+            'points' => $data['points'] ?? $points->rule('event_default_points'),
             'verified_by' => $user->id,
             'status' => 'pending',
         ]);
@@ -192,19 +195,17 @@ class RewardController extends Controller
                 ->latest()
                 ->limit(100)
                 ->get(),
-            'rules' => $this->rewardRules(),
+            'rules' => $this->rewardRules($points),
         ];
     }
 
-    private function rewardRules(): array
+    private function rewardRules(PointsService $points): array
     {
+        $rules = $points->rules();
+
         return [
-            'redemption_rate' => '1 point = PHP 0.50',
-            'semester_cap' => PointsService::SEMESTER_CAP,
-            'redemption_cap' => PointsService::REDEMPTION_CAP,
-            'grade_cap' => PointsService::GRADE_CAP,
-            'attendance_cap' => PointsService::ATTENDANCE_CAP,
-            'event_cap' => PointsService::EVENT_CAP,
+            ...$rules,
+            'redemption_rate' => '1 point = PHP ' . number_format((float) $rules['redemption_rate'], 2),
             'allowed_sources' => [
                 'grades',
                 'attendance',
@@ -213,26 +214,6 @@ class RewardController extends Controller
                 'early_enrollment',
                 'early_payment',
             ],
-        ];
-    }
-
-    private function emptyRewardSummary(): array
-    {
-        return [
-            'points' => 0,
-            'earned_points' => 0,
-            'redeemable_points' => 0,
-            'redemption_cap' => PointsService::REDEMPTION_CAP,
-            'peso_value' => 0,
-            'level' => 1,
-            'current_level_points' => 0,
-            'next_level_at' => 100,
-            'points_to_next_level' => 100,
-            'semester_cap' => PointsService::SEMESTER_CAP,
-            'semester_cap_remaining' => PointsService::SEMESTER_CAP,
-            'redemption_cap_remaining' => PointsService::REDEMPTION_CAP,
-            'rewards_count' => 0,
-            'by_source' => [],
         ];
     }
 

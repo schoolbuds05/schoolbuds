@@ -26,7 +26,7 @@
         <form method="POST" action="{{ route($routePrefix . '.students.import') }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
             @csrf
             <input type="file" name="file" accept=".csv,text/csv" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
-            <button class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Import CSV</button>
+            <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Import CSV</button>
         </form>
     </div>
 </div>
@@ -40,7 +40,7 @@
         <input type="hidden" name="year_level" value="{{ request('year_level') }}">
         <input type="hidden" name="school_year" value="{{ request('school_year') }}">
         <input type="hidden" name="course" value="{{ request('course') }}">
-        <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">Search</button>
+        <button type="submit" class="shrink-0 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-portal-accent-hover">Search</button>
     </form>
 
     <details class="group relative z-30 shrink-0">
@@ -84,7 +84,7 @@
             </div>
             <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
                 <a href="{{ route($routePrefix . '.students.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
-                <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
+                <button type="submit" class="portal-filter-button rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
             </div>
         </form>
     </details>
@@ -111,7 +111,7 @@
                             {{ $initials }}
                         @endif
                     </span>
-                    <span class="inline-flex items-center rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-600">{{ $student->student_id }}</span>
+                    <span class="inline-flex items-center rounded-lg bg-portal-accent-soft px-2.5 py-1 text-xs font-black text-portal-accent">{{ $student->student_id }}</span>
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $fullName }}</p>
                         <p class="mt-0.5 text-xs text-slate-400">{{ $student->email }} · {{ $student->grade_level }} · {{ $student->section ?: 'TBA' }} · {{ $student->school_year }}</p>
@@ -244,7 +244,7 @@
                         <input name="prev_school_address" value="{{ old('prev_school_address', $student->prev_school_address) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
                     </label>
 
-                    <button class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white md:col-start-4">Save changes</button>
+                    <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:col-start-4">Save changes</button>
                 </form>
             </div>
         </div>

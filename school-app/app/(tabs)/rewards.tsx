@@ -51,7 +51,8 @@ export default function Rewards() {
   }
 
   const summary = data?.summary || {};
-  const progress = Math.min(100, ((summary.current_level_points || 0) / 100) * 100);
+  const levelInterval = Math.max(1, Number(summary.level_interval ?? 100));
+  const progress = Math.min(100, ((summary.current_level_points || 0) / levelInterval) * 100);
 
   return (
     <ScrollView

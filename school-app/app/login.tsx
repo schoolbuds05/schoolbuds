@@ -48,7 +48,7 @@ export default function Login() {
       } else if (['faculty', 'teacher'].includes(role)) {
         router.replace('/(teacher)/classes');
       } else if (role === 'registrar') {
-        router.replace('/(registrar)/enrollments');
+        router.replace('/(registrar)/dashboard');
       } else if (role === 'parent') {
         router.replace('/(parent)/dashboard');
       } else if (['staff', 'librarian', 'property_custodian'].includes(role)) {

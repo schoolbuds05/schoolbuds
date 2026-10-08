@@ -61,11 +61,11 @@
                     </td>
                     @foreach([1,2,3,4] as $q)
                         @php($g = $sg->firstWhere('quarter', $q))
-                        <td class="px-5 py-3 text-center font-bold {{ $g && ($isCollege ? $g->score <= 2 : $g->score >= 90) ? 'text-emerald-700' : ($g && ($isCollege ? $g->score <= 3 : $g->score >= 75) ? 'text-blue-700' : 'text-slate-400') }}">
+                        <td class="px-5 py-3 text-center font-bold {{ $g && ($isCollege ? $g->score <= 2 : $g->score >= 90) ? 'text-emerald-700' : ($g && ($isCollege ? $g->score <= 3 : $g->score >= 75) ? 'text-portal-accent' : 'text-slate-400') }}">
                             {{ $g?->score ?? '-' }}
                         </td>
                     @endforeach
-                    <td class="px-5 py-3 text-center font-black {{ $avg !== null && ($isCollege ? $avg <= 2 : $avg >= 90) ? 'text-emerald-700' : ($avg !== null && ($isCollege ? $avg <= 3 : $avg >= 75) ? 'text-blue-700' : 'text-slate-400') }}">{{ $avg ?? '-' }}</td>
+                    <td class="px-5 py-3 text-center font-black {{ $avg !== null && ($isCollege ? $avg <= 2 : $avg >= 90) ? 'text-emerald-700' : ($avg !== null && ($isCollege ? $avg <= 3 : $avg >= 75) ? 'text-portal-accent' : 'text-slate-400') }}">{{ $avg ?? '-' }}</td>
                 </tr>
             @empty
                 <tr><td colspan="6" class="px-5 py-10 text-center text-slate-500">No students found.</td></tr>

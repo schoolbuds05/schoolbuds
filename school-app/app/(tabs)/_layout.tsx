@@ -144,6 +144,7 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen name="study-load" options={{ href: null }} />
+      <Tabs.Screen name="schedule" options={{ href: null }} />
       <Tabs.Screen name="assignments" options={{ href: null }} />
       <Tabs.Screen name="grades" options={{ href: null }} />
       <Tabs.Screen name="rewards" options={{ href: null }} />

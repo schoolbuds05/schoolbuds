@@ -1,23 +1,29 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import api, { removeToken } from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 const MORE_ROUTES = [
-  { name: 'schedule', label: 'Class Schedule', icon: 'calendar-outline' },
-  { name: 'study-load', label: 'Study Load', icon: 'library-outline' },
-  { name: 'assignments', label: 'Assignments', icon: 'document-text-outline' },
-  { name: 'grades', label: 'Grades', icon: 'bar-chart-outline' },
-  { name: 'rewards', label: 'Rewards', icon: 'trophy-outline' },
+  { name: 'activity', label: 'Activity', icon: 'time-outline' },
   { name: 'market', label: 'Marketplace', icon: 'storefront-outline' },
+  { name: 'controls', label: 'Controls', icon: 'settings-outline' },
+  { name: 'profile', label: 'Profile', icon: 'person-outline' },
 ];
 
-export default function More() {
+export default function AdminMore() {
   const router = useRouter();
   const { theme, reloadTheme } = useTheme();
+
+  const logout = async () => {
+    await api.post('/logout').catch(() => {});
+    await AsyncStorage.multiRemove(['token', 'role', 'position', 'user']);
+    removeToken();
+    await reloadTheme();
+    router.replace('/login');
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to log out?', [
@@ -25,13 +31,7 @@ export default function More() {
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: async () => {
-          await api.post('/logout').catch(() => {});
-          await AsyncStorage.multiRemove(['token', 'role', 'position', 'user']);
-          removeToken();
-          await reloadTheme();
-          router.replace('/login');
-        },
+        onPress: logout,
       },
     ]);
   };
@@ -44,12 +44,12 @@ export default function More() {
     >
       <Text style={[styles.title, { color: theme.text }]}>More</Text>
 
-      <View style={styles.grid}>
+      <View style={styles.list}>
         {MORE_ROUTES.map((item) => (
           <TouchableOpacity
             key={item.name}
             style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={() => router.replace(`/(tabs)/${item.name}`)}
+            onPress={() => router.navigate(`/(admin)/${item.name}`)}
             activeOpacity={0.75}
           >
             <View style={[styles.iconWrap, { backgroundColor: `${theme.primary}16` }]}>
@@ -64,7 +64,7 @@ export default function More() {
       </View>
 
       <TouchableOpacity
-        style={[styles.logoutBtn, { backgroundColor: theme.dangerLight, borderColor: theme.danger }]}
+        style={[styles.logoutButton, { backgroundColor: theme.dangerLight, borderColor: theme.danger }]}
         onPress={handleLogout}
         activeOpacity={0.75}
       >
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 20, paddingBottom: 40 },
   title: { fontSize: 24, fontWeight: '800', marginBottom: 14 },
-  grid: { gap: 10 },
+  list: { gap: 10 },
   card: {
     minHeight: 58,
     flexDirection: 'row',
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardText: { flex: 1, fontSize: 15, fontWeight: '700' },
-  logoutBtn: {
+  logoutButton: {
     minHeight: 58,
     flexDirection: 'row',
     alignItems: 'center',

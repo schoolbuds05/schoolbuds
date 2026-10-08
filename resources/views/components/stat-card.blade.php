@@ -3,7 +3,7 @@
     $colors = [
         'slate' => ['text' => 'text-violet-700', 'dot' => 'bg-violet-500', 'ring' => 'bg-violet-50'],
         'emerald' => ['text' => 'text-emerald-700', 'dot' => 'bg-emerald-500', 'ring' => 'bg-emerald-50'],
-        'blue' => ['text' => 'text-blue-700', 'dot' => 'bg-blue-500', 'ring' => 'bg-blue-50'],
+        'accent' => ['text' => 'text-portal-accent', 'dot' => 'bg-portal-accent', 'ring' => 'bg-portal-accent-soft'],
         'red' => ['text' => 'text-rose-600', 'dot' => 'bg-rose-500', 'ring' => 'bg-rose-50'],
     ];
     $color = $colors[$tone] ?? $colors['slate'];

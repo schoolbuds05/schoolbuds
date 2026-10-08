@@ -4,6 +4,7 @@
     "strict": false,
     "allowJs": true,
     "jsx": "react-native",
+    "noEmit": true,
     "noImplicitAny": false
   },
   "include": [

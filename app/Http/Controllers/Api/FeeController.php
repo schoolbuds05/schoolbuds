@@ -150,7 +150,7 @@ class FeeController extends Controller
             'source_key' => "early-payment:fee:{$fee->id}",
             'title' => 'Early tuition payment bonus',
             'description' => "Paid {$fee->type} on or before the due date.",
-            'points' => 40,
+            'points' => (int) $points->rule('early_payment_early_points'),
             'school_year' => $fee->school_year,
             'semester' => $fee->semester,
             'meta' => ['fee_id' => $fee->id],

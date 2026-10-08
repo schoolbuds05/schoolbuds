@@ -24,7 +24,7 @@
     </select>
 
     <div class="flex gap-2">
-        <button class="rounded-lg bg-slate-950 px-5 py-2 text-sm font-bold text-white">Filter</button>
+        <button class="portal-filter-button rounded-lg bg-slate-950 px-5 py-2 text-sm font-bold text-white">Filter</button>
         @if($search !== '' || $action !== '')
             <a href="{{ route('admin.activity.index') }}" class="rounded-lg border border-slate-200 px-5 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
                 Clear

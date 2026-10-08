@@ -65,7 +65,7 @@
                     </label>
                     <div class="flex justify-end gap-3 pt-3">
                         <button type="button" data-user-modal-close="create-user-modal" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
-                        <button class="rounded-lg bg-blue-700 px-5 py-2 text-sm font-bold text-white">Create user</button>
+                        <button class="rounded-lg bg-portal-accent px-5 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Create user</button>
                     </div>
                 </form>
             </div>
@@ -80,8 +80,8 @@
                 @endforeach
             </select>
             <div class="flex justify-end gap-2">
-                <button class="rounded-lg bg-blue-700 px-5 py-2 text-sm font-bold text-white">Filter</button>
-                <button type="button" data-user-modal-open="create-user-modal" class="rounded-lg border border-blue-700 bg-white px-5 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50">Create user</button>
+                <button class="portal-filter-button rounded-lg bg-portal-accent px-5 py-2 text-sm font-bold text-white">Filter</button>
+                <button type="button" data-user-modal-open="create-user-modal" class="rounded-lg bg-portal-accent px-5 py-2 text-sm font-bold text-white transition hover:bg-portal-accent-hover">Create user</button>
             </div>
         </form>
 
@@ -101,8 +101,12 @@
                     class="group grid w-full grid-cols-[44px_1fr_auto] gap-3 px-5 py-4 text-left transition hover:bg-violet-50/50 md:grid-cols-[1.45fr_1fr_150px_140px_80px] md:items-center"
                 >
                     <div class="flex min-w-0 items-center gap-3">
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-black text-slate-500 group-hover:bg-white">
-                            {{ strtoupper(substr($user->name ?: $user->email, 0, 2)) }}
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-xs font-black text-slate-500 group-hover:bg-white">
+                            @if($user->profile_photo_url)
+                                <img src="{{ $user->profile_photo_url }}" alt="{{ $user->name }} profile photo" class="h-full w-full object-cover" loading="lazy">
+                            @else
+                                {{ strtoupper(substr($user->name ?: $user->email, 0, 2)) }}
+                            @endif
                         </span>
                         <div class="min-w-0">
                             <p class="truncate text-sm font-black text-slate-900">{{ $user->name }}</p>
@@ -114,7 +118,7 @@
                         {{ $roleLabel($user->role) }}{{ $user->position ? ' - ' . $positionLabel($user->position) : '' }}
                     </span>
                     <p class="hidden text-xs font-semibold text-slate-600 md:block">{{ $user->created_at?->format('Y-m-d') }}</p>
-                    <span class="text-right text-sm font-black text-blue-700">Open</span>
+                    <span class="text-right text-sm font-black text-portal-accent">Open</span>
                 </button>
 
                 <div id="user-modal-{{ $user->id }}" class="fixed inset-0 hidden items-center justify-center p-4" style="z-index: 9998; background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(3px);" data-user-modal>
@@ -175,7 +179,7 @@
                                 >
                                     Delete user
                                 </button>
-                                <button class="rounded-lg bg-blue-700 px-5 py-2 text-sm font-bold text-white">Save changes</button>
+                                <button class="rounded-lg bg-portal-accent px-5 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Save changes</button>
                             </div>
                         </form>
                         <form id="delete-user-{{ $user->id }}" method="POST" action="{{ route('admin.users.destroy', $user) }}" class="hidden">

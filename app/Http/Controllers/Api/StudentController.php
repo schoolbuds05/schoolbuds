@@ -71,7 +71,7 @@ class StudentController extends Controller
                 'grades' => (object) [],
                 'attendance_pct' => 0,
                 'pending_fees' => [],
-                'reward_summary' => $this->emptyRewardSummary(),
+                'reward_summary' => $points->emptySummary(),
             ]);
         }
 
@@ -143,23 +143,4 @@ class StudentController extends Controller
         $student->setAttribute('school_year', $section->school_year ?: $student->school_year);
     }
 
-    private function emptyRewardSummary(): array
-    {
-        return [
-            'points' => 0,
-            'earned_points' => 0,
-            'redeemable_points' => 0,
-            'redemption_cap' => PointsService::REDEMPTION_CAP,
-            'peso_value' => 0,
-            'level' => 1,
-            'current_level_points' => 0,
-            'next_level_at' => 100,
-            'points_to_next_level' => 100,
-            'semester_cap' => PointsService::SEMESTER_CAP,
-            'semester_cap_remaining' => PointsService::SEMESTER_CAP,
-            'redemption_cap_remaining' => PointsService::REDEMPTION_CAP,
-            'rewards_count' => 0,
-            'by_source' => [],
-        ];
-    }
 }

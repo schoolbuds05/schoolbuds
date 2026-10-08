@@ -56,7 +56,7 @@
                             'rounded-full px-3 py-1 text-xs font-black uppercase',
                             'bg-green-100 text-green-800' => $att?->status === 'present',
                             'bg-yellow-100 text-yellow-800' => $att?->status === 'late',
-                            'bg-blue-100 text-blue-800' => $att?->status === 'excused',
+                            'bg-portal-accent-soft text-portal-accent' => $att?->status === 'excused',
                             'bg-red-100 text-red-800' => $att?->status === 'absent',
                             'bg-slate-100 text-slate-600' => !$att,
                         ])>{{ $att?->status ?? 'Not recorded' }}</span>
@@ -136,11 +136,11 @@ function markAll(status) {
 
 function highlightRow(studentId, status) {
     const row = document.getElementById('row-' + studentId);
-    row.classList.remove('bg-green-50', 'bg-red-50', 'bg-yellow-50', 'bg-blue-50');
+    row.classList.remove('bg-green-50', 'bg-red-50', 'bg-yellow-50', 'bg-portal-accent-soft');
     if (status === 'present') row.classList.add('bg-green-50');
     else if (status === 'absent') row.classList.add('bg-red-50');
     else if (status === 'late') row.classList.add('bg-yellow-50');
-    else if (status === 'excused') row.classList.add('bg-blue-50');
+    else if (status === 'excused') row.classList.add('bg-portal-accent-soft');
 }
 
 document.querySelectorAll('input[type=radio]:checked').forEach((radio) => {

@@ -1,33 +1,63 @@
 // @ts-nocheck
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme-context';
 
-function Icon({ label, focused, color }) {
+function TabIcon({ name, focused, color }) {
   return (
-    <View style={{ alignItems: 'center', paddingTop: 2 }}>
-      <Text style={{ fontSize: 12, fontWeight: '900', opacity: focused ? 1 : 0.45, color }}>{label}</Text>
+    <View
+      style={{
+        width: 36,
+        height: 30,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: focused ? `${color}18` : 'transparent',
+      }}
+    >
+      <Ionicons name={name} size={21} color={color} />
     </View>
+  );
+}
+
+function TabLabel({ label, color }) {
+  return (
+    <Text
+      style={{
+        width: '100%',
+        color,
+        fontSize: 9,
+        fontWeight: '700',
+        includeFontPadding: false,
+        lineHeight: 13,
+        textAlign: 'center',
+      }}
+      allowFontScaling={false}
+      numberOfLines={1}
+    >
+      {label}
+    </Text>
   );
 }
 
 export default function TeacherLayout() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 0);
-  const tabHeight = 54 + bottomPadding;
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSub,
         tabBarStyle: {
-          height: tabHeight,
+          height: 64 + bottomPadding,
           paddingBottom: bottomPadding,
-          paddingTop: 6,
+          paddingTop: 8,
           backgroundColor: theme.navBg,
           borderTopWidth: 1,
           borderTopColor: theme.border,
@@ -39,19 +69,82 @@ export default function TeacherLayout() {
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '600',
-          marginTop: 2,
+          fontWeight: '700',
+          marginTop: 3,
+          includeFontPadding: false,
+          textAlign: 'center',
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          height: 54,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 4,
+        },
+        tabBarIconStyle: {
+          width: 36,
+          height: 30,
+          marginBottom: 0,
         },
       }}
     >
-      <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', tabBarIcon: ({ focused, color }) => <Icon label="DB" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="classes" options={{ title: 'Classes', tabBarIcon: ({ focused, color }) => <Icon label="CL" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="assignments" options={{ title: 'Work', tabBarIcon: ({ focused, color }) => <Icon label="WK" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="grades" options={{ title: 'Grades', tabBarIcon: ({ focused, color }) => <Icon label="GR" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="attendance" options={{ title: 'Attend', tabBarIcon: ({ focused, color }) => <Icon label="AT" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: ({ focused, color }) => <Icon label="MK" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="chat" options={{ title: 'Chat', tabBarIcon: ({ focused, color }) => <Icon label="CH" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ focused, color }) => <Icon label="ME" focused={focused} color={color} /> }} />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Dashboard',
+          tabBarLabel: ({ color }) => <TabLabel label="Dashboard" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="classes"
+        options={{
+          title: 'Classes',
+          tabBarLabel: ({ color }) => <TabLabel label="Classes" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'school' : 'school-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="assignments"
+        options={{
+          title: 'Work',
+          tabBarLabel: ({ color }) => <TabLabel label="Work" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'briefcase' : 'briefcase-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="grades"
+        options={{
+          title: 'Grades',
+          tabBarLabel: ({ color }) => <TabLabel label="Grades" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'book' : 'book-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: 'More',
+          tabBarLabel: ({ color }) => <TabLabel label="More" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen name="attendance" options={{ href: null }} />
+      <Tabs.Screen name="market" options={{ href: null }} />
+      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen
+        name="profile"
+        options={{ href: null }}
+      />
     </Tabs>
   );
 }

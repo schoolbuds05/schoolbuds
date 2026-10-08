@@ -14,7 +14,7 @@
                 <input id="grades-file" name="grades_file" type="file" accept=".csv,text/csv" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
                 <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Import CSV</button>
             </form>
-            <a href="{{ route('registrar.grades.export', ['program_type' => 'college']) }}" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Export College CSV</a>
+            <a href="{{ route('registrar.grades.export', ['program_type' => 'college']) }}" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Export College CSV</a>
             <a href="{{ route('registrar.grades.export', ['program_type' => 'shs']) }}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Export SHS CSV</a>
         </div>
     @endif

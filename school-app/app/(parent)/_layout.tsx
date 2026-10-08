@@ -1,39 +1,113 @@
 // @ts-nocheck
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme-context';
 
-function Icon({ label, focused, color }) {
+function TabIcon({ name, focused, color }) {
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 2 }}>
-      <Text style={{ fontSize: 12, fontWeight: '900', opacity: focused ? 1 : 0.45, color }}>{label}</Text>
+    <View
+      style={{
+        width: 36,
+        height: 30,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: focused ? `${color}18` : 'transparent',
+      }}
+    >
+      <Ionicons name={name} size={21} color={color} />
     </View>
+  );
+}
+
+function TabLabel({ label, color }) {
+  return (
+    <Text
+      style={{
+        width: '100%',
+        color,
+        fontSize: 10,
+        fontWeight: '700',
+        includeFontPadding: false,
+        lineHeight: 13,
+        textAlign: 'center',
+      }}
+      allowFontScaling={false}
+      numberOfLines={1}
+    >
+      {label}
+    </Text>
   );
 }
 
 export default function ParentLayout() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 0);
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
 
   return (
-    <Tabs screenOptions={{
-      headerShown: false,
-      tabBarActiveTintColor: theme.primary,
-      tabBarInactiveTintColor: theme.textSub,
-      tabBarStyle: {
-        height: 54 + bottomPadding,
-        paddingBottom: bottomPadding,
-        paddingTop: 6,
-        backgroundColor: theme.navBg,
-        borderTopColor: theme.border,
-        borderTopWidth: 1,
-      },
-      tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
-    }}>
-      <Tabs.Screen name="dashboard" options={{ title: 'Children', tabBarIcon: ({ focused, color }) => <Icon label="CH" focused={focused} color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ focused, color }) => <Icon label="ME" focused={focused} color={color} /> }} />
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarHideOnKeyboard: true,
+        tabBarActiveTintColor: theme.primary,
+        tabBarInactiveTintColor: theme.textSub,
+        tabBarStyle: {
+          height: 64 + bottomPadding,
+          paddingBottom: bottomPadding,
+          paddingTop: 8,
+          backgroundColor: theme.navBg,
+          borderTopWidth: 1,
+          borderTopColor: theme.border,
+          elevation: 12,
+          shadowColor: '#000',
+          shadowOpacity: 0.1,
+          shadowOffset: { width: 0, height: -2 },
+          shadowRadius: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '700',
+          marginTop: 3,
+          includeFontPadding: false,
+          textAlign: 'center',
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          height: 54,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 4,
+        },
+        tabBarIconStyle: {
+          width: 36,
+          height: 30,
+          marginBottom: 0,
+        },
+      }}
+    >
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Children',
+          tabBarLabel: ({ color }) => <TabLabel label="Children" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarLabel: ({ color }) => <TabLabel label="Profile" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'person' : 'person-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

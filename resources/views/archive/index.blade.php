@@ -14,7 +14,7 @@
             <option value="{{ $type }}" @selected(request('record_type') === $type)>{{ $type }}</option>
         @endforeach
     </select>
-    <button class="rounded-lg bg-slate-900 px-5 py-2 text-sm font-bold text-white">Filter</button>
+    <button class="portal-filter-button rounded-lg bg-slate-900 px-5 py-2 text-sm font-bold text-white">Filter</button>
 </form>
 
 <div class="space-y-3">
@@ -44,7 +44,7 @@
                             <form method="POST" action="{{ route('admin.archive.restore', $archive) }}">
                                 @csrf
                                 <button
-                                    class="rounded-full bg-blue-600 px-3 py-1 text-xs font-black text-white hover:bg-blue-700"
+                                    class="rounded-full bg-portal-accent px-3 py-1 text-xs font-black text-white hover:bg-portal-accent-hover"
                                     onclick="return confirm('Restore {{ addslashes($archive->label ?: $archive->record_type) }}?');"
                                 >
                                     Restore

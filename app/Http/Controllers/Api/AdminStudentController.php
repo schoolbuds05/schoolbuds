@@ -11,6 +11,7 @@ use App\Models\StudentSubject;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\ArchiveService;
+use App\Services\PointsConfiguration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -18,7 +19,7 @@ use Spatie\Permission\Models\Role;
 
 class AdminStudentController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, PointsConfiguration $points)
     {
         $this->authorizeStudentManager($request);
 
@@ -46,7 +47,7 @@ class AdminStudentController extends Controller
             ->orderBy('first_name')
             ->get();
 
-        return response()->json($students->map(fn (Student $student) => $this->studentPayload($student)));
+        return response()->json($students->map(fn (Student $student) => $this->studentPayload($student, $points)));
     }
 
     public function update(Request $request, Student $student)
@@ -235,7 +236,7 @@ class AdminStudentController extends Controller
         }
     }
 
-    private function studentPayload(Student $student): array
+    private function studentPayload(Student $student, PointsConfiguration $pointsConfiguration): array
     {
         $application = $this->applicationForStudent($student);
 
@@ -245,7 +246,7 @@ class AdminStudentController extends Controller
             'name' => $student->parent->name,
             'email' => $student->parent->email,
         ] : null;
-        $payload['reward_summary'] = $this->rewardSummary($student);
+        $payload['reward_summary'] = $this->rewardSummary($student, $pointsConfiguration);
         $payload['enrollment'] = $application ? [
             'id'                  => $application->id,
             'father_name'         => $application->father_name,
@@ -386,15 +387,16 @@ class AdminStudentController extends Controller
         return ($sectionId ?? 'direct') . ':' . ($subjectId ?? 'none');
     }
 
-    private function rewardSummary(Student $student): array
+    private function rewardSummary(Student $student, PointsConfiguration $pointsConfiguration): array
     {
         $points = (int) StudentReward::where('student_id', $student->id)->sum('points');
-        $level = intdiv($points, 100) + 1;
+        $pointsPerLevel = max(1, (int) $pointsConfiguration->get('points_per_level'));
+        $level = intdiv($points, $pointsPerLevel) + 1;
 
         return [
             'points' => $points,
             'level' => $level,
-            'points_to_next_level' => max(0, ($level * 100) - $points),
+            'points_to_next_level' => max(0, ($level * $pointsPerLevel) - $points),
             'rewards_count' => StudentReward::where('student_id', $student->id)->count(),
         ];
     }

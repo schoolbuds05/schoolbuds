@@ -14,7 +14,7 @@
                     <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path stroke-linecap="round" d="M16 16l5 5"/></svg>
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Search by code or name..." class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:outline-none">
                 </div>
-                <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">Search</button>
+                <button type="submit" class="shrink-0 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-portal-accent-hover">Search</button>
             </form>
 
             <div class="flex items-center gap-2">
@@ -76,11 +76,11 @@
                         </div>
                         <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
                             <a href="{{ route('registrar.subjects.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
-                            <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
+                            <button type="submit" class="rounded-lg bg-portal-accent px-3 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Apply</button>
                         </div>
                     </form>
                 </details>
-                <button type="button" data-modal-open="subject-create-modal" class="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
+                <button type="button" data-modal-open="subject-create-modal" class="inline-flex items-center gap-2 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                     Add subject
                 </button>
@@ -103,11 +103,11 @@
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
         <label class="text-xs font-bold uppercase text-slate-500">
             Subject code
-            <input name="code" placeholder="e.g. IT101" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+            <input name="code" maxlength="20" required placeholder="e.g. IT101" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
         </label>
         <label class="text-xs font-bold uppercase text-slate-500 md:col-span-2">
             Subject name
-            <input name="name" placeholder="e.g. Introduction to Programming" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+            <input name="name" maxlength="255" required placeholder="e.g. Introduction to Programming" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
         </label>
         <label class="text-xs font-bold uppercase text-slate-500 md:col-span-4">
             Description
@@ -115,7 +115,7 @@
         </label>
         <label class="text-xs font-bold uppercase text-slate-500">
             Program type
-            <select name="program_type" class="program-type mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900"><option value="college">College</option><option value="shs">SHS</option></select>
+            <select name="program_type" required class="program-type mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900"><option value="college">College</option><option value="shs">SHS</option></select>
         </label>
         <label class="course-wrap text-xs font-bold uppercase text-slate-500">
             College course
@@ -146,11 +146,11 @@
         </label>
         <label class="text-xs font-bold uppercase text-slate-500">
             Lecture units
-            <input name="units_lec" value="3" placeholder="e.g. 3" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+            <input name="units_lec" type="number" min="0" step="any" value="3" placeholder="e.g. 3" required class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
         </label>
         <label class="text-xs font-bold uppercase text-slate-500">
             Lab units
-            <input name="units_lab" value="0" placeholder="e.g. 0" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+            <input name="units_lab" type="number" min="0" step="any" value="0" placeholder="e.g. 0" required class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
         </label>
         <div class="md:col-span-4">
             <p class="text-xs font-bold uppercase text-slate-500 mb-2">Prerequisites</p>
@@ -158,15 +158,15 @@
             <div class="prereq-list max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 grid grid-cols-1 gap-1 md:grid-cols-3">
                 @foreach($allSubjects as $prereqSubject)
                     <label class="prereq-option flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white cursor-pointer transition-colors" data-program="{{ $prereqSubject->program_type }}">
-                        <input type="checkbox" name="prerequisite_ids[]" value="{{ $prereqSubject->id }}" class="rounded border-slate-300 text-blue-600">
-                        <span class="font-semibold text-blue-600">{{ $prereqSubject->code }}</span>
+                        <input type="checkbox" name="prerequisite_ids[]" value="{{ $prereqSubject->id }}" class="rounded border-slate-300 text-portal-accent">
+                        <span class="font-semibold text-portal-accent">{{ $prereqSubject->code }}</span>
                         <span class="truncate">{{ $prereqSubject->name }}</span>
                     </label>
                 @endforeach
             </div>
         </div>
         <label class="flex items-center gap-2 text-sm font-bold text-slate-700 md:pt-6"><input type="checkbox" name="is_active" value="1" checked class="rounded border-slate-300"> Active for enrollment</label>
-        <button class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white md:mt-5">Create subject</button>
+        <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:mt-5">Create subject</button>
     </div>
 </form>
     </section>
@@ -194,7 +194,7 @@
                 onclick="this.closest('[data-subject-card]').querySelector('[data-subject-details]').classList.toggle('hidden'); this.querySelector('[data-arrow]').classList.toggle('rotate-180');"
             >
                 <div class="flex items-center gap-3 min-w-0">
-                    <span class="inline-flex items-center rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-600 whitespace-nowrap">{{ $subject->code }}</span>
+                    <span class="inline-flex items-center rounded-lg bg-portal-accent-soft px-2.5 py-1 text-xs font-black text-portal-accent whitespace-nowrap">{{ $subject->code }}</span>
                     <div class="min-w-0">
                         <p class="text-sm font-bold text-slate-900 truncate">{{ $subject->name }}</p>
                         <p class="text-xs text-slate-400 mt-0.5">{{ $programLabel }} · {{ $scopeLabel }} · {{ $levelLabel }} · {{ $semesterLabel }}</p>
@@ -234,11 +234,11 @@
                     @method('PUT')
                     <label class="text-xs font-bold uppercase text-slate-500">
                         Subject code
-                        <input name="code" value="{{ $subject->code }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <input name="code" maxlength="20" value="{{ $subject->code }}" required class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
                     </label>
                     <label class="text-xs font-bold uppercase text-slate-500 md:col-span-2">
                         Subject name
-                        <input name="name" value="{{ $subject->name }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <input name="name" maxlength="255" value="{{ $subject->name }}" required class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
                     </label>
                     <label class="text-xs font-bold uppercase text-slate-500 md:col-span-6">
                         Description
@@ -246,15 +246,15 @@
                     </label>
                     <label class="text-xs font-bold uppercase text-slate-500">
                         Program type
-                        <select name="program_type" class="program-type mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900"><option value="college" @selected($subject->program_type === 'college')>College</option><option value="shs" @selected($subject->program_type === 'shs')>SHS</option></select>
+                        <select name="program_type" required class="program-type mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900"><option value="college" @selected($subject->program_type === 'college')>College</option><option value="shs" @selected($subject->program_type === 'shs')>SHS</option></select>
                     </label>
                     <label class="text-xs font-bold uppercase text-slate-500">
                         Lecture units
-                        <input name="units_lec" value="{{ $subject->units_lec }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <input name="units_lec" type="number" min="0" step="any" value="{{ $subject->units_lec }}" required class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
                     </label>
                     <label class="text-xs font-bold uppercase text-slate-500">
                         Lab units
-                        <input name="units_lab" value="{{ $subject->units_lab }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <input name="units_lab" type="number" min="0" step="any" value="{{ $subject->units_lab }}" required class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
                     </label>
                     <label class="course-wrap text-xs font-bold uppercase text-slate-500 md:col-span-2">
                         College course
@@ -287,7 +287,7 @@
                         @if($subject->prerequisites->isNotEmpty())
                             <div class="flex flex-wrap gap-1 mb-2">
                                 @foreach($subject->prerequisites as $pr)
-                                    <span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{{ $pr->code }}</span>
+                                    <span class="inline-flex items-center rounded-md bg-portal-accent-soft px-2 py-1 text-xs font-bold text-portal-accent">{{ $pr->code }}</span>
                                 @endforeach
                             </div>
                         @endif
@@ -295,15 +295,15 @@
                             @php $currentPrereqIds = $subject->prerequisites->pluck('id')->toArray(); @endphp
                             @foreach($allSubjects->where('id', '!=', $subject->id) as $prereqSubject)
                                 <label class="prereq-option flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white cursor-pointer transition-colors" data-program="{{ $prereqSubject->program_type }}">
-                                    <input type="checkbox" name="prerequisite_ids[]" value="{{ $prereqSubject->id }}" @checked(in_array($prereqSubject->id, $currentPrereqIds)) class="rounded border-slate-300 text-blue-600">
-                                    <span class="font-semibold text-blue-600">{{ $prereqSubject->code }}</span>
+                                    <input type="checkbox" name="prerequisite_ids[]" value="{{ $prereqSubject->id }}" @checked(in_array($prereqSubject->id, $currentPrereqIds)) class="rounded border-slate-300 text-portal-accent">
+                                    <span class="font-semibold text-portal-accent">{{ $prereqSubject->code }}</span>
                                     <span class="truncate">{{ $prereqSubject->name }}</span>
                                 </label>
                             @endforeach
                         </div>
                     </div>
                     <label class="flex items-center gap-2 text-sm font-bold text-slate-700 md:pb-2"><input type="checkbox" name="is_active" value="1" @checked($subject->is_active) class="rounded border-slate-300"> Active</label>
-                    <button class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Save changes</button>
+                    <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Save changes</button>
                 </form>
             </div>
         </div>

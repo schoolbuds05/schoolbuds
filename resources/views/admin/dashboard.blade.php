@@ -12,8 +12,8 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
     <x-stat-card label="Students" :value="$stats['total_students']" />
     <x-stat-card label="Active" :value="$stats['active_students']" tone="emerald" />
-    <x-stat-card label="Teachers" :value="$stats['total_teachers']" tone="blue" />
-    <x-stat-card label="Collected" value="PHP {{ number_format($stats['total_collected']) }}" tone="blue" />
+    <x-stat-card label="Teachers" :value="$stats['total_teachers']" tone="accent" />
+    <x-stat-card label="Collected" value="PHP {{ number_format($stats['total_collected']) }}" tone="accent" />
     <x-stat-card label="Outstanding" value="PHP {{ number_format($stats['total_fees_due']) }}" tone="red" />
 </div>
 
@@ -21,7 +21,7 @@
     <section class="portal-card p-5">
         <div class="flex items-center justify-between mb-4">
             <h2 class="font-bold text-slate-800">Recent students</h2>
-            <a href="{{ route('admin.students.index') }}" class="text-sm text-blue-700 hover:underline">View all</a>
+            <a href="{{ route('admin.students.index') }}" class="text-sm text-portal-accent hover:underline">View all</a>
         </div>
         <div class="divide-y divide-slate-100">
             @forelse($recentStudents as $student)

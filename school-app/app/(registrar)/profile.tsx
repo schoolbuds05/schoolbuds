@@ -31,7 +31,7 @@ export default function RegistrarProfile() {
       try {
         const [meRes, studentsRes, enrollmentsRes] = await Promise.all([
           api.get('/me'),
-          api.get('/students'),
+          api.get('/registrar/students'),
           api.get('/registrar/enrollments'),
         ]);
 

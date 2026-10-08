@@ -12,7 +12,7 @@
 <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
     <x-stat-card label="Assets" :value="$stats['total']" />
     <x-stat-card label="Available" :value="$stats['available']" tone="emerald" />
-    <x-stat-card label="Assigned" :value="$stats['assigned']" tone="blue" />
+    <x-stat-card label="Assigned" :value="$stats['assigned']" tone="accent" />
     <x-stat-card label="Maintenance" :value="$stats['maintenance']" />
     <x-stat-card label="Needs attention" :value="$stats['needs_attention']" tone="red" />
 </div>
@@ -48,7 +48,7 @@
                             </span>
                         </td>
                         <td class="px-5 py-4">
-                            <span class="rounded-full px-2.5 py-1 text-xs font-bold {{ $asset->status === 'available' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700' }}">
+                            <span class="rounded-full px-2.5 py-1 text-xs font-bold {{ $asset->status === 'available' ? 'bg-emerald-100 text-emerald-700' : 'bg-portal-accent-soft text-portal-accent' }}">
                                 {{ ucfirst($asset->status) }}
                             </span>
                         </td>
@@ -63,4 +63,3 @@
     </div>
 </section>
 @endsection
-

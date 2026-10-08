@@ -17,6 +17,10 @@
 }
 
 @layer components {
+    .portal-sidebar-logo {
+        margin-left: 1.3rem;
+    }
+
     .portal-card {
         @apply rounded-xl border shadow-sm;
         background: var(--portal-card);
@@ -26,7 +30,7 @@
     }
 
     .portal-field {
-        @apply rounded-xl text-sm shadow-sm focus:border-violet-500 focus:ring-violet-500;
+        @apply rounded-xl text-sm shadow-sm focus:border-portal-accent focus:ring-portal-accent;
         background: var(--portal-input);
         border-color: var(--portal-border-strong);
         color: var(--portal-text);
@@ -38,7 +42,13 @@
     }
 
     .portal-button-primary {
-        @apply portal-button bg-violet-600 text-white shadow-lg shadow-violet-600/20 hover:bg-violet-700;
+        @apply portal-button text-white shadow-lg;
+        background: var(--portal-accent);
+        box-shadow: 0 12px 24px var(--portal-accent-shadow);
+    }
+
+    .portal-button-primary:hover {
+        background: var(--portal-accent-hover);
     }
 
     .portal-button-secondary {
@@ -51,6 +61,33 @@
     .portal-button-secondary:hover {
         background: var(--portal-hover);
         color: var(--portal-accent);
+    }
+
+    .portal-file-input::file-selector-button {
+        margin-right: 0.75rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: var(--portal-accent);
+        padding: 0.5rem 0.75rem;
+        color: #fff;
+        font-size: 0.875rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background-color 180ms ease;
+    }
+
+    .portal-file-input:hover::file-selector-button {
+        background: var(--portal-accent-hover);
+    }
+
+    .portal-button:focus-visible {
+        outline: 3px solid var(--portal-focus-ring);
+        outline-offset: 2px;
+    }
+
+    .portal-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
     }
 
     .portal-field-error {
@@ -599,27 +636,57 @@
 
 :root {
     color-scheme: light;
+    /* Portal palette: update colors here to keep shared web screens in sync. */
     --portal-page: #d9b7b7;
     --portal-shell-bg: rgba(255,255,255,0.68);
+    --portal-shell-shadow: rgba(121,84,89,0.12);
     --portal-sidebar: #f1e6e5;
+    --portal-sidebar-heading: #713f43;
+    --portal-sidebar-text: #7a5d5d;
+    --portal-sidebar-icon: #f0e7e7;
+    --portal-sidebar-icon-text: #8d6d6f;
     --portal-content: #f4eceb;
     --portal-header: rgba(255,255,255,0.9);
     --portal-card: #ffffff;
     --portal-input: #ffffff;
     --portal-hover: #f5e9ea;
+    --portal-accent-soft: #f7e4e5;
+    --portal-accent-border: #f0d1d5;
+    --portal-accent-shadow: rgba(206,90,96,0.2);
+    --portal-accent-hover: #b94b51;
+    --portal-focus-ring: rgba(206,90,96,0.28);
     --portal-text: #2d2122;
     --portal-text-soft: #695a5d;
     --portal-text-muted: #8a7174;
-    --portal-label: #c29a9c;
     --portal-border: #e7c9cc;
     --portal-border-strong: #dfb2b5;
     --portal-accent: #ce5a60;
     --portal-shadow: rgba(123,60,68,0.10);
+    --portal-filter-text: #991b1b;
+    --portal-filter-hover: #fff5f5;
 }
 
 .portal-shell {
     background: var(--portal-page) !important;
     color: var(--portal-text);
+}
+
+.portal-frame {
+    box-shadow: 0 26px 48px var(--portal-shell-shadow);
+}
+
+.portal-loading-bar {
+    box-shadow: 0 10px 15px var(--portal-accent-shadow);
+}
+
+.portal-filter-button {
+    background-color: var(--portal-card) !important;
+    border: 1px solid var(--portal-accent) !important;
+    color: var(--portal-filter-text) !important;
+}
+
+.portal-filter-button:hover {
+    background-color: var(--portal-filter-hover) !important;
 }
 
 .portal-shell > div > div {
@@ -673,7 +740,7 @@
 }
 
 .portal-chat-bubble-mine {
-    background: #7c3aed;
+    background: var(--portal-accent);
     color: #ffffff;
 }
 
@@ -702,28 +769,14 @@
 .portal-shell main input:not([type="checkbox"]):not([type="radio"]):focus,
 .portal-shell main select:focus,
 .portal-shell main textarea:focus {
-    border-color: rgb(124 58 237);
-    box-shadow: 0 0 0 3px rgb(124 58 237 / 0.14);
+    border-color: var(--portal-accent);
+    box-shadow: 0 0 0 3px var(--portal-focus-ring);
 }
 
-.portal-shell main a[class*="bg-slate-950"],
-.portal-shell main a[class*="bg-slate-900"],
-.portal-shell main button[class*="bg-slate-950"],
-.portal-shell main button[class*="bg-slate-900"] {
-    background-color: rgb(124 58 237);
-    box-shadow: 0 12px 24px rgb(124 58 237 / 0.22);
-}
-
-.portal-shell main a[class*="bg-slate-950"]:hover,
-.portal-shell main a[class*="bg-slate-900"]:hover,
-.portal-shell main button[class*="bg-slate-950"]:hover,
-.portal-shell main button[class*="bg-slate-900"]:hover {
-    background-color: rgb(109 40 217);
-}
 
 .portal-sidebar-scroll {
     scrollbar-width: thin;
-    scrollbar-color: rgb(221 214 254) transparent;
+    scrollbar-color: var(--portal-border-strong) transparent;
 }
 
 .portal-sidebar-scroll::-webkit-scrollbar {
@@ -735,7 +788,7 @@
 }
 
 .portal-sidebar-scroll::-webkit-scrollbar-thumb {
-    background: rgb(221 214 254);
+    background: var(--portal-border-strong);
     border-radius: 999px;
 }
 
@@ -760,33 +813,11 @@
     transition:
         background-color 180ms ease,
         color 180ms ease,
-        box-shadow 180ms ease,
-        transform 180ms ease;
-}
-
-.portal-nav-link:hover {
-    transform: translateX(2px);
-}
-
-.portal-nav-link.is-active::before {
-    content: "";
-    position: absolute;
-    left: -0.25rem;
-    top: 50%;
-    height: 1.4rem;
-    width: 0.2rem;
-    transform: translateY(-50%);
-    border-radius: 999px;
-    background: rgb(103 232 249);
+        box-shadow 180ms ease;
 }
 
 .portal-nav-icon {
     transition:
         background-color 180ms ease,
-        color 180ms ease,
-        transform 180ms ease;
-}
-
-.portal-nav-link:hover .portal-nav-icon {
-    transform: scale(1.04);
+        color 180ms ease;
 }

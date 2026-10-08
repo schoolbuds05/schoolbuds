@@ -118,6 +118,7 @@ Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')-
     Route::post('/students/{student}/fees/{fee}/pay', [StudentManageController::class, 'markFeePaid'])->name('students.fees.pay');
     Route::get('/controls', [SystemControlController::class, 'index'])->name('controls.index');
     Route::post('/controls', [SystemControlController::class, 'store'])->name('controls.store');
+    Route::post('/points-configuration', [SystemControlController::class, 'storePoints'])->name('points-configuration.store');
     Route::get('/activity', [ActivityLogController::class, 'index'])->name('activity.index');
     Route::get('/reports', [ReportsController::class, 'admin'])->name('reports.index');
     Route::get('/archive', [ArchiveController::class, 'index'])->name('archive.index');

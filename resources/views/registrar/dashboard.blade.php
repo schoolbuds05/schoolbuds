@@ -9,7 +9,7 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <x-stat-card label="Pending enrollments" :value="$stats['pending_enrollments']" tone="red" />
     <x-stat-card label="Approved" :value="$stats['approved_enrollments']" tone="emerald" />
-    <x-stat-card label="Active students" :value="$stats['active_students']" tone="blue" />
+    <x-stat-card label="Active students" :value="$stats['active_students']" tone="accent" />
     <x-stat-card label="Points issued" :value="$stats['points_issued']" />
 </div>
 

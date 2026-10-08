@@ -187,9 +187,7 @@ if (document.body.classList.contains('portal-shell')) {
     const sidebarNav = document.getElementById('portal-sidebar-nav');
     const savedSidebarY = sessionStorage.getItem(portalSidebarScrollKey);
     if (sidebarNav && savedSidebarY !== null) {
-        requestAnimationFrame(() => {
-            sidebarNav.scrollTop = Number(savedSidebarY);
-        });
+        sidebarNav.scrollTop = Number(savedSidebarY);
     }
 
     const saveScroll = () => {
@@ -203,7 +201,7 @@ if (document.body.classList.contains('portal-shell')) {
 
     document.addEventListener('click', (event) => {
         const link = event.target.closest('a[href]');
-        if (!link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
             return;
         }
 
@@ -214,6 +212,11 @@ if (document.body.classList.contains('portal-shell')) {
             return;
         }
 
+        const isSidebarLink = link.closest('#portal-sidebar-nav');
+        if (!isSidebarLink && event.defaultPrevented) {
+            return;
+        }
+
         saveScroll();
 
         const bar = document.getElementById('portal-loading-bar');
@@ -221,5 +224,11 @@ if (document.body.classList.contains('portal-shell')) {
             bar.style.opacity = '1';
             bar.style.width = '72%';
         }
-    });
+
+        if (isSidebarLink) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            window.location.assign(url.href);
+        }
+    }, true);
 }

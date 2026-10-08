@@ -39,7 +39,7 @@
             <option value="drop" @selected(request('action') === 'drop')>Drop subject</option>
         </select>
     </label>
-    <button class="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-bold text-white">Filter</button>
+    <button class="rounded-lg bg-portal-accent px-5 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">Filter</button>
     @if(request('status') || request('action'))
         <a href="{{ route('registrar.subject-requests.index') }}" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Clear</a>
     @endif
@@ -49,7 +49,7 @@
     @forelse($requests as $subjectRequest)
         @php
             $isAdd = $subjectRequest->action === 'add';
-            $actionClass = $isAdd ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700';
+            $actionClass = $isAdd ? 'bg-portal-accent-soft text-portal-accent' : 'bg-orange-50 text-orange-700';
             $statusClass = match ($subjectRequest->status) {
                 'approved' => 'bg-emerald-100 text-emerald-700',
                 'rejected' => 'bg-red-100 text-red-700',

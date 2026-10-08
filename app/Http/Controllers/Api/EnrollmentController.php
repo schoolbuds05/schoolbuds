@@ -1153,7 +1153,7 @@ class EnrollmentController extends Controller
             'source_key' => "early-enrollment:{$student->id}:{$app->school_year}:{$app->semester}",
             'title' => 'Early enrollment bonus',
             'description' => 'Enrollment submitted during the early enrollment window.',
-            'points' => 30,
+            'points' => (int) $points->rule('early_enrollment_points'),
             'school_year' => $app->school_year,
             'semester' => $app->semester,
             'meta' => ['enrollment_application_id' => $app->id],
@@ -1163,7 +1163,10 @@ class EnrollmentController extends Controller
     private function authorizeRegistrar(Request $request)
     {
         $user = $request->user();
-        if (!$user || !$user->hasAnyRole(['registrar', 'admin'])) {
+        if (!$user || (
+            !in_array($user->role, ['registrar', 'admin'], true)
+            && !$user->hasAnyRole(['registrar', 'admin'])
+        )) {
             abort(403, 'Unauthorized.');
         }
     }

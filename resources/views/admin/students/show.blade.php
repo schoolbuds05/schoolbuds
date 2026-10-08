@@ -3,7 +3,7 @@
 @section('content')
 <nav aria-label="Breadcrumb" class="mb-4 text-sm">
     <ol class="flex flex-wrap items-center gap-2">
-        <li><a href="{{ route(($routePrefix ?? 'admin') . '.students.index') }}" class="font-bold text-blue-700 hover:underline">Students</a></li>
+        <li><a href="{{ route(($routePrefix ?? 'admin') . '.students.index') }}" class="font-bold text-portal-accent hover:underline">Students</a></li>
         <li aria-hidden="true" class="text-slate-400">/</li>
         <li aria-current="page" class="font-semibold text-slate-600">{{ $student->first_name }} {{ $student->last_name }}</li>
     </ol>
@@ -21,9 +21,9 @@
                 <p class="text-xs font-bold text-emerald-700 uppercase">Attendance</p>
                 <p class="text-2xl font-black text-emerald-800">{{ $attendancePct }}%</p>
             </div>
-            <div class="rounded-lg bg-blue-50 p-4">
-                <p class="text-xs font-bold text-blue-700 uppercase">Status</p>
-                <p class="text-lg font-black text-blue-800">{{ ucfirst($student->status) }}</p>
+            <div class="rounded-lg bg-portal-accent-soft p-4">
+                <p class="text-xs font-bold text-portal-accent uppercase">Status</p>
+                <p class="text-lg font-black text-portal-accent">{{ ucfirst($student->status) }}</p>
             </div>
             <a href="#parent-account" class="portal-button-primary col-span-2">
                 {{ $student->parent ? 'Change parent link' : 'Link parent' }}
@@ -197,7 +197,7 @@
                 <input name="prev_school_address" value="{{ old('prev_school_address', $student->prev_school_address) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
             </label>
 
-            <button class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white md:col-start-4">Save student info</button>
+            <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:col-start-4">Save student info</button>
         </form>
     </details>
 </section>
@@ -269,7 +269,7 @@
                         'passed' => 'bg-emerald-100 text-emerald-700',
                         'failed' => 'bg-red-100 text-red-700',
                         'dropped' => 'bg-red-100 text-red-700',
-                        default => 'bg-blue-100 text-blue-700',
+                        default => 'bg-portal-accent-soft text-portal-accent',
                     };
                     $gradePeriods = ($subject['program_type'] ?? null) === 'college'
                         ? ['1' => 'Prelim', '2' => 'Midterm', '3' => 'Prefinal', '4' => 'Final']
@@ -443,7 +443,7 @@
                 Notes
                 <textarea name="notes" rows="2" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">{{ old('notes') }}</textarea>
             </label>
-            <button class="mt-3 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Post fee</button>
+            <button class="mt-3 rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Post fee</button>
         </form>
     </section>
 </div>

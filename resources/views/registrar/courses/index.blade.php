@@ -14,7 +14,7 @@
                     <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path stroke-linecap="round" d="M16 16l5 5"/></svg>
                     <input name="search" value="{{ request('search') }}" placeholder="Search course or acronym" class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:bg-white focus:outline-none">
                 </div>
-                <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">Search</button>
+                <button type="submit" class="shrink-0 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-portal-accent-hover">Search</button>
             </form>
 
             <div class="flex items-center gap-2">
@@ -38,11 +38,11 @@
                         </label>
                         <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
                             <a href="{{ route('registrar.courses.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
-                            <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
+                            <button type="submit" class="rounded-lg bg-portal-accent px-3 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Apply</button>
                         </div>
                     </form>
                 </details>
-                <button type="button" data-modal-open="course-create-modal" class="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
+                <button type="button" data-modal-open="course-create-modal" class="inline-flex items-center gap-2 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                     Add course
                 </button>
@@ -72,7 +72,7 @@
                 </select>
                 <textarea name="description" rows="3" placeholder="Description" class="w-full rounded-lg border-slate-300 text-sm">{{ old('description') }}</textarea>
                 <label class="flex items-center gap-2 text-sm font-bold text-slate-700"><input type="checkbox" name="is_active" value="1" checked class="rounded border-slate-300"> Active</label>
-                <button class="w-full rounded-lg bg-slate-950 py-2 text-sm font-bold text-white">Create course</button>
+                <button class="w-full rounded-lg bg-portal-accent py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Create course</button>
             </form>
         </section>
     </div>
@@ -91,7 +91,7 @@
                         onclick="this.closest('[data-course-card]').querySelector('[data-course-details]').classList.toggle('hidden'); this.querySelector('[data-arrow]').classList.toggle('rotate-180');"
                     >
                         <div class="flex min-w-0 items-center gap-3">
-                            <span class="inline-flex items-center rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-600">
+                            <span class="inline-flex items-center rounded-lg bg-portal-accent-soft px-2.5 py-1 text-xs font-black text-portal-accent">
                                 {{ $course->acronym ?: 'COURSE' }}
                             </span>
                             <div class="min-w-0">
@@ -152,7 +152,7 @@
                             <label class="flex items-center gap-2 text-sm font-bold text-slate-700 md:pb-2">
                                 <input type="checkbox" name="is_active" value="1" @checked($course->is_active) class="rounded border-slate-300"> Active
                             </label>
-                            <button class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white md:col-start-4">Save changes</button>
+                            <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:col-start-4">Save changes</button>
                         </form>
                     </div>
                 </div>

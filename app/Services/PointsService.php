@@ -16,6 +16,45 @@ class PointsService
     public const ATTENDANCE_CAP = 60;
     public const EVENT_CAP = 40;
 
+    public function __construct(private PointsConfiguration $configuration)
+    {
+    }
+
+    public function rules(): array
+    {
+        return $this->configuration->all();
+    }
+
+    public function rule(string $key): int|float
+    {
+        return $this->configuration->get($key);
+    }
+
+    public function emptySummary(): array
+    {
+        $redemptionCap = (int) $this->configuration->get('redemption_cap');
+        $semesterCap = (int) $this->configuration->get('semester_cap');
+        $pointsPerLevel = (int) $this->configuration->get('points_per_level');
+
+        return [
+            'points' => 0,
+            'earned_points' => 0,
+            'redeemable_points' => 0,
+            'redemption_cap' => $redemptionCap,
+            'peso_value' => 0,
+            'level' => 1,
+            'current_level_points' => 0,
+            'level_interval' => $pointsPerLevel,
+            'next_level_at' => $pointsPerLevel,
+            'points_to_next_level' => $pointsPerLevel,
+            'semester_cap' => $semesterCap,
+            'semester_cap_remaining' => $semesterCap,
+            'redemption_cap_remaining' => $redemptionCap,
+            'rewards_count' => 0,
+            'by_source' => [],
+        ];
+    }
+
     public function awardGradePoints(
         Student $student,
         float $score,
@@ -44,7 +83,7 @@ class PointsService
             'school_year' => $schoolYear,
             'semester' => $semester,
             'meta' => $meta + ['score' => $score],
-        ], self::GRADE_CAP);
+        ], (int) $this->configuration->get('grade_cap'));
     }
 
     public function awardDailyAttendancePoints(
@@ -67,12 +106,12 @@ class PointsService
             'source_key' => $sourceKey,
             'category' => 'attendance',
             'title' => 'Daily attendance points',
-            'description' => 'Perfect daily attendance earned 2 points.',
-            'points' => 2,
+            'description' => 'Perfect daily attendance earned ' . $this->configuration->get('attendance_daily_points') . ' points.',
+            'points' => (int) $this->configuration->get('attendance_daily_points'),
             'school_year' => $schoolYear,
             'semester' => $semester,
             'meta' => $meta + ['status' => $status],
-        ], self::ATTENDANCE_CAP);
+        ], (int) $this->configuration->get('attendance_cap'));
     }
 
     public function syncMonthlyPerfectAttendance(
@@ -100,19 +139,19 @@ class PointsService
             'source_key' => $sourceKey,
             'category' => 'attendance',
             'title' => 'Monthly perfect attendance bonus',
-            'description' => 'Perfect recorded attendance for the month earned 20 bonus points.',
-            'points' => 20,
+            'description' => 'Perfect recorded attendance for the month earned ' . $this->configuration->get('attendance_monthly_points') . ' bonus points.',
+            'points' => (int) $this->configuration->get('attendance_monthly_points'),
             'school_year' => $schoolYear,
             'semester' => $semester,
             'meta' => ['month' => $month],
-        ], self::ATTENDANCE_CAP);
+        ], (int) $this->configuration->get('attendance_cap'));
     }
 
     public function awardVerifiedPoints(Student $student, array $data, ?User $awardedBy = null): StudentReward
     {
         $source = $data['source'];
         $cap = match ($source) {
-            'events' => self::EVENT_CAP,
+            'events' => (int) $this->configuration->get('event_cap'),
             default => null,
         };
 
@@ -139,21 +178,26 @@ class PointsService
             ->where('points', '>', 0)
             ->sum('points');
         $redemptionBalance = $this->redemptionBalanceFor($student, $schoolYear, $semester);
-        $level = intdiv($earnedPoints, 100) + 1;
+        $pointsPerLevel = max(1, (int) $this->configuration->get('points_per_level'));
+        $redemptionCap = (int) $this->configuration->get('redemption_cap');
+        $semesterCap = (int) $this->configuration->get('semester_cap');
+        $redemptionRate = (float) $this->configuration->get('redemption_rate');
+        $level = intdiv($earnedPoints, $pointsPerLevel) + 1;
 
         return [
             'points' => $redemptionBalance,
             'earned_points' => $earnedPoints,
             'redeemable_points' => $redemptionBalance,
-            'redemption_cap' => self::REDEMPTION_CAP,
-            'peso_value' => $redemptionBalance * 0.5,
+            'redemption_cap' => $redemptionCap,
+            'peso_value' => $redemptionBalance * $redemptionRate,
             'level' => $level,
-            'current_level_points' => max(0, $earnedPoints - (($level - 1) * 100)),
-            'next_level_at' => $level * 100,
-            'points_to_next_level' => max(0, ($level * 100) - $earnedPoints),
-            'semester_cap' => self::SEMESTER_CAP,
-            'semester_cap_remaining' => max(0, self::SEMESTER_CAP - $earnedPoints),
-            'redemption_cap_remaining' => max(0, self::REDEMPTION_CAP - min(self::REDEMPTION_CAP, $earnedPoints)),
+            'current_level_points' => max(0, $earnedPoints - (($level - 1) * $pointsPerLevel)),
+            'level_interval' => $pointsPerLevel,
+            'next_level_at' => $level * $pointsPerLevel,
+            'points_to_next_level' => max(0, ($level * $pointsPerLevel) - $earnedPoints),
+            'semester_cap' => $semesterCap,
+            'semester_cap_remaining' => max(0, $semesterCap - $earnedPoints),
+            'redemption_cap_remaining' => max(0, $redemptionCap - min($redemptionCap, $earnedPoints)),
             'rewards_count' => (clone $query)->count(),
             'by_source' => $this->sourceTotals($student, $schoolYear, $semester),
         ];
@@ -170,7 +214,7 @@ class PointsService
             ->where('category', 'redemption');
         $this->scopePeriod($redemptionQuery, $schoolYear, $semester);
 
-        return max(0, min(self::REDEMPTION_CAP, (int) $earnedQuery->sum('points')) + (int) $redemptionQuery->sum('points'));
+        return max(0, min((int) $this->configuration->get('redemption_cap'), (int) $earnedQuery->sum('points')) + (int) $redemptionQuery->sum('points'));
     }
 
     private function awardOrUpdate(Student $student, array $attributes, ?int $sourceCap): StudentReward
@@ -225,7 +269,7 @@ class PointsService
             $periodQuery->where('id', '!=', $excludeId);
         }
 
-        $semesterRemaining = max(0, self::SEMESTER_CAP - (int) $periodQuery->sum('points'));
+        $semesterRemaining = max(0, (int) $this->configuration->get('semester_cap') - (int) $periodQuery->sum('points'));
         $allowed = min($points, $semesterRemaining);
 
         if ($sourceCap !== null) {
@@ -244,17 +288,17 @@ class PointsService
 
     private function pointsForGrade(float $score): int
     {
-        if ($score >= 90) return 15;
-        if ($score >= 85) return 8;
-        if ($score >= 75) return 3;
+        if ($score >= $this->configuration->get('shs_grade_high_threshold')) return (int) $this->configuration->get('shs_grade_high_points');
+        if ($score >= $this->configuration->get('shs_grade_mid_threshold')) return (int) $this->configuration->get('shs_grade_mid_points');
+        if ($score >= $this->configuration->get('shs_grade_pass_threshold')) return (int) $this->configuration->get('shs_grade_pass_points');
         return 0;
     }
 
     private function pointsForCollegeGrade(float $score): int
     {
-        if ($score <= 1.75) return 15;
-        if ($score <= 2.5) return 8;
-        if ($score <= 3) return 3;
+        if ($score <= $this->configuration->get('college_grade_top_max')) return (int) $this->configuration->get('college_grade_top_points');
+        if ($score <= $this->configuration->get('college_grade_mid_max')) return (int) $this->configuration->get('college_grade_mid_points');
+        if ($score <= $this->configuration->get('college_grade_pass_max')) return (int) $this->configuration->get('college_grade_pass_points');
         return 0;
     }
 

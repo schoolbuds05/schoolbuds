@@ -21,7 +21,7 @@
     </section>
 
     <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <x-stat-card label="Assigned classes" :value="$classes->count()" tone="blue" />
+        <x-stat-card label="Assigned classes" :value="$classes->count()" tone="accent" />
         <x-stat-card label="Class work posted" :value="$assignmentsCount" tone="violet" />
     </section>
 </div>

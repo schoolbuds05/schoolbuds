@@ -98,7 +98,7 @@
                                 <td class="px-5 py-3 text-center">
                                     <input type="number" name="grades[{{ $i }}][score]" value="{{ $existingScore ?? '' }}" min="1" max="{{ $isCollege ? '5' : '100' }}" step="{{ $isCollege ? '0.25' : '1' }}" placeholder="-" @disabled($isLocked) class="portal-field w-24 text-center">
                                 </td>
-                                <td class="px-5 py-3 text-center font-black {{ $existingScore !== null && ($isCollege ? $existingScore <= 2 : $existingScore >= 90) ? 'text-emerald-700' : ($existingScore !== null && ($isCollege ? $existingScore <= 3 : $existingScore >= 75) ? 'text-blue-700' : 'text-slate-400') }}">
+                                <td class="px-5 py-3 text-center font-black {{ $existingScore !== null && ($isCollege ? $existingScore <= 2 : $existingScore >= 90) ? 'text-emerald-700' : ($existingScore !== null && ($isCollege ? $existingScore <= 3 : $existingScore >= 75) ? 'text-portal-accent' : 'text-slate-400') }}">
                                     {{ $existingScore ?? '-' }}
                                 </td>
                                 <td class="px-5 py-3 text-center text-xs font-semibold text-slate-500">{{ $existingRemarks ?? '-' }}</td>

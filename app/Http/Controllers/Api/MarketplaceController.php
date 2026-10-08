@@ -359,8 +359,8 @@ class MarketplaceController extends Controller
             'redemption' => [
                 'rate' => (float) $this->settingValue('redemption_rate', 0.5),
                 'max_percent' => (float) $this->settingValue('max_redemption_percent', 40),
-                'min_points' => 50,
-                'max_points' => 100,
+                'min_points' => (int) $this->settingValue('redemption_min_points', 50),
+                'max_points' => (int) $this->settingValue('redemption_max_points', 100),
             ],
         ]);
     }
@@ -382,7 +382,7 @@ class MarketplaceController extends Controller
 
         $data = $request->validate([
             'require_item_approval' => ['nullable', 'boolean'],
-            'redemption_rate' => ['nullable', 'numeric', 'min:0'],
+            'redemption_rate' => ['nullable', 'numeric', 'gt:0'],
             'max_redemption_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
@@ -860,11 +860,13 @@ class MarketplaceController extends Controller
         $balance = app(PointsService::class)->redemptionBalanceFor($student, $student->school_year);
         $rate = max(0.01, (float) $this->settingValue('redemption_rate', 0.5));
         $maxPercent = max(0, min(100, (float) $this->settingValue('max_redemption_percent', 40)));
+        $minimumPoints = (int) $this->settingValue('redemption_min_points', 50);
+        $configuredMaximum = (int) $this->settingValue('redemption_max_points', 100);
         $maxByValue = (int) floor(($subtotal * ($maxPercent / 100)) / $rate);
-        $maxPoints = max(0, min(100, $maxByValue, $balance));
+        $maxPoints = max(0, min($configuredMaximum, $maxByValue, $balance));
 
-        if ($requested < 50) {
-            abort(response()->json(['message' => 'Minimum redemption is 50 points.'], 422));
+        if ($requested < $minimumPoints) {
+            abort(response()->json(['message' => "Minimum redemption is {$minimumPoints} points."], 422));
         }
 
         if ($requested > $maxPoints) {
@@ -1088,6 +1090,8 @@ class MarketplaceController extends Controller
             'require_item_approval' => (bool) $this->settingValue('require_item_approval', false),
             'redemption_rate' => (float) $this->settingValue('redemption_rate', 0.5),
             'max_redemption_percent' => (float) $this->settingValue('max_redemption_percent', 40),
+            'redemption_min_points' => (int) $this->settingValue('redemption_min_points', 50),
+            'redemption_max_points' => (int) $this->settingValue('redemption_max_points', 100),
         ];
     }
 

@@ -1,103 +1,163 @@
 // @ts-nocheck
-// app/(registrar)/_layout.tsx — Registrar tabs
-
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme-context';
 
-function Icon({ emoji, focused, color }) {
+function TabIcon({ name, focused, color }) {
   return (
-    <View style={{ alignItems: 'center', paddingTop: 2 }}>
-      <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.4, color }}>{emoji}</Text>
+    <View
+      style={{
+        width: 36,
+        height: 30,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: focused ? `${color}18` : 'transparent',
+      }}
+    >
+      <Ionicons name={name} size={21} color={color} />
     </View>
+  );
+}
+
+function TabLabel({ label, color }) {
+  return (
+    <Text
+      style={{
+        width: '100%',
+        color,
+        fontSize: 9,
+        fontWeight: '700',
+        includeFontPadding: false,
+        lineHeight: 13,
+        textAlign: 'center',
+      }}
+      allowFontScaling={false}
+      numberOfLines={1}
+    >
+      {label}
+    </Text>
   );
 }
 
 export default function RegistrarLayout() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-
-  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 0);
-  const tabHeight     = 54 + bottomPadding;
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor:   theme.primary,
+        tabBarHideOnKeyboard: true,
+        tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSub,
         tabBarStyle: {
-          height:          tabHeight,
-          paddingBottom:   bottomPadding,
-          paddingTop:      6,
+          height: 64 + bottomPadding,
+          paddingBottom: bottomPadding,
+          paddingTop: 8,
           backgroundColor: theme.navBg,
-          borderTopWidth:  1,
-          borderTopColor:  theme.border,
+          borderTopWidth: 1,
+          borderTopColor: theme.border,
           elevation: 12,
-          shadowColor:   '#000',
+          shadowColor: '#000',
           shadowOpacity: 0.1,
-          shadowOffset:  { width: 0, height: -2 },
-          shadowRadius:  8,
+          shadowOffset: { width: 0, height: -2 },
+          shadowRadius: 8,
         },
         tabBarLabelStyle: {
-          fontSize:   10,
-          fontWeight: '600',
-          marginTop:  2,
+          fontSize: 10,
+          fontWeight: '700',
+          marginTop: 3,
+          includeFontPadding: false,
+          textAlign: 'center',
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          height: 54,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 4,
+        },
+        tabBarIconStyle: {
+          width: 36,
+          height: 30,
+          marginBottom: 0,
         },
       }}
     >
       <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Dashboard',
+          tabBarLabel: ({ color }) => <TabLabel label="Home" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="enrollments"
         options={{
           title: 'Enrollments',
-          tabBarIcon: ({ focused, color }) => <Icon emoji="📋" focused={focused} color={color} />,
+          tabBarLabel: ({ color }) => <TabLabel label="Enroll" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'clipboard' : 'clipboard-outline'} focused={focused} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen name="subjects"
-        options={{ title: 'Subjects', tabBarIcon: ({ focused, color }) => <Icon emoji="📚" focused={focused} color={color} /> }}
+      <Tabs.Screen
+        name="subjects"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="sections"
-        options={{ title: 'Sections', tabBarIcon: ({ focused, color }) => <Icon emoji="🏫" focused={focused} color={color} /> }}
+        options={{
+          title: 'Sections',
+          tabBarLabel: ({ color }) => <TabLabel label="Sections" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'business' : 'business-outline'} focused={focused} color={color} />
+          ),
+        }}
       />
       <Tabs.Screen
         name="courses"
-        options={{ title: 'Courses', tabBarIcon: ({ focused, color }) => <Icon emoji="🎒" focused={focused} color={color} /> }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="students"
         options={{
           title: 'Students',
-          tabBarIcon: ({ focused, color }) => <Icon emoji="🎓" focused={focused} color={color} />,
+          tabBarLabel: ({ color }) => <TabLabel label="Students" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="controls"
+        name="more"
         options={{
-          href: null,
+          title: 'More',
+          tabBarLabel: ({ color }) => <TabLabel label="More" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} color={color} />
+          ),
         }}
       />
+      <Tabs.Screen name="controls" options={{ href: null }} />
       <Tabs.Screen
         name="subject-requests"
-        options={{
-          title: 'Requests',
-          tabBarIcon: ({ focused, color }) => <Icon emoji="RQ" focused={focused} color={color} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="reports"
-        options={{
-          title: 'Reports',
-          tabBarIcon: ({ focused, color }) => <Icon emoji="RP" focused={focused} color={color} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ focused, color }) => <Icon emoji="👤" focused={focused} color={color} />,
-        }}
+        options={{ href: null }}
       />
     </Tabs>
   );

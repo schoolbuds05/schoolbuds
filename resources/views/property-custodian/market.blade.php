@@ -10,7 +10,7 @@
     <x-stat-card :label="$marketplaceScopeLabel . ' listings'" :value="$marketplaceStats['items']" />
     <x-stat-card label="Available" :value="$marketplaceStats['available']" tone="emerald" />
     <x-stat-card label="Pending sales" :value="$marketplaceStats['pending_sales']" tone="red" />
-    <x-stat-card label="Paid sales" :value="$marketplaceStats['paid_sales']" tone="blue" />
+    <x-stat-card label="Paid sales" :value="$marketplaceStats['paid_sales']" tone="accent" />
 </div>
 
 <div class="grid grid-cols-1 gap-6 xl:grid-cols-[380px_1fr]">
@@ -63,7 +63,7 @@
             <input name="qrph_image_url" value="{{ old('qrph_image_url') }}" class="portal-field w-full" placeholder="QRPH image URL">
             <div>
                 <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Item photos</label>
-                <input name="item_images[]" type="file" accept="image/*" multiple class="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white">
+                <input name="item_images[]" type="file" accept="image/*" multiple class="portal-file-input mt-2 block w-full text-sm text-slate-600">
                 <p class="mt-1 text-xs text-slate-500">Upload up to 3 images.</p>
             </div>
 
@@ -115,7 +115,7 @@
                             <div>
                                 <input name="title" value="{{ $item->title }}" class="portal-field w-full font-bold" required>
                                 <input name="description" value="{{ $item->description }}" class="portal-field mt-2 w-full" required>
-                                <input name="item_images[]" type="file" accept="image/*" multiple class="mt-2 block w-full text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1.5 file:text-xs file:font-bold file:text-slate-700">
+                                <input name="item_images[]" type="file" accept="image/*" multiple class="portal-file-input mt-2 block w-full text-xs text-slate-500">
                                 <p class="mt-1 text-xs text-slate-400">Adds new photos until the item has 3 total.</p>
                                 <input type="hidden" name="category" value="{{ $item->category }}">
                                 <input type="hidden" name="condition" value="{{ $item->condition }}">
@@ -291,5 +291,3 @@
     </div>
 </div>
 @endsection
-
-

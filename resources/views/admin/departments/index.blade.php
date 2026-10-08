@@ -149,7 +149,7 @@
 
                     <div class="flex items-center justify-between gap-3 pt-1">
                         <label class="flex items-center gap-2 text-sm font-bold text-slate-700"><input type="checkbox" name="is_active" value="1" @checked($department->is_active) class="rounded border-slate-300"> Active</label>
-                        <button type="submit" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white">Save changes</button>
+                        <button type="submit" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Save changes</button>
                     </div>
                 </form>
 

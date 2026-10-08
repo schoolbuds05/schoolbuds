@@ -23,7 +23,7 @@ export default function Index() {
         } else if (['faculty', 'teacher'].includes(role)) {
           setRoute('/(teacher)/classes');
         } else if (role === 'registrar') {
-          setRoute('/(registrar)/enrollments');
+          setRoute('/(registrar)/dashboard');
         } else if (role === 'parent') {
           setRoute('/(parent)/dashboard');
         } else if (['staff', 'librarian', 'property_custodian'].includes(role)) {

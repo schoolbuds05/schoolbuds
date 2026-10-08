@@ -155,7 +155,7 @@
                                         <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Cash</span>
                                     @endif
                                     @if($item->accepts_gcash)
-                                        <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">GCash</span>
+                                        <span class="rounded-full bg-portal-accent-soft px-3 py-1 text-xs font-black text-portal-accent">GCash</span>
                                     @endif
                                     @if($item->accepts_qrph)
                                         <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">QRPH</span>

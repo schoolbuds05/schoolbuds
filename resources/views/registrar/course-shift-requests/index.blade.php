@@ -17,7 +17,7 @@
             <option value="{{ $status }}" @selected(request('status') === $status)>{{ ucfirst($status) }}</option>
         @endforeach
     </select>
-    <button class="rounded-lg bg-emerald-700 px-5 py-2 text-sm font-bold text-white">Filter</button>
+    <button class="rounded-lg bg-portal-accent px-5 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Filter</button>
 </form>
 
 <div class="space-y-4">
