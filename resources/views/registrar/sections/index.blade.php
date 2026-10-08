@@ -18,10 +18,67 @@
             </form>
 
             <div class="flex items-center gap-2">
-                <button type="button" data-modal-open="section-filter-modal" class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
-                    Filters
-                </button>
+                <details class="group relative z-30">
+                    <summary class="inline-flex cursor-pointer list-none items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
+                        Filters
+                        <svg class="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                    </summary>
+                    <form method="GET" class="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                        <input type="hidden" name="search" value="{{ request('search') }}">
+                        <h2 class="text-sm font-black text-slate-900">Filter sections</h2>
+                        <p class="mt-1 text-xs text-slate-500">Narrow by section details and academic period.</p>
+                        <div class="mt-4 grid gap-3">
+                            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Program
+                                <select name="program_type" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                                    <option value="">All programs</option>
+                                    <option value="college" @selected(request('program_type') === 'college')>College</option>
+                                    <option value="shs" @selected(request('program_type') === 'shs')>SHS</option>
+                                </select>
+                            </label>
+                            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Course
+                                <select name="course" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                                    <option value="">All courses</option>
+                                    @foreach($courses as $course)
+                                        <option value="{{ $course->name }}" @selected(request('course') === $course->name)>{{ $course->name }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                School year
+                                <select name="school_year" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                                    <option value="">All school years</option>
+                                    @foreach($schoolYears as $year)
+                                        <option value="{{ $year }}" @selected(request('school_year') === $year)>{{ $year }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Semester
+                                <select name="semester" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                                    <option value="">All semesters</option>
+                                    <option value="1st" @selected(request('semester') === '1st')>1st</option>
+                                    <option value="2nd" @selected(request('semester') === '2nd')>2nd</option>
+                                    <option value="summer" @selected(request('semester') === 'summer')>Summer</option>
+                                </select>
+                            </label>
+                            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Status
+                                <select name="is_active" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                                    <option value="">All status</option>
+                                    <option value="1" @selected(request('is_active') === '1')>Active</option>
+                                    <option value="0" @selected(request('is_active') === '0')>Inactive</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
+                            <a href="{{ route('registrar.sections.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
+                            <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
+                        </div>
+                    </form>
+                </details>
                 <button type="button" data-modal-open="section-create-modal" class="inline-flex shrink-0 items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                     Add section
@@ -89,73 +146,6 @@
     <label class="flex items-center gap-2 text-sm font-bold text-slate-700 md:pt-5"><input type="checkbox" name="is_active" value="1" checked class="rounded border-slate-300"> Active</label>
     <button class="rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white md:mt-5 md:col-span-3">Create section</button>
 </form>
-    </section>
-</div>
-
-<div id="section-filter-modal" data-modal class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="section-filter-title" tabindex="-1">
-    <section class="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
-        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-            <div>
-                <h2 id="section-filter-title" class="text-lg font-black text-slate-900">Filter sections</h2>
-                <p class="mt-1 text-sm text-slate-500">Narrow by section details and academic period.</p>
-            </div>
-            <button type="button" data-modal-close="section-filter-modal" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Close</button>
-        </header>
-
-        <form method="GET" class="grid grid-cols-1 gap-3 p-5 md:grid-cols-2">
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Program
-                <select name="program_type" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All programs</option>
-                    <option value="college" @selected(request('program_type') === 'college')>College</option>
-                    <option value="shs" @selected(request('program_type') === 'shs')>SHS</option>
-                </select>
-            </label>
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Course
-                <select name="course" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All courses</option>
-                    @foreach($courses as $course)
-                        <option value="{{ $course->name }}" @selected(request('course') === $course->name)>{{ $course->name }}</option>
-                    @endforeach
-                </select>
-            </label>
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                School year
-                <select name="school_year" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All school years</option>
-                    @foreach($schoolYears as $year)
-                        <option value="{{ $year }}" @selected(request('school_year') === $year)>{{ $year }}</option>
-                    @endforeach
-                </select>
-            </label>
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Semester
-                <select name="semester" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All semesters</option>
-                    <option value="1st" @selected(request('semester') === '1st')>1st</option>
-                    <option value="2nd" @selected(request('semester') === '2nd')>2nd</option>
-                    <option value="summer" @selected(request('semester') === 'summer')>Summer</option>
-                </select>
-            </label>
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Status
-                <select name="is_active" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All status</option>
-                    <option value="1" @selected(request('is_active') === '1')>Active</option>
-                    <option value="0" @selected(request('is_active') === '0')>Inactive</option>
-                </select>
-            </label>
-
-            <div class="flex items-center justify-end gap-2 md:col-span-2 pt-2">
-                <a href="{{ route('registrar.sections.index') }}" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Reset</a>
-                <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">Apply</button>
-            </div>
-        </form>
     </section>
 </div>
 

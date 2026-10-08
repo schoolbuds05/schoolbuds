@@ -43,61 +43,51 @@
         <button type="submit" class="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800">Search</button>
     </form>
 
-    <button type="button" data-modal-open="student-filter-modal" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
-        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
-        Filters
-    </button>
-</div>
-
-<div id="student-filter-modal" data-modal class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="student-filter-title" tabindex="-1">
-    <section class="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
-        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-            <div>
-                <h2 id="student-filter-title" class="text-lg font-black text-slate-900">Filter students</h2>
-                <p class="mt-1 text-sm text-slate-500">Narrow the student list by academic details.</p>
-            </div>
-            <button type="button" data-modal-close="student-filter-modal" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Close</button>
-        </header>
-
-        <form method="GET" class="grid grid-cols-1 gap-3 p-5 md:grid-cols-2">
+    <details class="group relative z-30 shrink-0">
+        <summary class="inline-flex cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M7 12h10M10 18h4"/></svg>
+            Filters
+            <svg class="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <form method="GET" action="{{ route($routePrefix . '.students.index') }}" class="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
             <input type="hidden" name="search" value="{{ request('search') }}">
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                Year level
-                <select name="year_level" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All year levels</option>
-                    @foreach($yearLevels as $yearLevel)
-                        <option value="{{ $yearLevel }}" @selected(request('year_level') === $yearLevel)>{{ $yearLevel }}</option>
-                    @endforeach
-                </select>
-            </label>
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
-                School year
-                <select name="school_year" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All school years</option>
-                    @foreach($schoolYears as $schoolYear)
-                        <option value="{{ $schoolYear }}" @selected(request('school_year') === $schoolYear)>{{ $schoolYear }}</option>
-                    @endforeach
-                </select>
-            </label>
-
-            <label class="text-xs font-bold uppercase tracking-wide text-slate-500 md:col-span-2">
-                Course / strand
-                <select name="course" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
-                    <option value="">All courses and strands</option>
-                    @foreach($courseOptions as $courseOption)
-                        <option value="{{ $courseOption }}" @selected(request('course') === $courseOption)>{{ $courseOption }}</option>
-                    @endforeach
-                </select>
-            </label>
-
-            <div class="flex items-center justify-end gap-2 pt-2 md:col-span-2">
-                <a href="{{ route($routePrefix . '.students.index') }}" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Reset</a>
-                <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">Apply</button>
+            <h2 class="text-sm font-black text-slate-900">Filter students</h2>
+            <p class="mt-1 text-xs text-slate-500">Narrow the list by academic details.</p>
+            <div class="mt-4 grid gap-3">
+                <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Year level
+                    <select name="year_level" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                        <option value="">All year levels</option>
+                        @foreach($yearLevels as $yearLevel)
+                            <option value="{{ $yearLevel }}" @selected(request('year_level') === $yearLevel)>{{ $yearLevel }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    School year
+                    <select name="school_year" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                        <option value="">All school years</option>
+                        @foreach($schoolYears as $schoolYear)
+                            <option value="{{ $schoolYear }}" @selected(request('school_year') === $schoolYear)>{{ $schoolYear }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Course / strand
+                    <select name="course" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
+                        <option value="">All courses and strands</option>
+                        @foreach($courseOptions as $courseOption)
+                            <option value="{{ $courseOption }}" @selected(request('course') === $courseOption)>{{ $courseOption }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            </div>
+            <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <a href="{{ route($routePrefix . '.students.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
+                <button type="submit" class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700">Apply</button>
             </div>
         </form>
-    </section>
+    </details>
 </div>
 
 <div class="space-y-3">
