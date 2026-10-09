@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\EnrollmentApplication;
 use App\Models\Section;
 use App\Models\Student;
@@ -16,14 +17,19 @@ use App\Services\PointsService;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Spatie\Permission\Models\Role;
 
 class StudentManageController extends Controller
 {
     public function index(Request $request)
     {
         $students = Student::query()
-            ->with('user:id,name,profile_photo_path')
+            ->with('user:id,name,middle_name,profile_photo_path')
             ->when($request->search, fn($q) =>
                 $q->where('first_name', 'like', "%{$request->search}%")
                   ->orWhere('last_name', 'like', "%{$request->search}%")
@@ -51,6 +57,29 @@ class StudentManageController extends Controller
             ->latest()
             ->paginate(15)
             ->withQueryString();
+
+        $studentUserIds = $students->getCollection()->pluck('user_id')->filter()->all();
+        $studentIds = $students->getCollection()->pluck('student_id')->all();
+        $applications = EnrollmentApplication::query()
+            ->where(function ($query) use ($studentUserIds, $studentIds) {
+                if ($studentUserIds) {
+                    $query->whereIn('user_id', $studentUserIds);
+                }
+                if ($studentIds) {
+                    $studentUserIds
+                        ? $query->orWhereIn('id_no', $studentIds)
+                        : $query->whereIn('id_no', $studentIds);
+                }
+            })
+            ->latest()
+            ->get(['user_id', 'id_no', 'middle_name']);
+
+        foreach ($students as $student) {
+            $application = $student->user_id
+                ? $applications->firstWhere('user_id', $student->user_id)
+                : $applications->firstWhere('id_no', $student->student_id);
+            $student->setAttribute('middle_name', $application?->middle_name ?? $student->user?->middle_name);
+        }
 
         $yearLevels = Student::query()
             ->whereNotNull('grade_level')
@@ -529,11 +558,17 @@ class StudentManageController extends Controller
             : 0;
 
         $application = $this->applicationForStudent($student);
+        $middleName = $application?->middle_name ?? $student->user?->middle_name;
+        $studentName = trim(implode(' ', array_filter([
+            $student->first_name,
+            $middleName,
+            $student->last_name,
+        ])));
         $subjects = $this->subjectsForStudent($student, $application);
 
         $routePrefix = $request->routeIs('registrar.*') ? 'registrar' : 'admin';
 
-        return view('admin.students.show', compact('student', 'gradeRecords', 'fees', 'pointRecords', 'pointSummary', 'attendance', 'attendancePct', 'routePrefix', 'subjects'));
+        return view('admin.students.show', compact('student', 'studentName', 'middleName', 'gradeRecords', 'fees', 'pointRecords', 'pointSummary', 'attendance', 'attendancePct', 'routePrefix', 'subjects'));
     }
 
     public function update(Request $request, Student $student)
@@ -541,6 +576,7 @@ class StudentManageController extends Controller
         $data = $request->validate([
             'student_id' => ['required', 'string', 'max:255', Rule::unique('students', 'student_id')->ignore($student->id)],
             'first_name' => ['required', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('students', 'email')->ignore($student->id), Rule::unique('users', 'email')->ignore($student->user_id)],
             'phone' => ['nullable', 'string', 'max:50'],
@@ -561,7 +597,7 @@ class StudentManageController extends Controller
             'status' => ['required', 'in:active,inactive,graduated'],
         ]);
 
-        $student->update($data);
+        $student->update(collect($data)->except('middle_name')->all());
 
         $application = $this->applicationForStudent($student);
 
@@ -575,12 +611,18 @@ class StudentManageController extends Controller
                 'prev_school_address',
                 'student_type',
                 'academic_status',
+                'middle_name',
             ])->all());
         }
 
         if ($student->user) {
             $userValues = [
-                'name' => trim($data['first_name'] . ' ' . $data['last_name']),
+                'middle_name' => $data['middle_name'] ?: null,
+                'name' => trim(implode(' ', array_filter([
+                    $data['first_name'],
+                    $data['middle_name'] ?? null,
+                    $data['last_name'],
+                ]))),
             ];
             if (!empty($data['email'])) {
                 $userValues['email'] = $data['email'];
@@ -594,27 +636,61 @@ class StudentManageController extends Controller
     public function updateParent(Request $request, Student $student)
     {
         $data = $request->validate([
-            'parent_email' => ['nullable', 'email'],
+            'parent_email' => ['nullable', 'email', 'max:255'],
         ]);
 
-        $parentId = null;
-        $parentEmail = trim((string) ($data['parent_email'] ?? ''));
+        $parentEmail = strtolower(trim((string) ($data['parent_email'] ?? '')));
 
-        if ($parentEmail !== '') {
-            $parent = User::where('email', $parentEmail)->first();
+        $parent = DB::transaction(function () use ($parentEmail, $request, $student) {
+            if ($parentEmail === '') {
+                $student->update(['parent_user_id' => null]);
 
-            if (!$parent || ($parent->role !== User::ROLE_PARENT && !$parent->hasRole(User::ROLE_PARENT))) {
-                return back()
-                    ->withErrors(['parent_email' => 'Parent email must belong to a parent account.'])
-                    ->withInput();
+                return ['user' => null, 'created' => false];
             }
 
-            $parentId = $parent->id;
+            $parent = User::where('email', $parentEmail)->first();
+            if ($parent && $parent->role !== User::ROLE_PARENT && !$parent->hasRole(User::ROLE_PARENT)) {
+                throw ValidationException::withMessages([
+                    'parent_email' => 'That email already belongs to a non-parent account.',
+                ]);
+            }
+
+            $created = false;
+            if (!$parent) {
+                $parent = User::create([
+                    'name' => $student->mother_name ?: $student->father_name ?: $parentEmail,
+                    'email' => $parentEmail,
+                    'password' => Hash::make(Str::random(48)),
+                    'role' => User::ROLE_PARENT,
+                ]);
+
+                Role::findOrCreate(User::ROLE_PARENT, 'web');
+                $parent->assignRole(User::ROLE_PARENT);
+                ActivityLog::recordRelationChange($request, $parent, 'roles', [], $parent->getRoleNames()->all());
+                $created = true;
+            }
+
+            $student->update(['parent_user_id' => $parent->id]);
+
+            return ['user' => $parent, 'created' => $created];
+        });
+
+        if (!$parent['user']) {
+            return back()->with('status', 'Parent account unlinked.');
+        }
+        if ($parent['created']) {
+            $status = Password::sendResetLink(['email' => $parentEmail]);
+
+            if ($status !== Password::RESET_LINK_SENT) {
+                return back()->withErrors([
+                    'parent_email' => 'The parent account was created and linked, but the setup email could not be sent. Ask the parent to use Forgot password on the login page.',
+                ])->withInput();
+            }
+
+            return back()->with('status', 'Parent account created and linked. A password setup link was sent to ' . $parentEmail . '.');
         }
 
-        $student->update(['parent_user_id' => $parentId]);
-
-        return back()->with('status', $parentId ? 'Parent account linked.' : 'Parent account unlinked.');
+        return back()->with('status', 'Parent account linked.');
     }
 
     public function storeFee(Request $request, Student $student)

@@ -111,11 +111,11 @@ export default function RegistrarEnrollments() {
       setShowAction(false);
       Alert.alert(
         actionType === 'approve' ? '✅ Approved' : '❌ Rejected',
-        actionType === 'approve'
-          ? res.data?.parent_default_password
-            ? `${selected.first_name}'s application has been approved. Parent default password: ${res.data.parent_default_password}`
-            : `${selected.first_name}'s application has been approved. Their account has been created.`
-          : `${selected.first_name}'s application has been rejected.`
+        res.data?.message || (
+          actionType === 'approve'
+            ? `${selected.first_name}'s application has been approved. Their account has been created.`
+            : `${selected.first_name}'s application has been rejected.`
+        )
       );
     } catch (e) {
       Alert.alert('Error', e.response?.data?.message ?? 'Something went wrong.');

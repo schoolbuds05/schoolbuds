@@ -46,6 +46,7 @@ class AuthController extends Controller
 
         Role::findOrCreate(User::ROLE_STUDENT, 'web');
         $user->assignRole(User::ROLE_STUDENT);
+        ActivityLog::recordRelationChange($request, $user, 'roles', [], $user->getRoleNames()->all());
 
         $token = $user->createToken('school-app')->plainTextToken;
 
@@ -84,6 +85,13 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
+            $email = substr(strtolower(trim($request->email)), 0, 255);
+            ActivityLog::record($request, 'auth_login_failed', 'Failed API login attempt.', [
+                'subject_type' => $user?->getMorphClass(),
+                'subject_id' => $user?->getKey(),
+                'meta' => ['email' => $email, 'client' => 'mobile_api'],
+            ]);
+
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
@@ -99,7 +107,9 @@ class AuthController extends Controller
         $token = $user->createToken('school-app')->plainTextToken;
 
         Role::findOrCreate($role, 'web');
+        $rolesBefore = $user->getRoleNames()->all();
         $user->syncRoles([$role]);
+        ActivityLog::recordRelationChange($request, $user, 'roles', $rolesBefore, $user->getRoleNames()->all());
 
         ActivityLog::record($request, 'login', "{$user->name} logged in.", [
             'user' => $user,
@@ -130,6 +140,11 @@ class AuthController extends Controller
     {
         $request->validate(['email' => 'required|email']);
 
+        $email = substr(strtolower(trim($request->email)), 0, 255);
+        ActivityLog::record($request, 'auth_password_reset_requested', 'Password reset requested through the mobile API.', [
+            'meta' => ['email' => $email, 'client' => 'mobile_api'],
+        ]);
+
         $user = User::where('email', $request->email)->first();
         if (! $user) {
             return response()->json(['message' => 'Email not found.'], 422);
@@ -145,10 +160,14 @@ class AuthController extends Controller
         ]);
 
         try {
-            Mail::raw("Your School System OTP is: {$otp}\n\nEnter this code in the app to reset your password. It expires in 60 minutes.", function ($message) use ($request) {
-                $message->to($request->email)
-                    ->subject('School System Password Reset OTP');
-            });
+            Mail::raw(
+                "SchoolBuds\nSt. Cecilia's College Cebu, Inc.\n\nYour password reset code is: {$otp}\n\nEnter this code in the SchoolBuds app to reset your password. It expires in 60 minutes.",
+                function ($message) use ($request) {
+                    $message->to($request->email)
+                        ->from(config('mail.from.address'), "SchoolBuds | St. Cecilia's College Cebu, Inc.")
+                        ->subject("SchoolBuds | St. Cecilia's College Cebu, Inc. - Password Reset Code");
+                }
+            );
         } catch (\Throwable $e) {
             logger()->error('OTP email send failed: ' . $e->getMessage());
 
@@ -184,11 +203,21 @@ class AuthController extends Controller
             ->first();
 
         if (! $reset || ! Hash::check($request->otp, $reset->token)) {
+            $email = substr(strtolower(trim($request->email)), 0, 255);
+            ActivityLog::record($request, 'auth_password_reset_failed', 'Failed password reset verification through the mobile API.', [
+                'meta' => ['email' => $email, 'client' => 'mobile_api'],
+            ]);
+
             return response()->json(['message' => 'Invalid OTP.'], 422);
         }
 
         if (Carbon::parse($reset->created_at)->addMinutes(60)->isPast()) {
             DB::table('password_resets')->where('email', $request->email)->delete();
+            $email = substr(strtolower(trim($request->email)), 0, 255);
+            ActivityLog::record($request, 'auth_password_reset_expired', 'Expired password reset code used through the mobile API.', [
+                'meta' => ['email' => $email, 'client' => 'mobile_api'],
+            ]);
+
             return response()->json(['message' => 'OTP has expired. Please request a new one.'], 422);
         }
 
@@ -203,6 +232,12 @@ class AuthController extends Controller
         ])->save();
 
         DB::table('password_resets')->where('email', $request->email)->delete();
+        ActivityLog::record($request, 'auth_password_reset', "{$user->name} reset their password.", [
+            'user' => $user,
+            'subject_type' => User::class,
+            'subject_id' => $user->id,
+            'meta' => ['client' => 'mobile_api'],
+        ]);
 
         return response()->json(['message' => 'Password has been reset.']);
     }

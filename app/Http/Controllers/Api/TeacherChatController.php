@@ -35,7 +35,8 @@ class TeacherChatController extends Controller
 
         TeacherMessage::where('sender_id', $contact->id)
             ->where('receiver_id', $user->id)
-            ->update(['is_read' => true]);
+            ->get()
+            ->each(fn (TeacherMessage $message) => $message->update(['is_read' => true]));
 
         $messages = $this->conversationQuery($user->id, $contact->id)
             ->with('sender:id,name')

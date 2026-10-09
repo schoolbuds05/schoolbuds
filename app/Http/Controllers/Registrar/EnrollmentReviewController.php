@@ -64,10 +64,7 @@ class EnrollmentReviewController extends Controller
                 ->with('status', $this->responseMessage($response, 'Enrollment could not be approved.'));
         }
 
-        $parentPassword = $this->responseValue($response, 'parent_default_password');
-        $status = $parentPassword
-            ? "Enrollment approved. Parent default password: {$parentPassword}"
-            : 'Enrollment approved.';
+        $status = $this->responseMessage($response, 'Enrollment approved.');
 
         return redirect()->route('registrar.enrollments.show', $enrollment)->with('status', $status);
     }
@@ -184,12 +181,4 @@ class EnrollmentReviewController extends Controller
             : $fallback;
     }
 
-    private function responseValue($response, string $key): ?string
-    {
-        $content = json_decode($response->getContent(), true);
-
-        return is_array($content) && isset($content[$key])
-            ? (string) $content[$key]
-            : null;
-    }
 }

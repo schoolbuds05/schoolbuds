@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\EnrollmentApplication;
 use App\Models\AcademicTerm;
 use App\Models\Course;
@@ -19,6 +20,8 @@ use App\Services\SemesterProgressionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -492,12 +495,12 @@ class EnrollmentController extends Controller
             return response()->json(['message' => 'This student ID is already linked to another student account.'], 422);
         }
 
-        $parentDefaultPassword = null;
+        $newParentUser = null;
         $academicStatus = ($progressionEvaluation['requires_irregular'] ?? false)
             ? 'Irregular'
             : $app->academic_status;
 
-        DB::transaction(function () use ($app, $request, $points, &$parentDefaultPassword, $studentId, $academicStatus) {
+        DB::transaction(function () use ($app, $request, $points, &$newParentUser, $studentId, $academicStatus) {
             // Reuse existing user account if one already exists for this email
             $user = User::where('email', $app->email)->first();
 
@@ -510,6 +513,7 @@ class EnrollmentController extends Controller
                 ]);
                 Role::findOrCreate('student', 'web');
                 $user->assignRole('student');
+                ActivityLog::recordRelationChange($request, $user, 'roles', [], $user->getRoleNames()->all());
             }
 
             $parent = null;
@@ -517,17 +521,18 @@ class EnrollmentController extends Controller
                 $parent = User::where('email', $app->parent_email)->first();
 
                 if (!$parent) {
-                    $parentDefaultPassword = 'parent-' . Str::lower(Str::random(8));
                     $parentName = $app->mother_name ?: $app->father_name ?: $app->parent_email;
 
                     $parent = User::create([
                         'name' => $parentName,
                         'email' => $app->parent_email,
-                        'password' => Hash::make($parentDefaultPassword),
+                        'password' => Hash::make(Str::random(64)),
                         'role' => User::ROLE_PARENT,
                     ]);
                     Role::findOrCreate(User::ROLE_PARENT, 'web');
                     $parent->assignRole(User::ROLE_PARENT);
+                    ActivityLog::recordRelationChange($request, $parent, 'roles', [], $parent->getRoleNames()->all());
+                    $newParentUser = $parent;
                 }
             }
 
@@ -578,9 +583,21 @@ class EnrollmentController extends Controller
             $student->save();
 
             if ($section) {
+                $studentsBefore = $section->students()->get()
+                    ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                    ->all();
                 $section->students()->syncWithoutDetaching([
                     $user->id => ['status' => 'enrolled'],
                 ]);
+                ActivityLog::recordRelationChange(
+                    $request,
+                    $section,
+                    'students',
+                    $studentsBefore,
+                    $section->students()->get()
+                        ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                        ->all()
+                );
             }
 
             $this->activateStudentSubjects($app, $user->id);
@@ -596,11 +613,34 @@ class EnrollmentController extends Controller
             ]);
         });
 
+        $emailWarnings = [];
+        $decisionEmailWarning = $this->sendEnrollmentDecisionEmail($app, true);
+        if ($decisionEmailWarning) {
+            $emailWarnings[] = $decisionEmailWarning;
+        }
+
+        if ($newParentUser) {
+            $parentEmailWarning = $this->sendParentSetupEmail($newParentUser);
+            if ($parentEmailWarning) {
+                $emailWarnings[] = $parentEmailWarning;
+            }
+        }
+
+        $message = $newParentUser
+            ? 'Application approved. Student and parent accounts were created.'
+            : 'Application approved. Student account and record created.';
+        if (!$decisionEmailWarning) {
+            $message .= ' An approval email was sent to the student.';
+        }
+        if ($newParentUser && !$parentEmailWarning) {
+            $message .= ' A password setup link was sent to the parent.';
+        }
+        if ($emailWarnings) {
+            $message .= ' ' . implode(' ', $emailWarnings);
+        }
+
         return response()->json([
-            'message' => $parentDefaultPassword
-                ? 'Application approved. Student and parent accounts were created.'
-                : 'Application approved. Student account and record created.',
-            'parent_default_password' => $parentDefaultPassword,
+            'message' => $message,
         ]);
     }
 
@@ -634,7 +674,15 @@ class EnrollmentController extends Controller
             ]);
         }
 
-        return response()->json(['message' => 'Application rejected.']);
+        $emailWarning = $this->sendEnrollmentDecisionEmail($app, false);
+        $message = 'Application rejected.';
+        if ($emailWarning) {
+            $message .= ' ' . $emailWarning;
+        } else {
+            $message .= ' A rejection email was sent to the student.';
+        }
+
+        return response()->json(['message' => $message]);
     }
 
     // POST /api/registrar/students — direct student creation (no approval flow)
@@ -713,9 +761,9 @@ class EnrollmentController extends Controller
             }
         }
 
-        $parentDefaultPassword = null;
+        $newParentUser = null;
 
-        DB::transaction(function () use ($request, $subjectIds, $sectionSubjectIds, $documentUrls, &$parentDefaultPassword) {
+        $application = DB::transaction(function () use ($request, $subjectIds, $sectionSubjectIds, $documentUrls, &$newParentUser) {
             // Create user account
             $user = User::create([
                 'name'     => trim("{$request->first_name} {$request->last_name}"),
@@ -725,6 +773,7 @@ class EnrollmentController extends Controller
             ]);
             Role::findOrCreate('student', 'web');
             $user->assignRole('student');
+            ActivityLog::recordRelationChange($request, $user, 'roles', [], $user->getRoleNames()->all());
 
             $courseName = $request->filled('course_id')
                 ? Course::find($request->course_id)?->name
@@ -787,17 +836,18 @@ class EnrollmentController extends Controller
                 $parent = User::where('email', $request->parent_email)->first();
 
                 if (!$parent) {
-                    $parentDefaultPassword = 'parent-' . Str::lower(Str::random(8));
                     $parentName = $request->mother_name ?: $request->father_name ?: $request->parent_email;
 
                     $parent = User::create([
                         'name' => $parentName,
                         'email' => $request->parent_email,
-                        'password' => Hash::make($parentDefaultPassword),
+                        'password' => Hash::make(Str::random(64)),
                         'role' => User::ROLE_PARENT,
                     ]);
                     Role::findOrCreate(User::ROLE_PARENT, 'web');
                     $parent->assignRole(User::ROLE_PARENT);
+                    ActivityLog::recordRelationChange($request, $parent, 'roles', [], $parent->getRoleNames()->all());
+                    $newParentUser = $parent;
                 }
             }
 
@@ -829,21 +879,142 @@ class EnrollmentController extends Controller
             );
 
             if ($section) {
+                $studentsBefore = $section->students()->get()
+                    ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                    ->all();
                 $section->students()->syncWithoutDetaching([
                     $user->id => ['status' => 'enrolled'],
                 ]);
+                ActivityLog::recordRelationChange(
+                    $request,
+                    $section,
+                    'students',
+                    $studentsBefore,
+                    $section->students()->get()
+                        ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                        ->all()
+                );
             }
 
             $this->activateStudentSubjects($app, $user->id);
+
+            return $app;
         });
 
+        $emailWarnings = [];
+        $decisionEmailWarning = $this->sendEnrollmentDecisionEmail($application, true);
+        if ($decisionEmailWarning) {
+            $emailWarnings[] = $decisionEmailWarning;
+        }
+        if ($newParentUser) {
+            $parentEmailWarning = $this->sendParentSetupEmail($newParentUser);
+            if ($parentEmailWarning) {
+                $emailWarnings[] = $parentEmailWarning;
+            }
+        }
+
+        $message = 'Student created and enrolled successfully.';
+        if (!$decisionEmailWarning) {
+            $message .= ' An approval email was sent to the student.';
+        }
+        if ($newParentUser && !$parentEmailWarning) {
+            $message .= ' A password setup link was sent to the parent.';
+        }
+        if ($emailWarnings) {
+            $message .= ' ' . implode(' ', $emailWarnings);
+        }
+
         return response()->json([
-            'message' => 'Student created and enrolled successfully.',
-            'parent_default_password' => $parentDefaultPassword,
+            'message' => $message,
         ], 201);
     }
 
     // ── PRIVATE ──────────────────────────────────────────────────
+
+    private function sendEnrollmentDecisionEmail(EnrollmentApplication $application, bool $approved): ?string
+    {
+        $decision = $approved ? 'approved' : 'rejected';
+        $subject = $approved
+            ? "SchoolBuds | St. Cecilia's College Cebu, Inc. - Enrollment Approved"
+            : "SchoolBuds | St. Cecilia's College Cebu, Inc. - Enrollment Update";
+        $body = "SchoolBuds\nSt. Cecilia's College Cebu, Inc.\n\n"
+            . "Hello {$application->first_name},\n\n"
+            . "Your enrollment application for {$application->school_year} ({$application->semester} semester) has been {$decision}.\n";
+
+        if ($approved) {
+            $body .= "\nYou can now sign in to the SchoolBuds app to view your enrollment details.";
+        } elseif ($application->remarks) {
+            $body .= "\nReason: {$application->remarks}\n\nPlease contact the Registrar if you have questions.";
+        }
+
+        $body .= "\n\nSt. Cecilia's College Cebu, Inc.";
+
+        try {
+            retry(
+                3,
+                function () use ($body, $application, $subject) {
+                    Mail::raw($body, function ($message) use ($application, $subject) {
+                        $message->to($application->email)
+                            ->from(config('mail.from.address'), "SchoolBuds | St. Cecilia's College Cebu, Inc.")
+                            ->subject($subject);
+                    });
+                },
+                1000,
+                fn (\Throwable $exception) => str_contains($exception->getMessage(), '421')
+                    || str_contains($exception->getMessage(), '4.3.0')
+            );
+
+            return null;
+        } catch (\Throwable $exception) {
+            logger()->error('Enrollment decision email could not be sent.', [
+                'enrollment_application_id' => $application->id,
+                'decision' => $decision,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return 'The enrollment decision was saved, but its email could not be sent.';
+        }
+    }
+
+    private function sendParentSetupEmail(User $parent): ?string
+    {
+        try {
+            $token = Password::broker()->createToken($parent);
+            $resetUrl = route('password.reset', [
+                'token' => $token,
+                'email' => $parent->email,
+            ]);
+
+            $body = "SchoolBuds\nSt. Cecilia's College Cebu, Inc.\n\n"
+                . "A parent account has been created for you. Use the secure link below to choose your password:\n\n"
+                . "{$resetUrl}\n\n"
+                . "This link expires in " . config('auth.passwords.users.expire') . " minutes. If you were not expecting this email, please contact the school.\n\n"
+                . "St. Cecilia's College Cebu, Inc.";
+
+            retry(
+                3,
+                function () use ($body, $parent) {
+                    Mail::raw($body, function ($message) use ($parent) {
+                        $message->to($parent->email)
+                            ->from(config('mail.from.address'), "SchoolBuds | St. Cecilia's College Cebu, Inc.")
+                            ->subject("SchoolBuds | St. Cecilia's College Cebu, Inc. - Set Up Your Parent Account");
+                    });
+                },
+                1000,
+                fn (\Throwable $exception) => str_contains($exception->getMessage(), '421')
+                    || str_contains($exception->getMessage(), '4.3.0')
+            );
+
+            return null;
+        } catch (\Throwable $exception) {
+            logger()->error('Parent account setup email could not be sent.', [
+                'parent_user_id' => $parent->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return 'The parent account was created, but its setup email could not be sent.';
+        }
+    }
 
     /**
      * Generate a student ID in the format SCC-YY-XXXXXXXX

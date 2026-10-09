@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, TextInput, RefreshControl, Alert, Modal,
+  TouchableOpacity, TextInput, RefreshControl, Alert, Modal, KeyboardAvoidingView,
   Platform, StatusBar, Image, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -186,6 +186,12 @@ export default function Market() {
   const isWeb = Platform.OS === 'web';
   const isWideWeb = Platform.OS === 'web' && windowWidth >= 900;
   const galleryWidth = isWideWeb ? Math.min(windowWidth, 760) : windowWidth;
+  const detailGalleryHeight = isWideWeb ? 320 : Math.min(230, Math.max(160, windowWidth * 0.55));
+  const webCardColumns = windowWidth >= 1300 ? 5 : windowWidth >= 1000 ? 4 : 3;
+  const webCardWidth = Math.max(
+    160,
+    (Math.min(windowWidth, 1280) - 28 - (webCardColumns - 1) * 10) / webCardColumns
+  );
   const [role, setRole]             = useState(null);
   const [position, setPosition]     = useState(null);
   const [viewMode, setViewMode]     = useState('browse');
@@ -218,6 +224,7 @@ export default function Market() {
   const [selectedSize, setSelectedSize] = useState('');
   const [pointsBalance, setPointsBalance] = useState(0);
   const [pointsToRedeem, setPointsToRedeem] = useState('');
+  const [showPointsInput, setShowPointsInput] = useState(false);
   const [qrphImage, setQrphImage] = useState(null);
 
   // ── Item detail modal ────────────────────────────────────────
@@ -256,7 +263,7 @@ export default function Market() {
       ]
     : [
         { label: 'Available', value: items.length, accent: '#A7F3D0' },
-        { label: 'Checkout', value: activeCheckoutCount, accent: '#FCD34D' },
+        { label: 'Orders', value: activeCheckoutCount, accent: '#FCD34D' },
       ];
 
   useEffect(() => {
@@ -632,13 +639,14 @@ export default function Market() {
   const checkoutTotal = Math.max(0, checkoutSubtotal - redeemDiscount);
 
   const openCheckout = async (item) => {
-    const defaultMethod = item.accepts_qrph && paymentOptions?.qrph ? 'qrph' : item.accepts_gcash ? 'gcash' : 'cash';
+    const defaultMethod = item.accepts_qrph && paymentOptions?.qrph?.enabled ? 'qrph' : item.accepts_gcash ? 'gcash' : 'cash';
     setCheckoutItem(item);
     setPaymentMethod(defaultMethod);
     setPaymentReference('');
     setCheckoutQuantity('1');
     setSelectedSize(item.size_options?.[0] ?? '');
     setPointsToRedeem('');
+    setShowPointsInput(false);
     setPointsBalance(0);
 
     if (role === 'student') {
@@ -879,8 +887,8 @@ export default function Market() {
     );
 
     return (
-      <View key={order.id} style={[s.orderCard, isWideWeb && s.orderCardWeb]}>
-        <View style={s.orderTop}>
+      <View key={order.id} style={[s.orderCard, !isWeb && s.orderCardMobile, isWideWeb && s.orderCardWeb]}>
+        <View style={[s.orderTop, !isWeb && s.orderTopMobile]}>
           <TouchableOpacity style={s.orderIcon} onPress={() => item.id && openItemDetail(item)} activeOpacity={0.8}>
             {item.image_urls?.[0] ? (
               <Image source={{ uri: item.image_urls[0] }} style={s.orderThumb} resizeMode="cover" />
@@ -888,10 +896,11 @@ export default function Market() {
               <Text style={s.orderIconText}>{CAT_EMOJI[item.category] ?? '📦'}</Text>
             )}
           </TouchableOpacity>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.orderTitle}>{item.title ?? 'Marketplace item'}</Text>
-            <Text style={s.orderSeller}>Seller: {order.seller?.name ?? item.seller?.name ?? 'School Marketplace'}</Text>
-            <Text style={s.orderNumber}>{orderNo(order.id)}</Text>
+            <Text style={s.orderSeller} numberOfLines={1}>
+              {order.seller?.name ?? item.seller?.name ?? 'School Marketplace'} · {orderNo(order.id)}
+            </Text>
           </View>
           <View style={[
             s.orderStatus,
@@ -901,31 +910,43 @@ export default function Market() {
               s.orderStatusText,
               isCancelled || isRefunded ? s.orderStatusCancelledText : isPaid ? s.orderStatusPaidText : s.orderStatusReservedText,
             ]}>
-              {isRefunded ? 'REFUNDED' : isCancelled ? 'CANCELLED' : isCompleted ? 'RECEIVED' : order.status === 'paid' ? 'PAID' : ['gcash', 'qrph'].includes(order.payment_method) ? 'PENDING' : 'CHECKOUT'}
+              {isRefunded ? 'REFUNDED' : isCancelled ? 'CANCELLED' : isCompleted ? 'RECEIVED' : order.status === 'paid' ? 'PAID' : ['gcash', 'qrph'].includes(order.payment_method) ? 'PENDING' : 'RESERVED'}
             </Text>
           </View>
         </View>
 
-        <View style={s.orderMetaGrid}>
-          <View style={s.orderMetaItem}>
-            <Text style={s.orderMetaLabel}>Amount</Text>
-            <Text style={s.orderMetaValue}>₱{Number(order.total_amount ?? 0).toLocaleString()}</Text>
-          </View>
-          <View style={s.orderMetaItem}>
-            <Text style={s.orderMetaLabel}>Payment</Text>
-            <Text style={s.orderMetaValue}>{isQrph ? 'QRPH' : isGcash ? 'GCash' : 'Cash'}</Text>
-          </View>
-          <View style={s.orderMetaItem}>
-            <Text style={s.orderMetaLabel}>Qty</Text>
-            <Text style={s.orderMetaValue}>{order.quantity ?? 1}</Text>
-          </View>
-          {order.size ? (
+        {isWeb ? (
+          <View style={s.orderMetaGrid}>
             <View style={s.orderMetaItem}>
-              <Text style={s.orderMetaLabel}>Size</Text>
-              <Text style={s.orderMetaValue}>{order.size}</Text>
+              <Text style={s.orderMetaLabel}>Amount</Text>
+              <Text style={s.orderMetaValue}>₱{Number(order.total_amount ?? 0).toLocaleString()}</Text>
             </View>
-          ) : null}
-        </View>
+            <View style={s.orderMetaItem}>
+              <Text style={s.orderMetaLabel}>Payment</Text>
+              <Text style={s.orderMetaValue}>{isQrph ? 'QRPH' : isGcash ? 'GCash' : 'Cash'}</Text>
+            </View>
+            <View style={s.orderMetaItem}>
+              <Text style={s.orderMetaLabel}>Qty</Text>
+              <Text style={s.orderMetaValue}>{order.quantity ?? 1}</Text>
+            </View>
+            {order.size ? (
+              <View style={s.orderMetaItem}>
+                <Text style={s.orderMetaLabel}>Size</Text>
+                <Text style={s.orderMetaValue}>{order.size}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : (
+            <View style={s.orderSummaryMobile}>
+              <View>
+                <Text style={s.orderMetaLabel}>TOTAL</Text>
+                <Text style={s.orderTotalMobile}>₱{Number(order.total_amount ?? 0).toLocaleString()}</Text>
+              </View>
+              <Text style={s.orderMobileMeta}>
+                {isQrph ? 'QRPH' : isGcash ? 'GCash' : 'Cash'} · Qty {order.quantity ?? 1}{order.size ? ` · ${order.size}` : ''}
+              </Text>
+            </View>
+        )}
 
         {(isCancelled || isRefunded) && order.notes ? (
           <View style={s.cancelReasonBox}>
@@ -941,27 +962,42 @@ export default function Market() {
           </View>
         ) : null}
 
-        {!isCancelled && !isRefunded && ['gcash', 'qrph'].includes(order.payment_method) && order.gcash_reference ? (
+        {isWeb && !isCancelled && !isRefunded && ['gcash', 'qrph'].includes(order.payment_method) && order.gcash_reference ? (
           <View style={s.referenceBox}>
             <Text style={s.referenceLabel}>{isQrph ? 'QRPH reference' : 'GCash reference'}</Text>
             <Text style={s.referenceValue}>{order.gcash_reference}</Text>
           </View>
         ) : null}
 
-        {!isCancelled && !isRefunded && ['gcash', 'qrph'].includes(order.payment_method) && !order.gcash_reference ? (
+        {isWeb && !isCancelled && !isRefunded && ['gcash', 'qrph'].includes(order.payment_method) && !order.gcash_reference ? (
             <Text style={s.orderNote}>Payment is pending school management verification.</Text>
         ) : null}
 
         {!isCancelled && !isRefunded ? (
-          <View style={s.cashOrderBox}>
-            <Text style={s.referenceLabel}>{['gcash', 'qrph'].includes(order.payment_method) ? 'Pickup after payment verification' : 'Pickup instructions'}</Text>
-            <Text style={s.orderNote}>{item.pickup_instructions || 'Pay and claim this item at the Property Custodian Office. Bring your student ID and order number.'}</Text>
+          <View style={[s.orderPickupPanel, isWeb && s.cashOrderBox]}>
+            <View style={s.orderPickupHeading}>
+              <Text style={[s.referenceLabel, !isWeb && s.orderPickupLabel]}>
+                {['gcash', 'qrph'].includes(order.payment_method) ? 'PICKUP AFTER PAYMENT VERIFICATION' : 'PICKUP DETAILS'}
+              </Text>
+            </View>
+            <Text style={[s.orderNote, !isWeb && s.orderPickupText]}>
+              {item.pickup_instructions || 'Pay and claim this item at the Property Custodian Office. Bring your student ID and order number.'}
+            </Text>
+            {!isWeb && item.location ? <Text style={s.orderPickupLocation}>📍 {item.location}</Text> : null}
+            {!isWeb && ['gcash', 'qrph'].includes(order.payment_method) ? (
+              <Text style={s.orderPaymentRef}>
+                {order.gcash_reference
+                  ? `${isQrph ? 'QRPH' : 'GCash'} reference: ${order.gcash_reference}`
+                  : 'Payment is awaiting school verification.'}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
+        <View style={!isWeb && s.orderActionsMobile}>
         {canCancel && (
           <TouchableOpacity
-            style={[s.orderCancelBtn, cancellingId === order.id && { opacity: 0.6 }]}
+            style={[s.orderCancelBtn, !isWeb && s.orderActionMobile, cancellingId === order.id && { opacity: 0.6 }]}
             onPress={() => openCancelOrder(order)}
             disabled={cancellingId === order.id}
           >
@@ -971,7 +1007,7 @@ export default function Market() {
 
         {canMarkReceived && (
           <TouchableOpacity
-            style={[s.receivedBtn, receivingId === order.id && { opacity: 0.6 }]}
+            style={[s.receivedBtn, !isWeb && s.orderActionMobile, receivingId === order.id && { opacity: 0.6 }]}
             onPress={() => handleMarkReceived(order)}
             disabled={receivingId === order.id}
           >
@@ -984,7 +1020,7 @@ export default function Market() {
 
         {isPaid && (
           <TouchableOpacity
-            style={[s.receiptBtn, receiptLoadingId === order.id && { opacity: 0.6 }]}
+            style={[s.receiptBtn, !isWeb && s.orderActionMobile, receiptLoadingId === order.id && { opacity: 0.6 }]}
             onPress={() => handlePrintReceipt(order)}
             disabled={receiptLoadingId === order.id}
           >
@@ -997,7 +1033,7 @@ export default function Market() {
 
         {canRefund && (
           <TouchableOpacity
-            style={[s.refundBtn, refundingId === order.id && { opacity: 0.6 }]}
+            style={[s.refundBtn, !isWeb && s.orderActionMobile, refundingId === order.id && { opacity: 0.6 }]}
             onPress={() => openRefundOrder(order)}
             disabled={refundingId === order.id}
           >
@@ -1007,6 +1043,7 @@ export default function Market() {
             }
           </TouchableOpacity>
         )}
+        </View>
       </View>
     );
   };
@@ -1149,15 +1186,20 @@ export default function Market() {
     const isReserved    = item.status === 'reserved';
     const isUnavailable = isSold || isReserved;
     const isUpdating    = updatingId === item.id;
-    const isBuying      = buyingId === item.id;
     const isMine        = viewMode === 'mine';
     const firstImage    = item.image_urls?.[0] ?? null;
 
     return (
-      <View key={i} style={[s.itemCard, isWeb ? s.itemCardWeb : s.itemCardMobile, isUnavailable && !isMine && s.itemCardDimmed]}>
+      <View key={item.id} style={[s.itemCard, !isWeb && s.itemCardMobile, isWeb ? { width: webCardWidth } : { width: (windowWidth - 44) / 2 }, isUnavailable && !isMine && s.itemCardDimmed]}>
 
         {/* Image thumbnail */}
-        <View style={[s.itemImg, isWeb && s.itemImgWeb]}>
+        <TouchableOpacity
+          style={[s.itemImg, isWeb ? { height: webCardWidth } : s.itemImgMobile]}
+          onPress={() => openItemDetail(item)}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${item.title}`}
+        >
           {firstImage ? (
             <Image
               source={{ uri: firstImage }}
@@ -1167,18 +1209,20 @@ export default function Market() {
           ) : (
             <Text style={s.itemImgEmoji}>{CAT_EMOJI[item.category] ?? '📦'}</Text>
           )}
-          <View style={[s.statusBadge, { backgroundColor: status.bg }]}>
-            <Text style={s.statusBadgeText}>{status.label}</Text>
-          </View>
+          {(isMine || isUnavailable) && (
+            <View style={[s.statusBadge, { backgroundColor: status.bg }]}>
+              <Text style={s.statusBadgeText}>{status.label}</Text>
+            </View>
+          )}
           {item.image_urls?.length > 1 && (
             <View style={s.photoCountBadge}>
               <Text style={s.photoCountText}>+{item.image_urls.length - 1}</Text>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
 
         {/* Body */}
-        <View style={[s.itemBody, isWeb && s.itemBodyWeb]}>
+        <View style={[s.itemBody, isWeb && s.itemBodyWeb, !isWeb && s.itemBodyMobile]}>
           <Text
             style={[s.itemTitle, isUnavailable && !isMine && s.textDimmed]}
             numberOfLines={2}
@@ -1190,31 +1234,31 @@ export default function Market() {
             ₱{Number(item.price).toLocaleString()}
           </Text>
 
-          <View style={s.itemMeta}>
+          <View style={[s.itemMeta, !isWeb && s.itemMetaMobile]}>
+            <Text style={s.categoryName} numberOfLines={1}>
+              {String(item.category ?? 'other').replace(/_/g, ' ')}
+            </Text>
             <View style={[s.condBadge, { backgroundColor: cond.bg }]}>
               <Text style={[s.condText, { color: cond.text }]}>{cond.label}</Text>
             </View>
-            {!isMine && (
-              <Text style={s.sellerName} numberOfLines={1}>
-                {item.seller?.name?.split(' ')[0]}
-              </Text>
-            )}
           </View>
 
-          {item.location ? (
-            <Text style={s.itemLocation} numberOfLines={1}>
-              📍 {item.location}
+          {isMine ? (
+            <>
+              {item.location ? <Text style={s.itemLocation} numberOfLines={1}>📍 {item.location}</Text> : null}
+              <Text style={s.stockText}>{item.stock ?? 1} in stock</Text>
+              {item.size_options?.length ? <Text style={s.stockText}>Sizes: {item.size_options.join(', ')}</Text> : null}
+              <View style={s.paymentRow}>
+                {item.accepts_qrph ? <Text style={s.paymentBadge}>QRPH</Text> : null}
+                {item.accepts_gcash ? <Text style={s.paymentBadge}>GCash</Text> : null}
+                {item.accepts_cash ? <Text style={s.paymentBadge}>Cash</Text> : null}
+              </View>
+            </>
+          ) : (
+            <Text style={s.sellerName} numberOfLines={1}>
+              {item.seller?.name?.split(' ')[0] ?? 'School Marketplace'} · {item.stock ?? 1} left
             </Text>
-          ) : null}
-          <Text style={s.stockText}>{item.stock ?? 1} in stock</Text>
-          {item.size_options?.length ? (
-            <Text style={s.stockText}>Sizes: {item.size_options.join(', ')}</Text>
-          ) : null}
-          <View style={s.paymentRow}>
-            {item.accepts_qrph  ? <Text style={s.paymentBadge}>QRPH</Text>  : null}
-            {item.accepts_gcash ? <Text style={s.paymentBadge}>GCash</Text> : null}
-            {item.accepts_cash  ? <Text style={s.paymentBadge}>Cash</Text>  : null}
-          </View>
+          )}
 
           {/* ── My Listings: action buttons ── */}
           {isMine ? (
@@ -1264,14 +1308,11 @@ export default function Market() {
             </View>
           ) : canBuyItems ? (
             <TouchableOpacity
-              style={[s.buyBtn, (isBuying || isUnavailable) && { opacity: 0.6 }]}
-              onPress={() => !isUnavailable && openCheckout(item)}
-              disabled={isBuying || isUnavailable}
+              style={[s.buyBtn, isUnavailable && { opacity: 0.6 }]}
+              onPress={() => !isUnavailable && openItemDetail(item)}
+              disabled={isUnavailable}
             >
-              {isBuying
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={s.buyBtnText}>{isUnavailable ? 'Unavailable' : 'Checkout'}</Text>
-              }
+              <Text style={s.buyBtnText}>{isUnavailable ? 'Unavailable' : 'View item'}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -1290,24 +1331,32 @@ export default function Market() {
             : viewMode === 'sales'
             ? 'Track buyers, payments, and stock'
             : viewMode === 'orders'
-            ? 'Track reserved items and checkout payments'
+            ? 'View payment status and pickup instructions'
             : 'Browse fixed-price school marketplace items'
         }
         initials="MK"
-        stats={headerStats}
-        compact={isWeb}
+        stats={isWeb ? headerStats : []}
+        compact
       >
-        <SearchBar
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search items..."
-          onSubmitEditing={fetchItems}
-        />
+        {viewMode === 'browse' ? (
+          <SearchBar
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search items..."
+            onSubmitEditing={fetchItems}
+          />
+        ) : null}
       </HeaderGradient>
       <View style={[s.contentShell, { backgroundColor: theme.card, borderBottomColor: theme.border }, isWeb && s.contentShellWeb]}>
-        <View style={[s.toggleRow, { backgroundColor: theme.primaryLight, borderColor: theme.border }]}>
+        <ScrollView
+          horizontal
+          scrollEnabled={!isWeb}
+          showsHorizontalScrollIndicator={false}
+          style={[s.toggleRow, { backgroundColor: theme.primaryLight, borderColor: theme.border }]}
+          contentContainerStyle={s.toggleContent}
+        >
           <TouchableOpacity
-            style={[s.toggleBtn, viewMode === 'browse' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
+            style={[s.toggleBtn, !isWeb && s.toggleBtnMobile, viewMode === 'browse' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
             onPress={() => setViewMode('browse')}
           >
             <Text style={[s.toggleBtnText, { color: theme.textSub }, viewMode === 'browse' && { color: theme.primary }]}>
@@ -1316,7 +1365,7 @@ export default function Market() {
           </TouchableOpacity>
           {canManageListings && (
             <TouchableOpacity
-              style={[s.toggleBtn, viewMode === 'mine' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
+              style={[s.toggleBtn, !isWeb && s.toggleBtnMobile, viewMode === 'mine' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
               onPress={() => setViewMode('mine')}
             >
               <Text style={[s.toggleBtnText, { color: theme.textSub }, viewMode === 'mine' && { color: theme.primary }]}>
@@ -1326,7 +1375,7 @@ export default function Market() {
           )}
           {canManageListings && (
             <TouchableOpacity
-              style={[s.toggleBtn, viewMode === 'sales' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
+              style={[s.toggleBtn, !isWeb && s.toggleBtnMobile, viewMode === 'sales' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
               onPress={() => setViewMode('sales')}
             >
               <Text style={[s.toggleBtnText, { color: theme.textSub }, viewMode === 'sales' && { color: theme.primary }]}>
@@ -1336,15 +1385,15 @@ export default function Market() {
           )}
           {canBuyItems && (
             <TouchableOpacity
-              style={[s.toggleBtn, viewMode === 'orders' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
+              style={[s.toggleBtn, !isWeb && s.toggleBtnMobile, viewMode === 'orders' && [s.toggleBtnActive, { backgroundColor: theme.card }]]}
               onPress={() => setViewMode('orders')}
             >
               <Text style={[s.toggleBtnText, { color: theme.textSub }, viewMode === 'orders' && { color: theme.primary }]}>
-                Checkout
+                My Orders
               </Text>
             </TouchableOpacity>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       {/* ── Category tabs ── */}
@@ -1378,6 +1427,27 @@ export default function Market() {
           </ScrollView>
         </View>
       )}
+
+      {viewMode === 'browse' && !loading ? (
+        <View style={s.browseSectionHeading}>
+          <View>
+            <Text style={[s.browseSectionTitle, { color: theme.text }]}>
+              {category === 'all' ? 'Discover items' : CATEGORIES.find(cat => cat.key === category)?.label}
+            </Text>
+            <Text style={[s.browseSectionSubtitle, { color: theme.textSub }]}>Useful finds from your school community</Text>
+          </View>
+          <Text style={[s.browseCount, { color: theme.textSub }]}>{items.length} items</Text>
+        </View>
+      ) : null}
+      {viewMode === 'orders' && !loading ? (
+        <View style={s.browseSectionHeading}>
+          <View>
+            <Text style={[s.browseSectionTitle, { color: theme.text }]}>My orders</Text>
+            <Text style={[s.browseSectionSubtitle, { color: theme.textSub }]}>Payment and pickup, all in one place</Text>
+          </View>
+          <Text style={[s.browseCount, { color: theme.textSub }]}>{orders.length} orders</Text>
+        </View>
+      ) : null}
 
       {/* ── My Listings summary bar ── */}
       {viewMode === 'mine' && !loading && myItems.length > 0 && (
@@ -1430,13 +1500,13 @@ export default function Market() {
             <View style={s.emptyWrap}>
               <Text style={s.emptyIcon}>{viewMode === 'mine' ? '📋' : viewMode === 'orders' ? '🧾' : viewMode === 'sales' ? '₱' : '🛒'}</Text>
               <Text style={s.emptyTitle}>
-                {viewMode === 'mine' ? 'No listings yet' : viewMode === 'orders' ? 'No checkout items yet' : viewMode === 'sales' ? 'No sales yet' : 'No items found'}
+                {viewMode === 'mine' ? 'No listings yet' : viewMode === 'orders' ? 'No orders yet' : viewMode === 'sales' ? 'No sales yet' : 'No items found'}
               </Text>
               <Text style={s.emptySub}>
                 {viewMode === 'mine'
                   ? 'Tap "+ Sell" to post your first item.'
                   : viewMode === 'orders'
-                  ? 'Reserved and paid marketplace items will appear here.'
+                  ? 'Your purchases, payment status, and pickup instructions will appear here.'
                   : viewMode === 'sales'
                   ? 'Student checkouts will appear here with buyer and payment details.'
                   : canManageListings
@@ -1498,8 +1568,8 @@ export default function Market() {
                     <Image
                       key={i}
                       source={{ uri: url }}
-                      style={[s.detailGalleryImg, { width: galleryWidth }]}
-                      resizeMode="cover"
+                      style={[s.detailGalleryImg, { width: galleryWidth, height: detailGalleryHeight }]}
+                      resizeMode="contain"
                     />
                   ))}
                 </ScrollView>
@@ -2022,10 +2092,27 @@ export default function Market() {
       </Modal>
 
       {/* ── Checkout Modal ── */}
-      <Modal visible={!!checkoutItem} transparent animationType="fade">
-        <View style={s.checkoutBackdrop}>
-          <View style={s.checkoutCard}>
-            <Text style={s.checkoutTitle}>Checkout</Text>
+      <Modal visible={!!checkoutItem} transparent animationType={isWeb ? 'fade' : 'slide'}>
+        <KeyboardAvoidingView
+          style={[s.checkoutBackdrop, !isWeb && s.checkoutBackdropMobile]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={[s.checkoutCard, !isWeb && s.checkoutCardMobile]}>
+            <View style={s.checkoutHeader}>
+              <View>
+                <Text style={s.checkoutTitle}>Checkout</Text>
+                <Text style={s.checkoutHeaderSub}>Review your order details</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Close checkout"
+                style={s.checkoutClose}
+                onPress={() => setCheckoutItem(null)}
+                disabled={!!buyingId}
+              >
+                <Text style={s.checkoutCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
 
             <ScrollView
               style={s.checkoutScroll}
@@ -2033,27 +2120,28 @@ export default function Market() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {checkoutItem?.image_urls?.[0] && (
-                <Image
-                  source={{ uri: checkoutItem.image_urls[0] }}
-                  style={s.checkoutItemImage}
-                  resizeMode="cover"
-                />
-              )}
-
-              <Text style={s.checkoutItem}>{checkoutItem?.title}</Text>
-              <Text style={s.checkoutPrice}>
-                ₱{Number((checkoutItem?.price ?? 0) * (parseInt(checkoutQuantity, 10) || 1)).toLocaleString()}
-              </Text>
-              <Text style={s.checkoutItem}>₱{Number(checkoutItem?.price ?? 0).toLocaleString()} each · {checkoutItem?.stock ?? 1} in stock</Text>
-
-              {redeemPoints > 0 ? (
-                <Text style={s.checkoutItem}>After points: PHP {money(checkoutTotal)}</Text>
-              ) : null}
+              <View style={s.checkoutProduct}>
+                {checkoutItem?.image_urls?.[0] ? (
+                  <Image
+                    source={{ uri: checkoutItem.image_urls[0] }}
+                    style={s.checkoutItemImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={s.checkoutItemPlaceholder}>
+                    <Text style={s.checkoutItemPlaceholderText}>{CAT_EMOJI[checkoutItem?.category] ?? '📦'}</Text>
+                  </View>
+                )}
+                <View style={s.checkoutProductInfo}>
+                  <Text style={s.checkoutItem} numberOfLines={2}>{checkoutItem?.title}</Text>
+                  <Text style={s.checkoutPrice}>₱{money(checkoutItem?.price)}</Text>
+                  <Text style={s.checkoutItemMeta}>₱{money(checkoutItem?.price)} each · {checkoutItem?.stock ?? 1} in stock</Text>
+                </View>
+              </View>
 
               {checkoutItem?.size_options?.length ? (
                 <>
-                  <Text style={s.fieldLabel}>Size *</Text>
+                  <Text style={s.checkoutLabel}>Size</Text>
                   <View style={s.chipRow}>
                     {checkoutItem.size_options.map(size => (
                       <TouchableOpacity
@@ -2068,66 +2156,120 @@ export default function Market() {
                 </>
               ) : null}
 
-              <Text style={s.fieldLabel}>Quantity</Text>
-              <View style={s.quantityRow}>
-                <TouchableOpacity
-                  style={s.quantityBtn}
-                  onPress={() => setCheckoutQuantity(String(Math.max(1, (parseInt(checkoutQuantity, 10) || 1) - 1)))}
-                >
-                  <Text style={s.quantityBtnText}>-</Text>
-                </TouchableOpacity>
-                <TextInput
-                  style={[s.fieldInput, s.quantityInput]}
-                  value={checkoutQuantity}
-                  onChangeText={v => setCheckoutQuantity(v.replace(/[^0-9]/g, ''))}
-                  keyboardType="number-pad"
-                />
-                <TouchableOpacity
-                  style={s.quantityBtn}
-                  onPress={() => {
-                    const current = parseInt(checkoutQuantity, 10) || 1;
-                    setCheckoutQuantity(String(Math.min(checkoutItem?.stock ?? 1, current + 1)));
-                  }}
-                >
-                  <Text style={s.quantityBtnText}>+</Text>
-                </TouchableOpacity>
+              <View style={s.checkoutControlRow}>
+                <View>
+                  <Text style={s.checkoutLabel}>Quantity</Text>
+                  <Text style={s.checkoutItemMeta}>Choose up to {checkoutItem?.stock ?? 1}</Text>
+                </View>
+                <View style={s.quantityRow}>
+                  <TouchableOpacity
+                    style={s.quantityBtn}
+                    onPress={() => setCheckoutQuantity(String(Math.max(1, (parseInt(checkoutQuantity, 10) || 1) - 1)))}
+                    accessibilityRole="button"
+                    accessibilityLabel="Decrease quantity"
+                  >
+                    <Text style={s.quantityBtnText}>−</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[s.fieldInput, s.quantityInput]}
+                    value={checkoutQuantity}
+                    onChangeText={v => setCheckoutQuantity(v.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    accessibilityLabel="Quantity"
+                  />
+                  <TouchableOpacity
+                    style={s.quantityBtn}
+                    onPress={() => {
+                      const current = parseInt(checkoutQuantity, 10) || 1;
+                      setCheckoutQuantity(String(Math.min(checkoutItem?.stock ?? 1, current + 1)));
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Increase quantity"
+                  >
+                    <Text style={s.quantityBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {role === 'student' ? (
+              {role === 'student' && pointsBalance > 0 ? (
                 <View style={s.pointsBox}>
-                  <View style={s.pointsTopRow}>
-                    <View>
-                      <Text style={s.pointsTitle}>Use points</Text>
-                      <Text style={s.pointsSub}>Balance {pointsBalance} pts · Max {maxRedeemPoints} pts</Text>
+                  <TouchableOpacity
+                    style={s.pointsHeader}
+                    onPress={() => setShowPointsInput(open => !open)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showPointsInput }}
+                    accessibilityLabel={showPointsInput ? 'Hide points redemption' : 'Redeem points'}
+                  >
+                    <View style={s.pointsHeading}>
+                      <Text style={s.pointsTitle}>Redeem points</Text>
+                      <Text style={s.pointsAvailable}>{pointsBalance} available</Text>
                     </View>
-                    <Text style={s.pointsValue}>-PHP {money(redeemDiscount)}</Text>
-                  </View>
-                  <View style={s.quantityRow}>
-                    <TextInput
-                      style={[s.fieldInput, s.quantityInput]}
-                      value={pointsToRedeem}
-                      onChangeText={v => setPointsToRedeem(v.replace(/[^0-9]/g, ''))}
-                      keyboardType="number-pad"
-                      placeholder="0"
-                      placeholderTextColor={C.muted}
-                    />
-                    <TouchableOpacity
-                      style={s.quantityBtn}
-                      onPress={() => setPointsToRedeem(String(maxRedeemPoints))}
-                      disabled={maxRedeemPoints <= 0}
-                    >
-                      <Text style={s.quantityBtnText}>Max</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={s.pointsHint}>
-                    {redemptionMinPoints} point minimum. 1 point = PHP {money(redemptionRate)}. Final total: PHP {money(checkoutTotal)}.
-                  </Text>
+                    <View style={s.pointsHeaderAction}>
+                      {redeemDiscount > 0 ? (
+                        <Text style={s.pointsValue}>−₱{money(redeemDiscount)}</Text>
+                      ) : null}
+                      <Text style={s.pointsToggle}>{showPointsInput ? 'Done' : pointsToRedeem ? 'Edit' : 'Add'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  {showPointsInput ? (
+                    <View style={s.pointsEntry}>
+                      <View style={s.pointsInputRow}>
+                        <TextInput
+                          style={[s.fieldInput, s.pointsInput]}
+                          value={pointsToRedeem}
+                          onChangeText={v => setPointsToRedeem(v.replace(/[^0-9]/g, ''))}
+                          keyboardType="number-pad"
+                          placeholder="Points to redeem"
+                          placeholderTextColor={C.muted}
+                          accessibilityLabel="Points to redeem"
+                        />
+                        <TouchableOpacity
+                          style={s.pointsMaxBtn}
+                          onPress={() => setPointsToRedeem(String(maxRedeemPoints))}
+                          disabled={maxRedeemPoints <= 0}
+                        >
+                          <Text style={s.pointsMaxText}>Max</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={s.pointsHint}>Min {redemptionMinPoints} points · ₱{money(redemptionRate)} per point</Text>
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
 
-              {paymentOptions?.qrph && (
-                <View style={s.gcashBox}>
-                  <Text style={s.gcashTitle}>Pay with QRPH</Text>
+              <View style={s.checkoutSection}>
+                <Text style={s.checkoutLabel}>Payment method</Text>
+                <View style={s.chipRow}>
+                  {checkoutItem?.accepts_qrph && paymentOptions?.qrph?.enabled && (
+                    <TouchableOpacity
+                      style={[s.chip, paymentMethod === 'qrph' && s.chipActive]}
+                      onPress={() => setPaymentMethod('qrph')}
+                    >
+                      <Text style={[s.chipText, paymentMethod === 'qrph' && s.chipTextActive]}>QRPH</Text>
+                    </TouchableOpacity>
+                  )}
+                  {checkoutItem?.accepts_gcash && (
+                    <TouchableOpacity
+                      style={[s.chip, paymentMethod === 'gcash' && s.chipActive]}
+                      onPress={() => setPaymentMethod('gcash')}
+                    >
+                      <Text style={[s.chipText, paymentMethod === 'gcash' && s.chipTextActive]}>GCash</Text>
+                    </TouchableOpacity>
+                  )}
+                  {checkoutItem?.accepts_cash && (
+                    <TouchableOpacity
+                      style={[s.chip, paymentMethod === 'cash' && s.chipActive]}
+                      onPress={() => setPaymentMethod('cash')}
+                    >
+                      <Text style={[s.chipText, paymentMethod === 'cash' && s.chipTextActive]}>Cash</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {paymentMethod === 'qrph' && (
+                <View style={s.paymentInfo}>
+                  <Text style={s.paymentInfoTitle}>QRPH payment</Text>
                   {(checkoutItem?.qrph_image_url || paymentOptions?.qrph?.image_url) ? (
                     <Image
                       source={{ uri: checkoutItem?.qrph_image_url || paymentOptions.qrph.image_url }}
@@ -2135,92 +2277,65 @@ export default function Market() {
                       resizeMode="contain"
                     />
                   ) : null}
-                  <Text style={s.gcashLine}>Account: {paymentOptions?.qrph?.account_name}</Text>
-                  {paymentOptions?.qrph?.account_number ? (
-                    <Text style={s.gcashLine}>Number: {paymentOptions.qrph.account_number}</Text>
+                  {paymentOptions?.qrph?.account_name ? (
+                    <Text style={s.paymentInfoText}>Account: {paymentOptions.qrph.account_name}</Text>
                   ) : null}
-                  <Text style={s.gcashLine}>{paymentOptions?.qrph?.instructions}</Text>
+                  {paymentOptions?.qrph?.account_number ? (
+                    <Text style={s.paymentInfoText}>Number: {paymentOptions.qrph.account_number}</Text>
+                  ) : null}
+                  <Text style={s.paymentInfoText}>{paymentOptions?.qrph?.instructions}</Text>
                 </View>
               )}
 
-              {checkoutItem?.accepts_gcash && (
-                <View style={s.gcashBox}>
-                  <Text style={s.gcashTitle}>Pay with GCash</Text>
-                  <Text style={s.gcashLine}>Name: {checkoutItem?.gcash_name}</Text>
-                  <Text style={s.gcashLine}>Number: {checkoutItem?.gcash_number}</Text>
-                  <Text style={s.gcashLine}>Send payment, then enter the reference number below.</Text>
+              {paymentMethod === 'gcash' && (
+                <View style={s.paymentInfo}>
+                  <Text style={s.paymentInfoTitle}>GCash payment</Text>
+                  {checkoutItem?.gcash_name ? <Text style={s.paymentInfoText}>Name: {checkoutItem.gcash_name}</Text> : null}
+                  {checkoutItem?.gcash_number ? <Text style={s.paymentInfoText}>Number: {checkoutItem.gcash_number}</Text> : null}
+                  <Text style={s.paymentInfoText}>Send payment, then enter the reference number.</Text>
                 </View>
               )}
 
-              {checkoutItem?.accepts_cash && (
-                <View style={s.cashBox}>
-                  <Text style={s.cashTitle}>Cash pickup</Text>
-                  <Text style={s.cashLine}>{checkoutItem?.pickup_instructions || 'Pay and claim this item at the Property Custodian Office. Bring your student ID and order number.'}</Text>
+              {paymentMethod === 'cash' && (
+                <View style={[s.paymentInfo, s.paymentInfoCash]}>
+                  <Text style={[s.paymentInfoTitle, s.paymentInfoCashTitle]}>Cash on pickup</Text>
+                  <Text style={s.paymentInfoText}>{checkoutItem?.pickup_instructions || 'Pay and claim this item at the Property Custodian Office. Bring your student ID and order number.'}</Text>
                 </View>
               )}
 
               {['gcash', 'qrph'].includes(paymentMethod) && (
-                <View style={s.cashBox}>
-                  <Text style={s.cashTitle}>Pickup after payment verification</Text>
-                  <Text style={s.cashLine}>{checkoutItem?.pickup_instructions || 'Pay and claim this item at the Property Custodian Office. Bring your student ID and order number.'}</Text>
-                </View>
-              )}
-
-              <Text style={s.fieldLabel}>Payment Method</Text>
-              <View style={s.chipRow}>
-                {checkoutItem?.accepts_qrph && paymentOptions?.qrph && (
-                  <TouchableOpacity
-                    style={[s.chip, paymentMethod === 'qrph' && s.chipActive]}
-                    onPress={() => setPaymentMethod('qrph')}
-                  >
-                    <Text style={[s.chipText, paymentMethod === 'qrph' && s.chipTextActive]}>QRPH</Text>
-                  </TouchableOpacity>
-                )}
-                {checkoutItem?.accepts_gcash && (
-                  <TouchableOpacity
-                    style={[s.chip, paymentMethod === 'gcash' && s.chipActive]}
-                    onPress={() => setPaymentMethod('gcash')}
-                  >
-                    <Text style={[s.chipText, paymentMethod === 'gcash' && s.chipTextActive]}>GCash online</Text>
-                  </TouchableOpacity>
-                )}
-                {checkoutItem?.accepts_cash && (
-                  <TouchableOpacity
-                    style={[s.chip, paymentMethod === 'cash' && s.chipActive]}
-                    onPress={() => setPaymentMethod('cash')}
-                  >
-                    <Text style={[s.chipText, paymentMethod === 'cash' && s.chipTextActive]}>Cash</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {['gcash', 'qrph'].includes(paymentMethod) && (
-                <>
-                  <Text style={s.fieldLabel}>Payment Reference Number *</Text>
+                <View style={s.checkoutSection}>
+                  <Text style={s.checkoutLabel}>Payment reference</Text>
                   <TextInput
-                    style={s.fieldInput}
+                    style={[s.fieldInput, s.referenceInput]}
                     placeholder="Enter reference after payment"
                     value={paymentReference}
                     onChangeText={setPaymentReference}
                     autoCapitalize="characters"
                   />
-                </>
+                </View>
               )}
             </ScrollView>
 
-            <View style={s.checkoutActions}>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setCheckoutItem(null)} disabled={!!buyingId}>
-                <Text style={s.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
+            <View style={s.checkoutFooter}>
+              <View style={s.checkoutTotalRow}>
+                <View>
+                  <Text style={s.checkoutTotalLabel}>Total</Text>
+                  {redeemDiscount > 0 ? (
+                    <Text style={s.checkoutDiscount}>Points discount −₱{money(redeemDiscount)}</Text>
+                  ) : null}
+                </View>
+                <Text style={s.checkoutTotalValue}>₱{money(checkoutTotal)}</Text>
+              </View>
               <TouchableOpacity style={[s.payBtn, buyingId && { opacity: 0.6 }]} onPress={handleBuy} disabled={!!buyingId}>
                 {buyingId
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={s.payBtnText}>{paymentMethod === 'qrph' ? 'Submit QRPH' : paymentMethod === 'gcash' ? 'Submit GCash' : 'Checkout'}</Text>
+                  : <Text style={s.payBtnText}>{paymentMethod === 'qrph' ? 'Submit QRPH payment' : paymentMethod === 'gcash' ? 'Submit GCash payment' : 'Place order'}</Text>
                 }
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Cancel Order Modal ── */}
@@ -2348,16 +2463,16 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   toggleRow: {
-    flexDirection: 'row',
     borderRadius: 12,
     padding: 3,
     marginBottom: 8,
-    gap: 3,
     width: '100%',
     maxWidth: 880,
     borderWidth: 1,
   },
-  toggleBtn:           { flex: 1, paddingVertical: 6, borderRadius: 9, alignItems: 'center' },
+  toggleContent: { flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  toggleBtn:           { flex: 1, minWidth: 0, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
+  toggleBtnMobile: { flex: 0, minWidth: 82, paddingHorizontal: 10 },
   toggleBtnActive:     {
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -2396,6 +2511,10 @@ const s = StyleSheet.create({
   },
   catEmoji:       { fontSize: 12 },
   catLabel:       { fontSize: 11, fontWeight: '600' },
+  browseSectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  browseSectionTitle: { fontSize: 17, fontWeight: '900' },
+  browseSectionSubtitle: { fontSize: 11, marginTop: 2 },
+  browseCount: { fontSize: 11, fontWeight: '700' },
 
   summaryBar: {
     flexDirection: 'row',
@@ -2430,7 +2549,7 @@ const s = StyleSheet.create({
   },
   gridWeb: {
     width: '100%',
-    maxWidth: 880,
+    maxWidth: 1280,
     alignSelf: 'center',
     justifyContent: 'center',
     paddingHorizontal: 14,
@@ -2450,8 +2569,12 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  itemCardMobile: { width: '47.5%' },
-  itemCardWeb: { width: 168, borderRadius: 10 },
+  itemCardMobile: {
+    borderRadius: 15,
+    shadowOpacity: 0.035,
+    elevation: 1,
+  },
+  itemCardWeb: { borderRadius: 12 },
   orderCard: {
     width: '100%',
     backgroundColor: C.card,
@@ -2466,7 +2589,9 @@ const s = StyleSheet.create({
     elevation: 2,
   },
   orderCardWeb: { width: 565 },
+  orderCardMobile: { padding: 12, borderRadius: 16, gap: 10, shadowOpacity: 0.025, elevation: 1 },
   orderTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  orderTopMobile: { gap: 10 },
   orderIcon: {
     width: 44,
     height: 44,
@@ -2489,6 +2614,17 @@ const s = StyleSheet.create({
   orderStatusPaidText:     { color: C.green },
   orderStatusReservedText: { color: C.warning },
   orderStatusCancelledText:{ color: C.danger },
+  orderSummaryMobile: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border, paddingVertical: 9, gap: 10 },
+  orderTotalMobile: { fontSize: 17, fontWeight: '900', color: C.text, marginTop: 2 },
+  orderMobileMeta: { flex: 1, textAlign: 'right', fontSize: 11, color: C.sub, fontWeight: '700' },
+  orderPickupPanel: { backgroundColor: '#F0F7FF', borderRadius: 12, padding: 11 },
+  orderPickupHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  orderPickupLabel: { color: C.blue, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
+  orderPickupText: { color: C.text, marginTop: 5, fontSize: 12, lineHeight: 18 },
+  orderPickupLocation: { color: C.sub, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  orderPaymentRef: { color: C.blue, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  orderActionsMobile: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  orderActionMobile: { flex: 1, minWidth: '46%', marginTop: 0, paddingVertical: 9 },
   orderMetaGrid:  { flexDirection: 'row', gap: 10, marginTop: 14 },
   orderMetaItem:  { flex: 1, backgroundColor: C.bg, borderRadius: 10, padding: 10 },
   orderMetaLabel: { fontSize: 11, color: C.muted, fontWeight: '700' },
@@ -2551,14 +2687,12 @@ const s = StyleSheet.create({
   itemCardDimmed: { opacity: 0.72 },
   itemImg: {
     backgroundColor: '#F0F4FF',
-    height: 108,
+    height: 132,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
-  itemImgWeb: {
-    height: 78,
-  },
+  itemImgMobile: { height: 112 },
   itemImgEmoji: { fontSize: 40 },
 
   statusBadge: {
@@ -2580,10 +2714,11 @@ const s = StyleSheet.create({
   },
   photoCountText: { color: '#fff', fontSize: 10, fontWeight: '700' },
 
-  itemBody:      { padding: 9 },
-  itemBodyWeb:   { padding: 7 },
-  itemTitle:     { fontSize: 12, fontWeight: '700', color: C.text, marginBottom: 4, lineHeight: 17 },
-  itemPrice:     { fontSize: 16, fontWeight: '800', color: C.blue, marginBottom: 7 },
+  itemBody:      { padding: 10 },
+  itemBodyMobile: { padding: 10, gap: 1 },
+  itemBodyWeb:   { padding: 11 },
+  itemTitle:     { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 5, lineHeight: 18, minHeight: 36 },
+  itemPrice:     { fontSize: 18, fontWeight: '900', color: '#E11D48', marginBottom: 7 },
   itemPriceSold: { textDecorationLine: 'line-through', color: C.muted, fontSize: 14, fontWeight: '500' },
   textDimmed:    { color: C.muted },
 
@@ -2591,8 +2726,11 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 7,
+    gap: 6,
   },
+  itemMetaMobile: { marginBottom: 4 },
+  categoryName: { flex: 1, color: C.sub, fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
   condBadge:  { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
   condText:   { fontSize: 10, fontWeight: '600' },
   sellerName: { fontSize: 11, color: C.muted, maxWidth: '50%' },
@@ -2618,7 +2756,7 @@ const s = StyleSheet.create({
   actionBtnWarning: { backgroundColor: C.warningLight, borderColor: C.warning },
   actionBtnEdit:    { backgroundColor: C.blueLight,    borderColor: C.blue    },
   actionBtnDelete:  { backgroundColor: C.bg,           borderColor: C.border  },
-  buyBtn:     { backgroundColor: C.green, borderRadius: 10, paddingVertical: 9, alignItems: 'center', marginTop: 2 },
+  buyBtn:     { backgroundColor: '#E11D48', borderRadius: 9, paddingVertical: 9, alignItems: 'center', marginTop: 7 },
   buyBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 
   emptyWrap:    { width: '100%', alignItems: 'center', paddingVertical: 60 },
@@ -2703,8 +2841,8 @@ const s = StyleSheet.create({
   },
   detailScrollContent: { flexGrow: 1, paddingBottom: 28, backgroundColor: C.bg },
   detailBody:          { padding: 14, gap: 10 },
-  detailGallery:      { width: '100%', height: 180, backgroundColor: '#F3F8F6' },
-  detailGalleryImg:   { height: 180 },
+  detailGallery:      { width: '100%', backgroundColor: '#FFFFFF' },
+  detailGalleryImg:   { backgroundColor: '#FFFFFF' },
   detailGalleryEmpty: {
     height: 170,
     justifyContent: 'center',
@@ -2815,6 +2953,10 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     padding: 18,
   },
+  checkoutBackdropMobile: {
+    justifyContent: 'flex-end',
+    padding: 0,
+  },
   checkoutCard: {
     backgroundColor: C.card,
     borderRadius: 16,
@@ -2823,45 +2965,89 @@ const s = StyleSheet.create({
     borderColor: C.border,
     maxHeight: '88%',
   },
+  checkoutCardMobile: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderWidth: 0,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    maxHeight: '94%',
+  },
+  checkoutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
   checkoutTitle: { fontSize: 18, fontWeight: '800', color: C.text },
-  checkoutItem:  { fontSize: 14, color: C.sub, marginTop: 6 },
-  checkoutPrice: { fontSize: 24, fontWeight: '800', color: C.blue, marginTop: 8 },
-  checkoutScroll: { marginTop: 8 },
-  checkoutScrollContent: { paddingBottom: 8 },
+  checkoutHeaderSub: { fontSize: 12, color: C.sub, marginTop: 2 },
+  checkoutClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
+  checkoutCloseText: { color: C.sub, fontSize: 22, lineHeight: 24, fontWeight: '500' },
+  checkoutScroll: { marginTop: 4 },
+  checkoutScrollContent: { paddingBottom: 16 },
+  checkoutProduct: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  checkoutProductInfo: { flex: 1 },
+  checkoutItem: { fontSize: 14, lineHeight: 19, color: C.text, fontWeight: '700' },
+  checkoutPrice: { fontSize: 17, fontWeight: '900', color: '#E11D48', marginTop: 4 },
+  checkoutItemMeta: { fontSize: 11, color: C.sub, marginTop: 3 },
+  checkoutItemPlaceholder: { width: 68, height: 68, borderRadius: 12, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
+  checkoutItemPlaceholderText: { fontSize: 28 },
 
   checkoutItemImage: {
-    width: '100%',
-    height: 160,
+    width: 68,
+    height: 68,
     borderRadius: 12,
-    marginTop: 12,
     backgroundColor: C.bg,
   },
 
-  quantityRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+  checkoutLabel: { fontSize: 12, color: C.text, fontWeight: '800', marginBottom: 8 },
+  checkoutControlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 14 },
+  checkoutSection: { marginTop: 14 },
+  quantityRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 0 },
   quantityBtn: {
-    width: 42, height: 42,
-    borderRadius: 12,
-    backgroundColor: C.blueLight,
+    width: 36, height: 36,
+    borderRadius: 10,
+    backgroundColor: C.bg,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#CFE3FA',
+    borderColor: C.border,
   },
-  quantityBtnText: { color: C.blue, fontSize: 20, fontWeight: '900' },
-  quantityInput:   { flex: 1, textAlign: 'center', fontWeight: '800' },
+  quantityBtnText: { color: C.text, fontSize: 19, fontWeight: '800' },
+  quantityInput:   { width: 52, height: 38, textAlign: 'center', fontWeight: '800', fontSize: 16, lineHeight: 20, paddingVertical: 0, paddingHorizontal: 4 },
   pointsBox: {
-    backgroundColor: C.warningLight,
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: '#F6D98D',
+    borderColor: '#F4E5B2',
   },
-  pointsTopRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10 },
-  pointsTitle: { color: C.warning, fontSize: 13, fontWeight: '900' },
-  pointsSub: { color: C.sub, fontSize: 12, marginTop: 3, fontWeight: '700' },
-  pointsValue: { color: C.warning, fontSize: 13, fontWeight: '900' },
-  pointsHint: { color: C.sub, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  pointsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 28 },
+  pointsHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pointsTitle: { color: C.text, fontSize: 13, fontWeight: '800' },
+  pointsAvailable: { color: C.sub, fontSize: 11, fontWeight: '600' },
+  pointsHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pointsValue: { color: C.green, fontSize: 12, fontWeight: '800' },
+  pointsToggle: { color: C.warning, fontSize: 12, fontWeight: '800' },
+  pointsEntry: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F4E5B2' },
+  pointsHint: { color: C.sub, fontSize: 11, lineHeight: 16, marginTop: 7 },
+  pointsInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pointsInput: { flex: 1, height: 40, paddingVertical: 8 },
+  pointsMaxBtn: { borderRadius: 9, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F0D27D' },
+  pointsMaxText: { color: C.warning, fontSize: 12, fontWeight: '800' },
+  paymentInfo: { backgroundColor: C.blueLight, borderRadius: 12, padding: 12, marginTop: 12 },
+  paymentInfoCash: { backgroundColor: C.greenLight },
+  paymentInfoCashTitle: { color: C.green },
+  paymentInfoTitle: { fontSize: 13, fontWeight: '800', color: C.blue, marginBottom: 5 },
+  paymentInfoText: { fontSize: 12, color: C.text, lineHeight: 18 },
+  referenceInput: { marginTop: 0 },
   gcashBox: {
     backgroundColor: C.blueLight,
     borderRadius: 12,
@@ -2879,6 +3065,11 @@ const s = StyleSheet.create({
   uploadBtnText: { color: C.blue, fontSize: 13, fontWeight: '800' },
   cancelPrompt:      { color: C.sub, fontSize: 13, marginTop: 10, marginBottom: 12 },
   cancelReasonInput: { height: 96, textAlignVertical: 'top' },
+  checkoutFooter: { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 12, gap: 10 },
+  checkoutTotalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  checkoutTotalLabel: { fontSize: 12, fontWeight: '700', color: C.sub },
+  checkoutDiscount: { fontSize: 11, color: C.green, marginTop: 3 },
+  checkoutTotalValue: { fontSize: 21, fontWeight: '900', color: C.text },
   checkoutActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
   cancelBtn: {
     flex: 1,
@@ -2890,7 +3081,7 @@ const s = StyleSheet.create({
     borderColor: C.border,
   },
   cancelBtnText:    { color: C.sub, fontWeight: '700' },
-  payBtn:           { flex: 1.3, backgroundColor: C.green,  borderRadius: 12, padding: 14, alignItems: 'center' },
+  payBtn:           { backgroundColor: '#E11D48', borderRadius: 12, padding: 14, alignItems: 'center' },
   confirmCancelBtn: { flex: 1.1, backgroundColor: C.danger, borderRadius: 12, padding: 14, alignItems: 'center' },
   payBtnText:       { color: '#fff', fontWeight: '800' },
 });

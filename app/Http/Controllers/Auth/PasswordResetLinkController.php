@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
@@ -35,6 +36,16 @@ class PasswordResetLinkController extends Controller
         // need to show to the user. Finally, we'll send out a proper response.
         $status = Password::sendResetLink(
             $request->only('email')
+        );
+
+        $email = substr(strtolower(trim($request->email)), 0, 255);
+        ActivityLog::record(
+            $request,
+            $status == Password::RESET_LINK_SENT ? 'auth_password_reset_requested' : 'auth_password_reset_request_failed',
+            $status == Password::RESET_LINK_SENT
+                ? 'Password reset link requested through the web portal.'
+                : 'Password reset link request was not accepted by the web portal.',
+            ['meta' => ['email' => $email, 'client' => 'web']]
         );
 
         return $status == Password::RESET_LINK_SENT

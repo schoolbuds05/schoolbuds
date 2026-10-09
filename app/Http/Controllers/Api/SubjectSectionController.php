@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicTerm;
+use App\Models\ActivityLog;
 use App\Models\EnrollmentApplication;
 use App\Models\Fee;
 use App\Models\SchoolClass;
@@ -85,7 +86,15 @@ class SubjectSectionController extends Controller
         $subject = Subject::create($data);
 
         if ($request->filled('prerequisite_ids')) {
+            $prerequisitesBefore = [];
             $subject->prerequisites()->sync($request->prerequisite_ids);
+            ActivityLog::recordRelationChange(
+                $request,
+                $subject,
+                'prerequisites',
+                $prerequisitesBefore,
+                $subject->prerequisites()->allRelatedIds()->all()
+            );
         }
 
         return response()->json($subject->load('prerequisites:id,code,name'), 201);
@@ -121,11 +130,19 @@ class SubjectSectionController extends Controller
         $data['course'] = $data['course'] === '' ? null : $data['course'];
         $data['strand'] = $data['strand'] === '' ? null : $data['strand'];
 
+        $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
         $subject->update($data);
 
         if ($request->filled('prerequisite_ids')) {
             $prerequisiteIds = array_filter((array) $request->prerequisite_ids, fn($idValue) => (int) $idValue !== (int) $subject->id);
             $subject->prerequisites()->sync($prerequisiteIds);
+            ActivityLog::recordRelationChange(
+                $request,
+                $subject,
+                'prerequisites',
+                $prerequisitesBefore,
+                $subject->prerequisites()->allRelatedIds()->all()
+            );
         }
 
         return response()->json($subject->load('prerequisites:id,code,name'));
@@ -139,11 +156,15 @@ class SubjectSectionController extends Controller
         ArchiveService::record($subject, $request->user()?->id, 'api.subjects');
 
         if ($subject->sectionSubjects()->exists()) {
-            $subject->sectionSubjects()->delete();
+            $subject->sectionSubjects()->get()->each(fn (SectionSubject $sectionSubject) => $sectionSubject->delete());
         }
 
+        $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
+        $requiredByBefore = $subject->requiredBy()->allRelatedIds()->all();
         $subject->prerequisites()->detach();
         $subject->requiredBy()->detach();
+        ActivityLog::recordRelationChange($request, $subject, 'prerequisites', $prerequisitesBefore, []);
+        ActivityLog::recordRelationChange($request, $subject, 'required_by', $requiredByBefore, []);
         $subject->delete();
 
         return response()->json(['message' => 'Subject removed.']);
@@ -171,7 +192,15 @@ class SubjectSectionController extends Controller
         }
 
         $subject = Subject::findOrFail($id);
+        $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
         $subject->prerequisites()->syncWithoutDetaching([$request->prerequisite_id]);
+        ActivityLog::recordRelationChange(
+            $request,
+            $subject,
+            'prerequisites',
+            $prerequisitesBefore,
+            $subject->prerequisites()->allRelatedIds()->all()
+        );
 
         return response()->json($subject->prerequisites()->get(['id', 'code', 'name']), 201);
     }
@@ -182,7 +211,15 @@ class SubjectSectionController extends Controller
         $this->authorizeRegistrar($request);
 
         $subject = Subject::findOrFail($id);
+        $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
         $subject->prerequisites()->detach($prerequisiteId);
+        ActivityLog::recordRelationChange(
+            $request,
+            $subject,
+            'prerequisites',
+            $prerequisitesBefore,
+            $subject->prerequisites()->allRelatedIds()->all()
+        );
 
         return response()->json(['message' => 'Prerequisite removed.']);
     }
@@ -441,11 +478,24 @@ class SubjectSectionController extends Controller
             }
         }
 
+        $studentsBefore = $section->students()->get()
+            ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+            ->all();
         $section->students()->syncWithoutDetaching([
             $request->user_id => ['status' => 'enrolled']
         ]);
+        ActivityLog::recordRelationChange(
+            $request,
+            $section,
+            'students',
+            $studentsBefore,
+            $section->students()->get()
+                ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                ->all()
+        );
 
-        Student::where('user_id', $request->user_id)->update(['section' => $section->name]);
+        Student::where('user_id', $request->user_id)->get()
+            ->each(fn (Student $student) => $student->update(['section' => $section->name]));
 
         return response()->json(['message' => 'Student enrolled in section.']);
     }
@@ -455,8 +505,21 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeRegistrar($request);
         $section = Section::findOrFail($id);
+        $studentsBefore = $section->students()->get()
+            ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+            ->all();
         $section->students()->detach($userId);
-        Student::where('user_id', $userId)->update(['section' => 'TBA']);
+        ActivityLog::recordRelationChange(
+            $request,
+            $section,
+            'students',
+            $studentsBefore,
+            $section->students()->get()
+                ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                ->all()
+        );
+        Student::where('user_id', $userId)->get()
+            ->each(fn (Student $student) => $student->update(['section' => 'TBA']));
         return response()->json(['message' => 'Student removed from section.']);
     }
 

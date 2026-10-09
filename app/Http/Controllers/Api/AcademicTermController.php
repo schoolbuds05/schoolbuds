@@ -63,7 +63,8 @@ class AcademicTermController extends Controller
                     $query->where('school_year', '!=', $data['school_year'])
                         ->orWhere('semester', '!=', $data['semester']);
                 })
-                ->update(['is_active' => false]);
+                ->get()
+                ->each(fn (AcademicTerm $term) => $term->update(['is_active' => false]));
 
             Section::query()
                 ->where('is_active', true)
@@ -71,7 +72,8 @@ class AcademicTermController extends Controller
                     $query->where('school_year', '!=', $data['school_year'])
                         ->orWhere('semester', '!=', $data['semester']);
                 })
-                ->update(['is_active' => false]);
+                ->get()
+                ->each(fn (Section $section) => $section->update(['is_active' => false]));
         }
 
         $term = AcademicTerm::updateOrCreate(

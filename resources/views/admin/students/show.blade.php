@@ -1,18 +1,18 @@
-@extends('layouts.portal', ['title' => $student->first_name . ' ' . $student->last_name])
+@extends('layouts.portal', ['title' => $studentName])
 
 @section('content')
 <nav aria-label="Breadcrumb" class="mb-4 text-sm">
     <ol class="flex flex-wrap items-center gap-2">
         <li><a href="{{ route(($routePrefix ?? 'admin') . '.students.index') }}" class="font-bold text-portal-accent hover:underline">Students</a></li>
         <li aria-hidden="true" class="text-slate-400">/</li>
-        <li aria-current="page" class="font-semibold text-slate-600">{{ $student->first_name }} {{ $student->last_name }}</li>
+        <li aria-current="page" class="font-semibold text-slate-600">{{ $studentName }}</li>
     </ol>
 </nav>
 
 <section class="mt-4 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
     <div class="flex flex-col md:flex-row md:items-center gap-5 justify-between">
         <div>
-            <h1 class="text-2xl font-black text-slate-900">{{ $student->first_name }} {{ $student->last_name }}</h1>
+            <h1 class="text-2xl font-black text-slate-900">{{ $studentName }}</h1>
             <p class="text-sm text-slate-500 mt-1">{{ $student->student_id }} · {{ $student->email }}</p>
             <p class="text-sm text-slate-500">{{ $student->grade_level }} · {{ $student->section ?: 'TBA' }} · {{ $student->school_year }}</p>
         </div>
@@ -58,6 +58,10 @@
             <p class="text-xs font-black uppercase text-slate-400">Gender</p>
             <p class="mt-1 font-bold text-slate-800">{{ ucfirst($student->gender) }}</p>
         </div>
+        <div class="rounded-lg bg-slate-50 p-3">
+            <p class="text-xs font-black uppercase text-slate-400">Middle name</p>
+            <p class="mt-1 font-bold text-slate-800">{{ $middleName ?: 'Not set' }}</p>
+        </div>
         <div class="rounded-lg bg-slate-50 p-3 md:col-span-2">
             <p class="text-xs font-black uppercase text-slate-400">Mother</p>
             <p class="mt-1 font-bold text-slate-800">{{ $student->mother_name ?: 'Not set' }}</p>
@@ -100,6 +104,10 @@
             <label class="text-xs font-bold uppercase text-slate-500">
                 First name
                 <input name="first_name" value="{{ old('first_name', $student->first_name) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+            </label>
+            <label class="text-xs font-bold uppercase text-slate-500">
+                Middle name
+                <input name="middle_name" value="{{ old('middle_name', $middleName) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
             </label>
             <label class="text-xs font-bold uppercase text-slate-500">
                 Last name
@@ -205,7 +213,7 @@
 <section id="parent-account" class="mt-6 scroll-mt-24 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
     <div class="mb-4">
         <h2 class="font-black text-slate-800">Parent Account</h2>
-        <p class="mt-1 text-sm text-slate-500">Link this student to an existing parent account by email.</p>
+        <p class="mt-1 text-sm text-slate-500">Enter a parent email. Existing parent accounts will be linked; a new email will get a parent account and a password setup link.</p>
     </div>
 
     @if($student->parent)
@@ -219,10 +227,10 @@
         @method('PUT')
         <label class="text-xs font-bold uppercase text-slate-500">
             Parent email
-            <input name="parent_email" value="{{ old('parent_email', $student->parent?->email) }}" type="email" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900" placeholder="parent@example.com">
+            <input name="parent_email" value="{{ old('parent_email', $student->parent?->email) }}" type="email" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900" placeholder="parent@example.com" autocomplete="email">
         </label>
         <div class="flex items-end gap-2">
-            <button class="portal-button-primary">Link parent</button>
+            <button class="portal-button-primary">{{ $student->parent ? 'Update parent link' : 'Link parent' }}</button>
             @if($student->parent)
                 <button name="parent_email" value="" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600" formnovalidate>Unlink</button>
             @endif

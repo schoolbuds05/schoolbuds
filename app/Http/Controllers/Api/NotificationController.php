@@ -94,7 +94,8 @@ class NotificationController extends Controller
                     ->orWhereNull('user_id');
             })
             ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+            ->get()
+            ->each(fn (SchoolNotification $notification) => $notification->update(['read_at' => now()]));
 
         return response()->json(['message' => 'Notifications marked as read.']);
     }

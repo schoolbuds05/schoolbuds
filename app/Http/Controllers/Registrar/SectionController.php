@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Registrar;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
+use App\Models\ActivityLog;
 use App\Models\Course;
 use App\Models\Section;
 use App\Models\SectionSubject;
@@ -165,11 +166,24 @@ class SectionController extends Controller
             return back()->withErrors(['student' => 'Only student accounts can be enrolled in a section.']);
         }
 
+        $studentsBefore = $section->students()->get()
+            ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+            ->all();
         $section->students()->syncWithoutDetaching([
             $studentUser->id => ['status' => 'enrolled'],
         ]);
+        ActivityLog::recordRelationChange(
+            $request,
+            $section,
+            'students',
+            $studentsBefore,
+            $section->students()->get()
+                ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                ->all()
+        );
 
-        Student::where('user_id', $studentUser->id)->update(['section' => $section->name]);
+        Student::where('user_id', $studentUser->id)->get()
+            ->each(fn (Student $student) => $student->update(['section' => $section->name]));
 
         return back()->with('status', 'Student added to section.');
     }
@@ -178,8 +192,21 @@ class SectionController extends Controller
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
+        $studentsBefore = $section->students()->get()
+            ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+            ->all();
         $section->students()->detach($student->id);
-        Student::where('user_id', $student->id)->update(['section' => 'TBA']);
+        ActivityLog::recordRelationChange(
+            $request,
+            $section,
+            'students',
+            $studentsBefore,
+            $section->students()->get()
+                ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
+                ->all()
+        );
+        Student::where('user_id', $student->id)->get()
+            ->each(fn (Student $record) => $record->update(['section' => 'TBA']));
 
         return back()->with('status', 'Student removed from section.');
     }

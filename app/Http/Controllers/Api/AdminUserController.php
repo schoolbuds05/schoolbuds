@@ -109,7 +109,7 @@ class AdminUserController extends Controller
             'department' => $data['department'] ?? null,
         ]);
 
-        $this->syncRole($user, $data['role']);
+        $this->syncRole($request, $user, $data['role']);
 
         ActivityLog::record($request, 'admin_user_created', "{$request->user()->name} created user {$user->name}.", [
             'subject_type' => User::class,
@@ -156,7 +156,7 @@ class AdminUserController extends Controller
         }
 
         $user->save();
-        $this->syncRole($user, $data['role']);
+        $this->syncRole($request, $user, $data['role']);
 
         ActivityLog::record($request, 'admin_user_updated', "{$request->user()->name} updated user {$user->name}.", [
             'subject_type' => User::class,
@@ -216,10 +216,12 @@ class AdminUserController extends Controller
         }
     }
 
-    private function syncRole(User $user, string $role): void
+    private function syncRole(Request $request, User $user, string $role): void
     {
         Role::findOrCreate($role, 'web');
+        $rolesBefore = $user->getRoleNames()->all();
         $user->syncRoles([$role]);
+        ActivityLog::recordRelationChange($request, $user, 'roles', $rolesBefore, $user->getRoleNames()->all());
     }
 
     private function roleOptions(): array

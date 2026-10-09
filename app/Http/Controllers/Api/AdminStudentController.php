@@ -119,7 +119,9 @@ class AdminStudentController extends Controller
             }
             $student->user->update($userValues);
             Role::findOrCreate('student', 'web');
+            $rolesBefore = $student->user->getRoleNames()->all();
             $student->user->syncRoles(['student']);
+            ActivityLog::recordRelationChange($request, $student->user, 'roles', $rolesBefore, $student->user->getRoleNames()->all());
         }
 
         return response()->json($this->studentPayload($student->load(['user:id,name,email,role,created_at', 'parent:id,name,email,role'])));
@@ -185,12 +187,13 @@ class AdminStudentController extends Controller
             ->where('user_id', $student->user_id)
             ->where('subject_id', $subject->id)
             ->where('section_id', $data['section_id'] ?? null)
-            ->update([
+            ->get()
+            ->each(fn (StudentSubject $studentSubject) => $studentSubject->update([
                 'status'      => 'enrolled',
                 'drop_reason' => null,
                 'dropped_at'  => null,
                 'dropped_by'  => null,
-            ]);
+            ]));
 
         return response()->json([
             'message' => 'Subject restored for this student.',

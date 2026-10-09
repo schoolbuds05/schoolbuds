@@ -36,6 +36,7 @@ class ArchiveService
             'Section' => ['sectionSubjects.subject', 'sectionSubjects.teacher', 'students'],
             'Course' => [],
             'SectionSubject' => ['section', 'subject', 'teacher'],
+            'MarketplaceItem' => ['messages', 'orders'],
             default => [],
         };
     }
@@ -49,6 +50,7 @@ class ArchiveService
             'User' => trim(($model->name ?? '') . ' - ' . ($model->email ?? '')),
             'Student' => trim(($model->student_id ?? '') . ' - ' . ($model->first_name ?? '') . ' ' . ($model->last_name ?? '')),
             'SectionSubject' => trim(($model->section?->name ?? 'Section') . ' - ' . ($model->subject?->code ?? 'Subject')),
+            'MarketplaceItem' => $model->title ?? null,
             default => method_exists($model, 'getKey') ? (string) $model->getKey() : null,
         };
     }

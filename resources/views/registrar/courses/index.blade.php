@@ -42,7 +42,7 @@
                         </div>
                     </form>
                 </details>
-                <button type="button" data-modal-open="course-create-modal" class="inline-flex items-center gap-2 rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">
+                <button type="button" data-modal-open="course-create-modal" class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
                     Add course
                 </button>

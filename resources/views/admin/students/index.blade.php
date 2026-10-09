@@ -94,7 +94,7 @@
     @forelse($students as $student)
         @php
             $statusClass = $student->status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600';
-            $fullName = trim($student->first_name . ' ' . $student->last_name);
+            $fullName = trim(implode(' ', array_filter([$student->first_name, $student->middle_name, $student->last_name])));
             $initials = strtoupper(substr($student->first_name, 0, 1) . substr($student->last_name, 0, 1));
         @endphp
         <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" data-student-card>
@@ -132,120 +132,33 @@
                             <p class="mt-1 text-xs text-slate-500">Phone: {{ $student->phone ?: 'Not set' }} · Birthdate: {{ $student->birthdate ?: 'Not set' }}</p>
                             <p class="mt-1 text-xs text-slate-500">Mother: {{ $student->mother_name ?: 'Not set' }} · Father: {{ $student->father_name ?: 'Not set' }}</p>
                         </div>
-                        <a href="{{ route(($routePrefix ?? 'admin') . '.students.show', $student) }}" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">Open full record</a>
+                        <a href="{{ route(($routePrefix ?? 'admin') . '.students.show', $student) }}" class="portal-button-primary">Open full record</a>
                     </div>
                 </div>
 
-                <form method="POST" action="{{ route(($routePrefix ?? 'admin') . '.students.update', $student) }}" class="grid grid-cols-1 gap-4 p-4 md:grid-cols-4 md:items-end">
-                    @csrf
-                    @method('PUT')
-
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Student ID
-                        <input name="student_id" value="{{ old('student_id', $student->student_id) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        First name
-                        <input name="first_name" value="{{ old('first_name', $student->first_name) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Last name
-                        <input name="last_name" value="{{ old('last_name', $student->last_name) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Email
-                        <input name="email" value="{{ old('email', $student->email) }}" type="email" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Phone
-                        <input name="phone" value="{{ old('phone', $student->phone) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Birthdate
-                        <input name="birthdate" value="{{ old('birthdate', $student->birthdate) }}" type="date" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Gender
-                        <select name="gender" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                            <option value="male" @selected(old('gender', $student->gender) === 'male')>Male</option>
-                            <option value="female" @selected(old('gender', $student->gender) === 'female')>Female</option>
-                        </select>
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Status
-                        <select name="status" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                            <option value="active" @selected(old('status', $student->status) === 'active')>Active</option>
-                            <option value="inactive" @selected(old('status', $student->status) === 'inactive')>Inactive</option>
-                            <option value="graduated" @selected(old('status', $student->status) === 'graduated')>Graduated</option>
-                        </select>
-                    </label>
-
-                    <label class="text-xs font-bold uppercase text-slate-500 md:col-span-4">
-                        Address
-                        <input name="address" value="{{ old('address', $student->address) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Mother name
-                        <input name="mother_name" value="{{ old('mother_name', $student->mother_name) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Mother occupation
-                        <input name="mother_occupation" value="{{ old('mother_occupation', $student->mother_occupation) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Father name
-                        <input name="father_name" value="{{ old('father_name', $student->father_name) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Father occupation
-                        <input name="father_occupation" value="{{ old('father_occupation', $student->father_occupation) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Grade / year level
-                        <input name="grade_level" value="{{ old('grade_level', $student->grade_level) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Section
-                        <input name="section" value="{{ old('section', $student->section) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        School year
-                        <input name="school_year" value="{{ old('school_year', $student->school_year) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Academic status
-                        <select name="academic_status" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                            <option value="">Not set</option>
-                            <option value="Regular" @selected(old('academic_status', $student->academic_status) === 'Regular')>Regular</option>
-                            <option value="Irregular" @selected(old('academic_status', $student->academic_status) === 'Irregular')>Irregular</option>
-                        </select>
-                    </label>
-
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Student type
-                        <select name="student_type" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                            <option value="">Not set</option>
-                            <option value="new_student" @selected(old('student_type', $student->student_type) === 'new_student')>New student</option>
-                            <option value="old_student" @selected(old('student_type', $student->student_type) === 'old_student')>Old student</option>
-                            <option value="transferee" @selected(old('student_type', $student->student_type) === 'transferee')>Transferee</option>
-                            <option value="shiftee" @selected(old('student_type', $student->student_type) === 'shiftee')>Shiftee</option>
-                            <option value="returnee" @selected(old('student_type', $student->student_type) === 'returnee')>Returnee</option>
-                        </select>
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500">
-                        Previous school
-                        <input name="prev_school" value="{{ old('prev_school', $student->prev_school) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-                    <label class="text-xs font-bold uppercase text-slate-500 md:col-span-2">
-                        Previous school address
-                        <input name="prev_school_address" value="{{ old('prev_school_address', $student->prev_school_address) }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
-                    </label>
-
-                    <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover md:col-start-4">Save changes</button>
-                </form>
+                <div class="grid grid-cols-1 gap-4 p-4 text-sm md:grid-cols-4">
+                    <div><p class="text-xs font-black uppercase text-slate-400">Student ID</p><p class="mt-1 font-bold text-slate-800">{{ $student->student_id }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">First name</p><p class="mt-1 font-bold text-slate-800">{{ $student->first_name }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Middle name</p><p class="mt-1 font-bold text-slate-800">{{ $student->middle_name ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Last name</p><p class="mt-1 font-bold text-slate-800">{{ $student->last_name }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Email</p><p class="mt-1 font-bold text-slate-800">{{ $student->email ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Phone</p><p class="mt-1 font-bold text-slate-800">{{ $student->phone ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Birthdate</p><p class="mt-1 font-bold text-slate-800">{{ $student->birthdate ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Gender</p><p class="mt-1 font-bold text-slate-800">{{ ucfirst($student->gender) }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Status</p><p class="mt-1 font-bold text-slate-800">{{ ucfirst($student->status) }}</p></div>
+                    <div class="md:col-span-4"><p class="text-xs font-black uppercase text-slate-400">Address</p><p class="mt-1 font-bold text-slate-800">{{ $student->address ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Mother name</p><p class="mt-1 font-bold text-slate-800">{{ $student->mother_name ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Mother occupation</p><p class="mt-1 font-bold text-slate-800">{{ $student->mother_occupation ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Father name</p><p class="mt-1 font-bold text-slate-800">{{ $student->father_name ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Father occupation</p><p class="mt-1 font-bold text-slate-800">{{ $student->father_occupation ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Grade / year level</p><p class="mt-1 font-bold text-slate-800">{{ $student->grade_level ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Section</p><p class="mt-1 font-bold text-slate-800">{{ $student->section ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">School year</p><p class="mt-1 font-bold text-slate-800">{{ $student->school_year ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Academic status</p><p class="mt-1 font-bold text-slate-800">{{ $student->academic_status ?: 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Student type</p><p class="mt-1 font-bold text-slate-800">{{ $student->student_type ? str_replace('_', ' ', ucfirst($student->student_type)) : 'Not set' }}</p></div>
+                    <div><p class="text-xs font-black uppercase text-slate-400">Previous school</p><p class="mt-1 font-bold text-slate-800">{{ $student->prev_school ?: 'Not set' }}</p></div>
+                    <div class="md:col-span-2"><p class="text-xs font-black uppercase text-slate-400">Previous school address</p><p class="mt-1 font-bold text-slate-800">{{ $student->prev_school_address ?: 'Not set' }}</p></div>
+                </div>
             </div>
         </div>
     @empty

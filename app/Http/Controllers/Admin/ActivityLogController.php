@@ -22,7 +22,11 @@ class ActivityLogController extends Controller
                         ->orWhere('actor_role', 'like', "%{$search}%")
                         ->orWhere('description', 'like', "%{$search}%")
                         ->orWhere('action', 'like', "%{$search}%")
-                        ->orWhere('ip_address', 'like', "%{$search}%");
+                        ->orWhere('ip_address', 'like', "%{$search}%")
+                        ->orWhere('user_agent', 'like', "%{$search}%")
+                        ->orWhere('subject_type', 'like', "%{$search}%")
+                        ->orWhere('subject_id', 'like', "%{$search}%")
+                        ->orWhere('meta', 'like', "%{$search}%");
                 });
             })
             ->latest()

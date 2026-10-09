@@ -117,8 +117,10 @@ class DepartmentController extends Controller
 
     private function syncProgramsAndChair(Department $department, array $data): void
     {
-        Course::query()->where('department_id', $department->id)->update(['department_id' => null]);
-        Course::query()->whereIn('id', $data['course_ids'] ?? [])->update(['department_id' => $department->id]);
+        Course::query()->where('department_id', $department->id)->get()
+            ->each(fn (Course $course) => $course->update(['department_id' => null]));
+        Course::query()->whereIn('id', $data['course_ids'] ?? [])->get()
+            ->each(fn (Course $course) => $course->update(['department_id' => $department->id]));
 
         $teacherIds = array_values(array_filter(array_map('intval', $data['teacher_ids'] ?? [])));
 
@@ -126,19 +128,21 @@ class DepartmentController extends Controller
             User::query()
                 ->where('role', User::ROLE_FACULTY)
                 ->whereIn('id', $teacherIds)
-                ->update([
+                ->get()
+                ->each(fn (User $user) => $user->update([
                     'department_id' => $department->id,
                     'department' => $department->name,
-                ]);
+                ]));
         }
 
         if ($department->chair_user_id) {
-            Department::query()->where('chair_user_id', $department->chair_user_id)->whereKeyNot($department->id)->update(['chair_user_id' => null]);
-            User::query()->whereKey($department->chair_user_id)->update([
+            Department::query()->where('chair_user_id', $department->chair_user_id)->whereKeyNot($department->id)->get()
+                ->each(fn (Department $otherDepartment) => $otherDepartment->update(['chair_user_id' => null]));
+            User::query()->whereKey($department->chair_user_id)->get()->each(fn (User $user) => $user->update([
                 'position' => User::POSITION_HEAD_DEPARTMENT,
                 'department_id' => $department->id,
                 'department' => $department->name,
-            ]);
+            ]));
         }
     }
 }

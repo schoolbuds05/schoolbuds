@@ -12,6 +12,7 @@ use App\Models\SchoolNotification;
 use App\Models\Student;
 use App\Models\StudentReward;
 use App\Models\User;
+use App\Services\ArchiveService;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -304,7 +305,12 @@ class MarketplaceController extends Controller
         if ($item->user_id !== $request->user()->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-        $item->delete();
+
+        DB::transaction(function () use ($item, $request): void {
+            ArchiveService::record($item, $request->user()->id, 'api.marketplace', $item->title);
+            $item->delete();
+        });
+
         return response()->json(['message' => 'Item deleted']);
     }
 

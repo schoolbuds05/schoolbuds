@@ -13,11 +13,28 @@
     <x-stat-card label="Paid sales" :value="$marketplaceStats['paid_sales']" tone="accent" />
 </div>
 
-<div class="grid grid-cols-1 gap-6 xl:grid-cols-[380px_1fr]">
-    <section class="portal-card h-fit p-5">
-        <h3 class="font-bold text-slate-800">Post marketplace item</h3>
-        <form method="POST" action="{{ route('property-custodian.marketplace.store') }}" enctype="multipart/form-data" class="mt-4 space-y-3">
+<div class="space-y-6">
+    <section class="portal-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h3 class="font-bold text-slate-800">Manage marketplace listings</h3>
+            <p class="mt-1 text-sm text-slate-500">Keep your school marketplace organized and up to date.</p>
+        </div>
+        <button type="button" onclick="document.getElementById('marketplace-post-modal').showModal()" class="portal-button-primary shrink-0">
+            + Post an item
+        </button>
+    </section>
+
+    <dialog id="marketplace-post-modal" class="m-auto max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl p-0 shadow-2xl backdrop:bg-slate-950/50">
+        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+            <div>
+                <h2 class="font-black text-slate-900">Post marketplace item</h2>
+                <p class="mt-0.5 text-xs text-slate-500">Add item details, payment options, and photos.</p>
+            </div>
+            <button type="button" onclick="document.getElementById('marketplace-post-modal').close()" class="rounded-lg px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100">Close</button>
+        </div>
+        <form method="POST" action="{{ route('property-custodian.marketplace.store') }}" enctype="multipart/form-data" class="space-y-3 p-5">
             @csrf
+            <input type="hidden" name="_marketplace_create" value="1">
             <input name="title" value="{{ old('title') }}" class="portal-field w-full" placeholder="Item title" required>
             <textarea name="description" class="portal-field min-h-24 w-full" placeholder="Description" required>{{ old('description') }}</textarea>
 
@@ -69,7 +86,7 @@
 
             <button class="portal-button-primary w-full" type="submit">Post item</button>
         </form>
-    </section>
+    </dialog>
 
     <div class="space-y-6" x-data="{ previewImages: [], previewIndex: 0, previewTitle: '', get previewImage() { return this.previewImages[this.previewIndex] || null } }">
         <section class="portal-card overflow-hidden">
@@ -291,3 +308,11 @@
     </div>
 </div>
 @endsection
+
+@if(old('_marketplace_create'))
+    @push('scripts')
+        <script>
+            document.getElementById('marketplace-post-modal')?.showModal();
+        </script>
+    @endpush
+@endif

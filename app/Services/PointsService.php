@@ -68,7 +68,8 @@ class PointsService
         $points = $collegeScale ? $this->pointsForCollegeGrade($score) : $this->pointsForGrade($score);
 
         if ($points <= 0) {
-            StudentReward::where('student_id', $student->id)->where('source_key', $sourceKey)->delete();
+            StudentReward::where('student_id', $student->id)->where('source_key', $sourceKey)->get()
+                ->each(fn (StudentReward $reward) => $reward->delete());
             return null;
         }
 
@@ -96,7 +97,8 @@ class PointsService
         array $meta = []
     ): ?StudentReward {
         if ($status !== 'present') {
-            StudentReward::where('student_id', $student->id)->where('source_key', $sourceKey)->delete();
+            StudentReward::where('student_id', $student->id)->where('source_key', $sourceKey)->get()
+                ->each(fn (StudentReward $reward) => $reward->delete());
             return null;
         }
 
@@ -129,7 +131,8 @@ class PointsService
             ->get();
 
         if ($records->isEmpty() || $records->where('status', '!=', 'present')->isNotEmpty()) {
-            StudentReward::where('student_id', $student->id)->where('source_key', $sourceKey)->delete();
+            StudentReward::where('student_id', $student->id)->where('source_key', $sourceKey)->get()
+                ->each(fn (StudentReward $reward) => $reward->delete());
             return null;
         }
 

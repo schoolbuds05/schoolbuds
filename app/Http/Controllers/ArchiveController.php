@@ -3,8 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
+use App\Models\ActivityLog;
 use App\Models\ArchivedRecord;
 use App\Models\Course;
+use App\Models\MarketplaceItem;
+use App\Models\MarketplaceMessage;
+use App\Models\MarketplaceOrder;
 use App\Models\Section;
 use App\Models\SectionSubject;
 use App\Models\Student;
@@ -53,7 +57,7 @@ class ArchiveController extends Controller
 
         try {
             DB::transaction(function () use ($archive, $request) {
-                $this->restoreRecord($archive);
+                $this->restoreRecord($archive, $request);
                 $archive->update([
                     'restored_by' => $request->user()->id,
                     'restored_at' => now(),
@@ -66,7 +70,7 @@ class ArchiveController extends Controller
         return back()->with('status', "{$archive->record_type} restored.");
     }
 
-    private function restoreRecord(ArchivedRecord $archive): void
+    private function restoreRecord(ArchivedRecord $archive, Request $request): void
     {
         $attributes = $archive->payload['attributes'] ?? [];
 
@@ -75,7 +79,8 @@ class ArchiveController extends Controller
             'Subject' => $this->restoreModel(Subject::class, $attributes),
             'Section' => $this->restoreModel(Section::class, $attributes),
             'SectionSubject' => $this->restoreModel(SectionSubject::class, $attributes),
-            'User' => $this->restoreUser($attributes, $archive->payload['relations'] ?? []),
+            'MarketplaceItem' => $this->restoreMarketplaceItem($attributes, $archive->payload['relations'] ?? []),
+            'User' => $this->restoreUser($attributes, $archive->payload['relations'] ?? [], $request),
             'Student' => $this->restoreStudent($attributes),
             default => throw new \RuntimeException("Restore is not available for {$archive->record_type}."),
         };
@@ -98,7 +103,7 @@ class ArchiveController extends Controller
         });
     }
 
-    private function restoreUser(array $attributes, array $relations): User
+    private function restoreUser(array $attributes, array $relations, Request $request): User
     {
         if (!empty($attributes['id']) && User::whereKey($attributes['id'])->exists()) {
             throw new \RuntimeException('A user with the original ID already exists.');
@@ -127,6 +132,7 @@ class ArchiveController extends Controller
         $roleNames->each(fn (string $role) => Role::findOrCreate($role, 'web'));
         if ($roleNames->isNotEmpty()) {
             $user->syncRoles($roleNames->all());
+            ActivityLog::recordRelationChange($request, $user, 'roles', [], $user->getRoleNames()->all());
         }
 
         return $user;
@@ -154,6 +160,21 @@ class ArchiveController extends Controller
 
             return $student;
         });
+    }
+
+    private function restoreMarketplaceItem(array $attributes, array $relations): MarketplaceItem
+    {
+        $item = $this->restoreModel(MarketplaceItem::class, $attributes);
+
+        foreach ($relations['orders'] ?? [] as $orderAttributes) {
+            $this->restoreModel(MarketplaceOrder::class, $orderAttributes);
+        }
+
+        foreach ($relations['messages'] ?? [] as $messageAttributes) {
+            $this->restoreModel(MarketplaceMessage::class, $messageAttributes);
+        }
+
+        return $item;
     }
 
     private function cleanAttributes(array $attributes): array

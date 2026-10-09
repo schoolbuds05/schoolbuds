@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
+use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\Department;
 use App\Services\ArchiveService;
@@ -64,9 +65,11 @@ class UserManageController extends Controller
         ]);
         Role::findOrCreate($data['role'], 'web');
         $user->assignRole($data['role']);
+        ActivityLog::recordRelationChange($request, $user, 'roles', [], $user->getRoleNames()->all());
 
         if ($department) {
-            Department::query()->where('chair_user_id', $user->id)->whereKeyNot($department->id)->update(['chair_user_id' => null]);
+            Department::query()->where('chair_user_id', $user->id)->whereKeyNot($department->id)->get()
+                ->each(fn (Department $otherDepartment) => $otherDepartment->update(['chair_user_id' => null]));
             $department->update(['chair_user_id' => $user->id]);
         }
 
@@ -87,6 +90,7 @@ class UserManageController extends Controller
         ]);
         $data['position'] = $this->positionForRole($data['role'], $data['position'] ?? null);
         $department = $this->departmentForPosition($data);
+        $rolesBefore = $user->getRoleNames()->all();
 
         if ($user->id === $request->user()->id && $data['role'] !== 'admin') {
             return back()->withErrors(['role' => 'You cannot remove admin access from your own account.']);
@@ -108,12 +112,15 @@ class UserManageController extends Controller
         $user->save();
         Role::findOrCreate($data['role'], 'web');
         $user->syncRoles([$data['role']]);
+        ActivityLog::recordRelationChange($request, $user, 'roles', $rolesBefore, $user->getRoleNames()->all());
 
         if ($department) {
-            Department::query()->where('chair_user_id', $user->id)->whereKeyNot($department->id)->update(['chair_user_id' => null]);
+            Department::query()->where('chair_user_id', $user->id)->whereKeyNot($department->id)->get()
+                ->each(fn (Department $otherDepartment) => $otherDepartment->update(['chair_user_id' => null]));
             $department->update(['chair_user_id' => $user->id]);
         } else {
-            Department::query()->where('chair_user_id', $user->id)->update(['chair_user_id' => null]);
+            Department::query()->where('chair_user_id', $user->id)->get()
+                ->each(fn (Department $department) => $department->update(['chair_user_id' => null]));
         }
 
         return redirect()->route('admin.users.index')->with('status', 'User updated.');

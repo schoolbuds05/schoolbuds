@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -32,13 +33,22 @@ class RegisteredUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'middle_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
+        $firstName = trim($request->first_name);
+        $middleName = trim((string) $request->middle_name) ?: null;
+        $lastName = trim($request->last_name);
+
         $user = User::create([
-            'name' => $request->name,
+            'name' => trim(implode(' ', array_filter([$firstName, $middleName, $lastName]))),
+            'first_name' => $firstName,
+            'middle_name' => $middleName,
+            'last_name' => $lastName,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => User::ROLE_STUDENT,
@@ -50,6 +60,7 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
 
         Auth::login($user);
+        ActivityLog::recordRelationChange($request, $user, 'roles', [], $user->getRoleNames()->all());
 
         return redirect(route('dashboard', absolute: false));
     }

@@ -10,6 +10,7 @@ use App\Models\PropertyAsset;
 use App\Models\SchoolNotification;
 use App\Models\Student;
 use App\Models\StudentReward;
+use App\Services\ArchiveService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -212,7 +213,11 @@ class DashboardController extends Controller
     public function destroyMarketplaceItem(Request $request, MarketplaceItem $item): RedirectResponse
     {
         $this->authorizeMarketplaceItem($request, $item);
-        $item->delete();
+
+        DB::transaction(function () use ($item, $request): void {
+            ArchiveService::record($item, $request->user()->id, 'web.marketplace', $item->title);
+            $item->delete();
+        });
 
         return redirect()->route('property-custodian.market')->with('status', 'Marketplace item removed.');
     }
@@ -465,5 +470,4 @@ class DashboardController extends Controller
             ->all();
     }
 }
-
 

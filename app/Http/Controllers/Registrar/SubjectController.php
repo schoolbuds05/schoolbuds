@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Registrar;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
+use App\Models\ActivityLog;
 use App\Models\Course;
+use App\Models\SectionSubject;
 use App\Models\Subject;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
@@ -94,7 +96,15 @@ class SubjectController extends Controller
         $subject = Subject::create($data);
 
         if ($request->filled('prerequisite_ids')) {
+            $prerequisitesBefore = [];
             $subject->prerequisites()->sync($request->input('prerequisite_ids'));
+            ActivityLog::recordRelationChange(
+                $request,
+                $subject,
+                'prerequisites',
+                $prerequisitesBefore,
+                $subject->prerequisites()->allRelatedIds()->all()
+            );
         }
 
         return back()->with('status', 'Subject created.');
@@ -104,11 +114,19 @@ class SubjectController extends Controller
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
+        $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
         $subject->update($this->validated($request));
 
         $prerequisiteIds = $request->input('prerequisite_ids', []);
         $prerequisiteIds = array_filter((array) $prerequisiteIds, fn($id) => (int) $id !== $subject->id);
         $subject->prerequisites()->sync($prerequisiteIds);
+        ActivityLog::recordRelationChange(
+            $request,
+            $subject,
+            'prerequisites',
+            $prerequisitesBefore,
+            $subject->prerequisites()->allRelatedIds()->all()
+        );
 
         return back()->with('status', 'Subject updated.');
     }
@@ -118,9 +136,13 @@ class SubjectController extends Controller
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
         ArchiveService::record($subject, $request->user()?->id, 'web.subjects');
-        $subject->sectionSubjects()->delete();
+        $subject->sectionSubjects()->get()->each(fn (SectionSubject $sectionSubject) => $sectionSubject->delete());
+        $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
+        $requiredByBefore = $subject->requiredBy()->allRelatedIds()->all();
         $subject->prerequisites()->detach();
         $subject->requiredBy()->detach();
+        ActivityLog::recordRelationChange($request, $subject, 'prerequisites', $prerequisitesBefore, []);
+        ActivityLog::recordRelationChange($request, $subject, 'required_by', $requiredByBefore, []);
         $subject->delete();
 
         return back()->with('status', 'Subject removed.');

@@ -165,16 +165,38 @@ class DashboardController extends Controller
         return back()->with('status', 'Class work created.');
     }
 
-    public function market()
+    public function market(Request $request)
     {
+        $view = $request->query('view') === 'orders' ? 'orders' : 'browse';
+        $categories = ['books', 'uniforms', 'electronics', 'supplies', 'other'];
+        $category = in_array($request->query('category'), $categories, true)
+            ? $request->query('category')
+            : '';
+        $search = trim((string) $request->query('search', ''));
+
         $items = MarketplaceItem::query()
             ->with('seller:id,name')
             ->where('approval_status', 'approved')
             ->where('status', 'available')
+            ->when($category !== '', fn ($query) => $query->where('category', $category))
+            ->when($search !== '', function ($query) use ($search) {
+                $term = addcslashes($search, '%_');
+                $query->where(fn ($match) => $match
+                    ->where('title', 'like', "%{$term}%")
+                    ->orWhere('description', 'like', "%{$term}%"));
+            })
             ->latest()
-            ->paginate(12);
+            ->paginate(16)
+            ->withQueryString();
 
-        return view('teacher.market', compact('items'));
+        $orders = MarketplaceOrder::query()
+            ->with(['item.seller:id,name', 'seller:id,name'])
+            ->where('buyer_id', $request->user()->id)
+            ->latest()
+            ->paginate(10, ['*'], 'orders_page')
+            ->withQueryString();
+
+        return view('teacher.market', compact('items', 'orders', 'categories', 'category', 'search', 'view'));
     }
 
     public function buyMarketItem(Request $request, MarketplaceItem $item)
@@ -253,7 +275,9 @@ class DashboardController extends Controller
             'message' => "I want to buy {$quantity} x {$item->title}" . ($size ? " (size {$size})" : '') . ". Payment method: {$paymentText}. Please let me know how we can complete the transaction.",
         ]);
 
-        return back()->with('status', "Checkout started for {$item->title}. Order #{$order->id}.");
+        return redirect()
+            ->route('teacher.market', ['view' => 'orders'])
+            ->with('status', "Checkout started for {$item->title}. Order #{$order->id}.");
     }
 
     private function normalizeQuizQuestions(string $type, array $questions): array
