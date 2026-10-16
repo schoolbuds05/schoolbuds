@@ -378,6 +378,27 @@
         syncReference();
     });
 
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+            return;
+        }
+
+        if (event.target.closest('input, textarea, select, [contenteditable="true"]')) {
+            return;
+        }
+
+        const modal = [...document.querySelectorAll('[data-market-modal]')]
+            .find((candidate) => !candidate.classList.contains('hidden'));
+        const navigationButton = modal?.querySelector(
+            event.key === 'ArrowLeft' ? '[data-market-gallery-prev]' : '[data-market-gallery-next]'
+        );
+
+        if (navigationButton) {
+            event.preventDefault();
+            navigationButton.click();
+        }
+    });
+
     document.addEventListener('click', (event) => {
         const openButton = event.target.closest('[data-market-modal-open]');
         const closeButton = event.target.closest('[data-market-modal-close]');

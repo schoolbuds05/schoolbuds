@@ -35,6 +35,7 @@ const EMPTY_FORM = {
 
 const EMPTY_ASSIGNMENT = {
   subject_id: '',
+  subject_ids: [],
   teacher_id: '',
   day: '',
   time_start: '',
@@ -381,6 +382,7 @@ export default function Sections() {
   const fillAssignment = (item) => {
     setAssignment({
       subject_id: String(item.subject_id),
+      subject_ids: [],
       teacher_id: item.teacher_id ? String(item.teacher_id) : '',
       day: item.day ?? '',
       time_start: item.time_start ?? '',
@@ -391,14 +393,32 @@ export default function Sections() {
     setTeacherDropdownOpen(false);
   };
 
+  const toggleAssignmentSubject = (subjectId) => {
+    const id = String(subjectId);
+    setAssignment(prev => {
+      const selectedIds = prev.subject_id ? [] : prev.subject_ids;
+      return {
+        ...EMPTY_ASSIGNMENT,
+        subject_ids: selectedIds.includes(id)
+          ? selectedIds.filter(selectedId => selectedId !== id)
+          : [...selectedIds, id],
+      };
+    });
+  };
+
   const handleAssignSubject = async () => {
     if (!editing?.id) return Alert.alert('Save first', 'Create the section before assigning subjects.');
-    if (!assignment.subject_id) return Alert.alert('Required', 'Select a subject to assign.');
+    if (!assignment.subject_id && assignment.subject_ids.length === 0) {
+      return Alert.alert('Required', 'Select one or more subjects to assign.');
+    }
 
     setAssigning(true);
     try {
+      const subjectSelection = assignment.subject_id
+        ? { subject_id: parseInt(assignment.subject_id, 10) }
+        : { subject_ids: assignment.subject_ids.map(id => parseInt(id, 10)) };
       await api.post(`/sections/${editing.id}/subjects`, {
-        subject_id: parseInt(assignment.subject_id, 10),
+        ...subjectSelection,
         teacher_id: assignment.teacher_id ? parseInt(assignment.teacher_id, 10) : null,
         day: assignment.day.trim() || null,
         time_start: assignment.time_start.trim() || null,
@@ -808,10 +828,15 @@ export default function Sections() {
                 <View style={s.assignBox}>
                   <Text style={s.assignTitle}>
                     {assignment.subject_id && assignedSubjects.some(item => String(item.subject_id) === assignment.subject_id)
-                      ? '✏️ Update Schedule'
-                      : '➕ Add Subject'}
+                      ? '✏️ Update Subject Schedule'
+                      : assignment.subject_ids.length > 0
+                        ? `➕ Add ${assignment.subject_ids.length} Subjects`
+                        : '➕ Add Subjects'}
                   </Text>
                   <Field label="Subject">
+                    {!assignment.subject_id && (
+                      <Text style={s.helperText}>Tap to select multiple subjects. Teacher and schedule can be set for each subject afterward.</Text>
+                    )}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.subjectChoices}>
                       {assignedSubjects
                         .filter(item => String(item.subject_id) === assignment.subject_id)
@@ -823,10 +848,10 @@ export default function Sections() {
                       {availableSubjects.map(subject => (
                         <TouchableOpacity
                           key={subject.id}
-                          style={[s.subjectChoice, String(subject.id) === assignment.subject_id && s.subjectChoiceActive]}
-                          onPress={() => setSchedule('subject_id', String(subject.id))}
+                          style={[s.subjectChoice, assignment.subject_ids.includes(String(subject.id)) && s.subjectChoiceActive]}
+                          onPress={() => toggleAssignmentSubject(subject.id)}
                         >
-                          <Text style={[s.subjectChoiceText, String(subject.id) === assignment.subject_id && s.subjectChoiceTextActive]}>
+                          <Text style={[s.subjectChoiceText, assignment.subject_ids.includes(String(subject.id)) && s.subjectChoiceTextActive]}>
                             {subject.code}
                           </Text>
                         </TouchableOpacity>
@@ -917,7 +942,7 @@ export default function Sections() {
                     )}
                   </Field>
                   <TouchableOpacity style={[s.assignBtn, assigning && { opacity: 0.6 }]} onPress={handleAssignSubject} disabled={assigning}>
-                    {assigning ? <ActivityIndicator color="#fff" /> : <Text style={s.assignBtnText}>💾 Save Subject Schedule</Text>}
+                    {assigning ? <ActivityIndicator color="#fff" /> : <Text style={s.assignBtnText}>{assignment.subject_id ? '💾 Save Subject Schedule' : '📚 Assign Selected Subjects'}</Text>}
                   </TouchableOpacity>
                 </View>
               </View>

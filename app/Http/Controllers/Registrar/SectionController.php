@@ -13,6 +13,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SectionController extends Controller
 {
@@ -101,7 +102,9 @@ class SectionController extends Controller
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
         $data = $request->validate([
-            'subject_id' => ['required', 'integer', 'exists:subjects,id'],
+            'subject_id' => ['required_without:subject_ids', 'nullable', 'integer', 'exists:subjects,id'],
+            'subject_ids' => ['required_without:subject_id', 'array', 'min:1'],
+            'subject_ids.*' => ['required', 'integer', 'distinct', 'exists:subjects,id'],
             'teacher_id' => ['nullable', 'integer', 'exists:users,id'],
             'day' => ['nullable', 'string', 'max:100'],
             'days' => ['nullable', 'array'],
@@ -111,21 +114,29 @@ class SectionController extends Controller
             'room' => ['nullable', 'string', 'max:50'],
         ]);
 
-        SectionSubject::updateOrCreate(
-            [
-                'section_id' => $section->id,
-                'subject_id' => $data['subject_id'],
-            ],
-            [
-                'teacher_id' => $data['teacher_id'] ?? null,
-                'day' => !empty($data['days']) ? implode(', ', $data['days']) : ($data['day'] ?? null),
-                'time_start' => $data['time_start'] ?? null,
-                'time_end' => $data['time_end'] ?? null,
-                'room' => $data['room'] ?? null,
-            ]
-        );
+        $subjectIds = $data['subject_ids'] ?? [$data['subject_id']];
 
-        return back()->with('status', 'Subject assigned to section.');
+        DB::transaction(function () use ($section, $subjectIds, $data) {
+            foreach ($subjectIds as $subjectId) {
+                SectionSubject::updateOrCreate(
+                    [
+                        'section_id' => $section->id,
+                        'subject_id' => $subjectId,
+                    ],
+                    [
+                        'teacher_id' => $data['teacher_id'] ?? null,
+                        'day' => !empty($data['days']) ? implode(', ', $data['days']) : ($data['day'] ?? null),
+                        'time_start' => $data['time_start'] ?? null,
+                        'time_end' => $data['time_end'] ?? null,
+                        'room' => $data['room'] ?? null,
+                    ]
+                );
+            }
+        });
+
+        return back()->with('status', count($subjectIds) === 1
+            ? 'Subject assigned to section.'
+            : count($subjectIds).' subjects assigned to section.');
     }
 
     public function removeSubject(Request $request, Section $section, SectionSubject $sectionSubject)

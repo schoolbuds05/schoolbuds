@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,10 @@ import HeaderGradient from '../components/ui/HeaderGradient';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
+const plainQuizText = (value) => String(value ?? '')
+  .normalize('NFKD')
+  .replace(/(\*\*|__|~~|`)(.*?)\1/g, '$2');
+
 export default function StudentAssignments() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -29,6 +33,10 @@ export default function StudentAssignments() {
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [violations, setViolations] = useState([]);
+  const [remainingSeconds, setRemainingSeconds] = useState(null);
+  const timedOutSubmission = useRef(false);
+  const submissionFinal = Boolean(selected?.submission?.submitted_at)
+    || ['submitted', 'graded'].includes(selected?.submission?.status);
 
   const load = useCallback(async () => {
     try {
@@ -47,20 +55,34 @@ export default function StudentAssignments() {
   const open = async (item) => {
     try {
       const res = await api.get(`/assignments/${item.id}`);
-      const assignment = { ...res.data, submission: item.submission };
+      let submission = item.submission;
+      let expiresAt = null;
+      if (res.data.type === 'exam' && !item.submission?.submitted_at) {
+        const started = await api.post(`/assignments/${item.id}/start`);
+        submission = started.data.submission;
+        expiresAt = started.data.expires_at;
+      }
+      const assignment = { ...res.data, submission, expires_at: expiresAt };
+      timedOutSubmission.current = false;
       setSelected(assignment);
-      setAnswerText(item.submission?.answer_text ?? '');
+      setAnswerText(submission?.answer_text ?? '');
       const existing = {};
-      (item.submission?.answers ?? []).forEach((value, index) => { existing[index] = value; });
+      (submission?.answers ?? []).forEach((value, index) => { existing[index] = value; });
       setAnswers(existing);
-      setViolations(item.submission?.violations ?? []);
+      setViolations(submission?.violations ?? []);
+      setRemainingSeconds(null);
     } catch (e) {
       Alert.alert('Could not open', e.response?.data?.message || 'Please try again.');
     }
   };
 
-  const submit = async (overrideViolations = null) => {
+  const submit = useCallback(async (overrideViolations = null, timedOut = false) => {
     if (!selected) return;
+    if (selected.submission?.submitted_at) {
+      Alert.alert('Already submitted', 'This work has already been submitted.');
+      return;
+    }
+
     const activeViolations = Array.isArray(overrideViolations)
       ? overrideViolations
       : Array.isArray(violations) ? violations : [];
@@ -75,14 +97,14 @@ export default function StudentAssignments() {
       },
       recorded_at: String(violation?.recorded_at ?? ''),
     }));
-    const hasAnswer = selected.type === 'quiz'
+    const hasAnswer = ['quiz', 'exam'].includes(selected.type)
       ? quizAnswers.some(answer => answer !== '')
       : answerText.trim() !== '';
 
-    if (!hasAnswer) {
+    if (!hasAnswer && !timedOut) {
       Alert.alert(
         'Answer required',
-        selected.type === 'quiz'
+        ['quiz', 'exam'].includes(selected.type)
           ? 'Select an answer for at least one quiz question before submitting.'
           : 'Write your answer before submitting.'
       );
@@ -92,16 +114,22 @@ export default function StudentAssignments() {
     setSubmitting(true);
     try {
       await api.post(`/assignments/${selected.id}/submit`, {
-        answer_text: selected.type === 'quiz' ? null : answerText.trim(),
-        answers: selected.type === 'quiz' ? quizAnswers : null,
+        answer_text: ['quiz', 'exam'].includes(selected.type) ? null : answerText.trim(),
+        answers: ['quiz', 'exam'].includes(selected.type) ? quizAnswers : null,
         violation_count: activeViolations.length,
         violations: quizViolations,
-        auto_submit: selected.type === 'quiz' && activeViolations.length >= 3,
+        auto_submit: ['quiz', 'exam'].includes(selected.type) && activeViolations.length >= 3,
       });
       setSelected(null);
       await load();
-      Alert.alert('Submitted', 'Your work has been submitted.');
+      Alert.alert(timedOut ? 'Time is up' : 'Submitted', timedOut ? 'Your exam was submitted when the time limit ended.' : 'Your work has been submitted.');
     } catch (e) {
+      if (timedOut && e.response?.status === 409) {
+        setSelected(null);
+        await load();
+        Alert.alert('Time is up', 'Your exam was submitted when the time limit ended.');
+        return;
+      }
       const responseMessage = e.response?.data?.message;
       const failureMessage = responseMessage
         || (e.response
@@ -112,10 +140,55 @@ export default function StudentAssignments() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [selected, violations, answers, answerText, load]);
 
   useEffect(() => {
-    if (!selected || selected.type !== 'quiz') return undefined;
+    if (
+      !selected
+      || selected.type !== 'exam'
+      || selected.submission?.submitted_at
+      || !selected.expires_at
+    ) return undefined;
+
+    const updateRemainingTime = () => {
+      setRemainingSeconds(Math.max(0, Math.ceil((Date.parse(selected.expires_at) - Date.now()) / 1000)));
+    };
+    updateRemainingTime();
+    const timer = setInterval(updateRemainingTime, 1000);
+    return () => clearInterval(timer);
+  }, [selected]);
+
+  useEffect(() => {
+    const isSubmitted = Boolean(selected?.submission?.submitted_at)
+      || ['submitted', 'graded'].includes(selected?.submission?.status);
+    if (selected?.type === 'exam' && !isSubmitted && remainingSeconds === 0 && !submitting && !timedOutSubmission.current) {
+      timedOutSubmission.current = true;
+      submit(null, true);
+    }
+  }, [remainingSeconds, selected, submitting, submit]);
+
+  useEffect(() => {
+    const isSubmitted = Boolean(selected?.submission?.submitted_at)
+      || ['submitted', 'graded'].includes(selected?.submission?.status);
+    if (!selected || selected.type !== 'exam' || isSubmitted) return undefined;
+
+    const timer = setTimeout(() => {
+      api.put(`/assignments/${selected.id}/progress`, {
+        answers: (selected.questions ?? []).map((_, index) => String(answers[index] ?? '').trim()),
+      }).catch(error => {
+        console.log('Exam progress save failed:', error.response?.data ?? error.message);
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [selected, answers, submissionFinal]);
+
+  useEffect(() => {
+    if (
+      !selected
+      || !['quiz', 'exam'].includes(selected.type)
+      || selected.submission?.submitted_at
+      || ['submitted', 'graded'].includes(selected.submission?.status)
+    ) return undefined;
 
     const subscription = AppState.addEventListener('change', async (state) => {
       if (state !== 'background') return;
@@ -126,27 +199,42 @@ export default function StudentAssignments() {
         recorded_at: new Date().toISOString(),
       };
       const nextViolations = [...violations, violation];
-      setViolations(nextViolations);
+      const currentAnswers = (selected.questions ?? []).map((_, index) =>
+        String(answers[index] ?? '').trim()
+      );
 
       try {
-        await api.post(`/assignments/${selected.id}/violation`, {
+        const response = await api.post(`/assignments/${selected.id}/violation`, {
           type: violation.type,
           details: violation.details,
+          answers: currentAnswers,
         });
-      } catch (e) {
-        console.log('Quiz violation report failed:', e.message);
-      }
+        const submission = response.data;
+        setViolations(submission?.violations ?? nextViolations);
 
-      if (nextViolations.length >= 3) {
-        Alert.alert('Quiz flagged', 'This quiz was auto-submitted for teacher review after repeated app switching.');
-        await submit(nextViolations);
-      } else {
-        Alert.alert('Stay in quiz', `App switching is recorded during quizzes. Warning ${nextViolations.length}/3.`);
+        if (submission?.submitted_at) {
+          setSelected(null);
+          await load();
+          Alert.alert(
+            selected.type === 'exam' ? 'Exam flagged' : 'Quiz flagged',
+            'Your answers were auto-submitted for teacher review after repeated app switching.'
+          );
+          return;
+        }
+
+        const violationCount = Number(submission?.violation_count ?? nextViolations.length);
+        Alert.alert('Stay in quiz', `App switching is recorded during quizzes. Warning ${violationCount}/3.`);
+      } catch (e) {
+        console.log('Quiz violation report failed:', e.response?.data ?? e.message);
+        Alert.alert(
+          'Could not record quiz activity',
+          e.response?.data?.message || 'Your quiz activity could not be recorded. Check your connection and try again.'
+        );
       }
     });
 
     return () => subscription.remove();
-  }, [selected, violations]);
+  }, [selected, violations, answers, load]);
 
   if (loading) {
     return (
@@ -160,7 +248,6 @@ export default function StudentAssignments() {
   const quizReviewReady = selected?.submission?.status === 'graded'
     && selected?.submission?.score !== null
     && selected?.submission?.score !== undefined;
-
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       <HeaderGradient
@@ -193,7 +280,7 @@ export default function StudentAssignments() {
             </View>
             <Text style={[s.title, { color: theme.text }]}>{item.title}</Text>
             <Text style={[s.sub, { color: theme.textSub }]}>
-              {item.section_subject?.subject?.code || 'Subject'} · {item.teacher?.name || 'Teacher'} · {item.due_at ? new Date(item.due_at).toLocaleString() : 'No due date'}
+              {item.type.toUpperCase()} · {item.section_subject?.subject?.code || 'Subject'} · {item.teacher?.name || 'Teacher'} · {item.due_at ? new Date(item.due_at).toLocaleString() : 'No due date'}
             </Text>
             {item.submission?.score !== null && item.submission?.score !== undefined ? (
               <Text style={[s.score, { color: theme.success }]}>Score: {item.submission.score}/{item.points_possible}</Text>
@@ -207,7 +294,10 @@ export default function StudentAssignments() {
           <View style={[s.detailHeader, { paddingTop: insets.top + 10, paddingLeft: Math.max(insets.left, 16), paddingRight: Math.max(insets.right, 16), backgroundColor: theme.card, borderBottomColor: theme.border }]}>
             <View style={s.detailHeading}>
               <Text style={[s.modalTitle, { color: theme.text }]}>{selected?.title}</Text>
-              <Text style={[s.sub, { color: theme.textSub }]}>{selected?.type} · {Number(selected?.points_possible || 0).toFixed(0)} pts</Text>
+              <Text style={[s.sub, { color: theme.textSub }]}>
+                {selected?.type} · {Number(selected?.points_possible || 0).toFixed(0)} pts
+                {selected?.type === 'exam' ? ` · ${selected.duration_minutes} min` : ''}
+              </Text>
             </View>
             <TouchableOpacity style={[s.closeBtn, { backgroundColor: theme.bg }]} onPress={() => setSelected(null)}>
               <Text style={[s.closeText, { color: theme.text }]}>X</Text>
@@ -217,9 +307,16 @@ export default function StudentAssignments() {
             contentContainerStyle={[s.detailBody, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}
             keyboardShouldPersistTaps="handled"
           >
-            {selected?.type === 'quiz' && violations.length ? (
+            {selected?.type === 'exam' && !submissionFinal && remainingSeconds !== null ? (
+              <View style={[s.warningCard, { borderColor: remainingSeconds < 60 ? theme.danger : theme.primary }]}>
+                <Text style={[s.warningText, { color: remainingSeconds < 60 ? theme.danger : theme.primary }]}>
+                  Time remaining: {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, '0')}
+                </Text>
+              </View>
+            ) : null}
+            {['quiz', 'exam'].includes(selected?.type) && violations.length ? (
               <View style={[s.warningCard, { borderColor: theme.warning }]}>
-                <Text style={[s.warningText, { color: theme.warning }]}>Quiz warnings: {violations.length}/3</Text>
+                <Text style={[s.warningText, { color: theme.warning }]}>{selected.type === 'exam' ? 'Exam' : 'Quiz'} warnings: {violations.length}/3</Text>
               </View>
             ) : null}
             <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -233,7 +330,7 @@ export default function StudentAssignments() {
               </View>
             ) : null}
 
-            {selected?.type === 'quiz' ? (
+            {['quiz', 'exam'].includes(selected?.type) ? (
               (selected?.questions ?? []).map((question, index) => {
                 const questionChoices = Array.isArray(question.choices) ? question.choices : [];
                 const studentAnswer = String(selected?.submission?.answers?.[index] ?? '').trim();
@@ -242,26 +339,24 @@ export default function StudentAssignments() {
 
                 return (
                   <View key={index} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                    <Text style={[s.questionTitle, { color: theme.text }]}>{index + 1}. {question.question}</Text>
-                    {questionChoices.map(choice => {
+                    <Text style={[s.questionTitle, { color: theme.text }]}>{index + 1}. {plainQuizText(question.question)}</Text>
+                    {questionChoices.map((choice, choiceIndex) => {
                       const isSelected = answers[index] === choice;
                       const isCorrectChoice = quizReviewReady
                         && String(choice).trim().toLowerCase() === correctAnswer.toLowerCase();
                       const borderColor = quizReviewReady
                         ? isCorrectChoice ? theme.success : isSelected ? theme.danger : theme.border
                         : isSelected ? theme.primary : theme.border;
-                      const choiceColor = quizReviewReady
-                        ? isCorrectChoice ? theme.success : isSelected ? theme.danger : theme.textSub
-                        : isSelected ? theme.primary : theme.textSub;
 
                       return (
                         <TouchableOpacity
                           key={choice}
                           style={[s.choice, { borderColor, backgroundColor: isSelected ? theme.primaryLight : theme.bg }]}
-                          onPress={() => !quizReviewReady && setAnswers(current => ({ ...current, [index]: choice }))}
-                          disabled={quizReviewReady}
+                          onPress={() => !quizReviewReady && !submissionFinal && setAnswers(current => ({ ...current, [index]: choice }))}
+                          disabled={quizReviewReady || submissionFinal}
                         >
-                          <Text style={[s.choiceText, { color: choiceColor }]}>{choice}</Text>
+                          <Text style={[s.choiceLetter, { color: theme.text }]}>{String.fromCharCode(65 + choiceIndex)}.</Text>
+                          <Text style={[s.choiceText, { color: theme.text }]}>{plainQuizText(choice)}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -272,7 +367,7 @@ export default function StudentAssignments() {
                         onChangeText={value => setAnswers(current => ({ ...current, [index]: value }))}
                         placeholder="Your answer"
                         placeholderTextColor={theme.textMuted}
-                        editable={!quizReviewReady}
+                        editable={!quizReviewReady && !submissionFinal}
                       />
                     ) : null}
                     {quizReviewReady ? (
@@ -294,13 +389,20 @@ export default function StudentAssignments() {
                   placeholderTextColor={theme.textMuted}
                   multiline
                   textAlignVertical="top"
+                  editable={!submissionFinal}
                 />
               </View>
             )}
 
-            <TouchableOpacity style={[s.submitBtn, { backgroundColor: theme.primary }]} onPress={submit} disabled={submitting}>
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>{selected?.submission ? 'Resubmit' : 'Submit'}</Text>}
-            </TouchableOpacity>
+            {submissionFinal ? (
+              <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[s.sub, { color: theme.textSub }]}>Submitted. You cannot submit this work again.</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={[s.submitBtn, { backgroundColor: theme.primary }]} onPress={submit} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.submitText}>Submit</Text>}
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -332,8 +434,9 @@ const s = StyleSheet.create({
   questionTitle: { fontSize: 16, fontWeight: '900', lineHeight: 23 },
   input: { borderWidth: 1, borderRadius: 12, minHeight: 46, paddingHorizontal: 12, fontSize: 14, marginTop: 12 },
   textarea: { minHeight: 140, paddingTop: 12 },
-  choice: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginTop: 10, width: '100%' },
-  choiceText: { fontSize: 14, fontWeight: '700', lineHeight: 20, flexShrink: 1 },
+  choice: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginTop: 10, width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  choiceLetter: { fontSize: 14, fontWeight: '900', lineHeight: 20 },
+  choiceText: { flex: 1, fontSize: 14, fontWeight: '400', lineHeight: 20 },
   submitBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   submitText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });

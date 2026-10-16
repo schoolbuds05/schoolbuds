@@ -190,6 +190,8 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
     Route::get('/assignments',                  [TeacherDashboard::class, 'assignments'])->name('assignments');
     Route::post('/assignments/generate-quiz', [AssignmentController::class, 'generateQuiz'])->name('assignments.generate-quiz');
     Route::post('/assignments',                 [TeacherDashboard::class, 'storeAssignment'])->name('assignments.store');
+    Route::post('/assignments/{assignment}/publish', [TeacherDashboard::class, 'publishAssignment'])->name('assignments.publish');
+    Route::put('/assignments/{assignment}/draft', [TeacherDashboard::class, 'updateDraftAssignment'])->name('assignments.draft.update');
     Route::get('/market',                       [TeacherDashboard::class, 'market'])->name('market');
     Route::post('/market/{item}/buy',           [TeacherDashboard::class, 'buyMarketItem'])->name('market.buy');
     Route::get('/chat',                         [TeacherDashboard::class, 'chat'])->name('chat');

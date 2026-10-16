@@ -17,6 +17,7 @@ use App\Models\Attendance;
 use App\Models\TeacherMessage;
 use App\Services\GradeWorkflowService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
@@ -135,34 +136,155 @@ class DashboardController extends Controller
     {
         $data = $request->validate([
             'section_subject_id' => ['required', 'integer', Rule::in($this->currentTermSectionSubjects((int) $request->user()->id)->pluck('id')->all())],
-            'type' => ['required', Rule::in(['assignment', 'quiz'])],
+            'type' => ['required', Rule::in(['assignment', 'quiz', 'exam'])],
             'title' => ['required', 'string', 'max:160'],
             'instructions' => ['nullable', 'string', 'max:5000'],
             'points_possible' => ['required', 'numeric', 'min:1', 'max:1000'],
             'due_at' => ['nullable', 'date'],
+            'duration_minutes' => ['required_if:type,exam', 'nullable', 'integer', 'min:1', 'max:300'],
             'allow_file_upload' => ['nullable', 'boolean'],
-            'questions' => ['nullable', 'array'],
+            'questions' => ['required_if:type,exam', 'nullable', 'array', 'min:1', 'max:50'],
             'questions.*.question' => ['required_with:questions', 'string', 'max:1000'],
-            'questions.*.choices' => ['nullable', 'array'],
-            'questions.*.choices.*' => ['nullable', 'string', 'max:500'],
-            'questions.*.answer' => ['nullable', 'string', 'max:500'],
+            'questions.*.choices' => ['required_if:type,exam', 'nullable', 'array', 'min:2', 'max:6'],
+            'questions.*.choices.*' => ['required_if:type,exam', 'nullable', 'string', 'max:500'],
+            'questions.*.answer' => ['required_if:type,exam', 'nullable', 'string', 'max:500'],
             'status' => ['required', Rule::in(['draft', 'published', 'closed'])],
         ]);
 
-        $questions = $this->normalizeQuizQuestions($data['type'], $data['questions'] ?? []);
-
-        if ($data['type'] === 'quiz' && $questions === []) {
-            return back()->withErrors(['questions' => 'Add at least one question for this quiz.'])->withInput();
+        if ($data['type'] === 'exam') {
+            foreach ($data['questions'] as $index => $question) {
+                $choices = array_values(array_filter(
+                    array_map(fn ($choice) => trim((string) $choice), $question['choices'] ?? []),
+                    fn ($choice) => $choice !== ''
+                ));
+                $answer = trim((string) ($question['answer'] ?? ''));
+                $answerIndex = array_search(mb_strtolower($answer), array_map('mb_strtolower', $choices), true);
+                if ($answerIndex === false && preg_match('/^[A-F]$/i', $answer)) {
+                    $answerIndex = ord(strtoupper($answer)) - 65;
+                }
+                if ($answerIndex === false || !isset($choices[$answerIndex])) {
+                    return back()
+                        ->withErrors(["questions.{$index}.answer" => 'Choose the correct answer from the choices.'])
+                        ->withInput();
+                }
+            }
         }
 
-        ClassAssignment::create([
+        $questions = $this->normalizeQuizQuestions($data['type'], $data['questions'] ?? []);
+
+        if (in_array($data['type'], ['quiz', 'exam'], true) && $questions === []) {
+            return back()->withErrors(['questions' => 'Add at least one valid multiple-choice question.'])->withInput();
+        }
+
+        $assignment = ClassAssignment::create([
             ...$data,
             'teacher_id' => $request->user()->id,
             'allow_file_upload' => $request->boolean('allow_file_upload'),
             'questions' => $questions,
         ]);
 
+        if ($assignment->status === 'published') {
+            $this->notifyAssignmentStudents($assignment);
+        }
+
         return back()->with('status', 'Class work created.');
+    }
+
+    public function publishAssignment(Request $request, ClassAssignment $assignment)
+    {
+        abort_unless((int) $assignment->teacher_id === (int) $request->user()->id, 403);
+        if ($assignment->status !== 'draft') {
+            return back()->withErrors(['assignment' => 'Only draft class work can be published.']);
+        }
+
+        $assignment->update(['status' => 'published']);
+        $this->notifyAssignmentStudents($assignment);
+
+        return back()->with('status', 'Class work published.');
+    }
+
+    public function updateDraftAssignment(Request $request, ClassAssignment $assignment)
+    {
+        abort_unless((int) $assignment->teacher_id === (int) $request->user()->id, 403);
+        abort_unless(
+            $assignment->status === 'draft' && in_array($assignment->type, ['quiz', 'exam'], true),
+            404
+        );
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:160'],
+            'instructions' => ['nullable', 'string', 'max:5000'],
+            'points_possible' => ['required', 'numeric', 'min:1', 'max:1000'],
+            'due_at' => ['nullable', 'date'],
+            'duration_minutes' => [
+                Rule::requiredIf($assignment->type === 'exam'),
+                'nullable',
+                'integer',
+                'min:1',
+                'max:300',
+            ],
+            'questions' => ['required', 'array', 'min:1', 'max:50'],
+            'questions.*.question' => ['required', 'string', 'max:1000'],
+            'questions.*.choices' => ['required', 'array', 'min:2', 'max:6'],
+            'questions.*.choices.*' => ['nullable', 'string', 'max:500'],
+            'questions.*.answer' => ['required', 'string', 'max:500'],
+        ]);
+
+        foreach ($data['questions'] as $index => $question) {
+            $choices = array_values(array_filter(
+                array_map(fn ($choice) => trim((string) $choice), $question['choices'] ?? []),
+                fn ($choice) => $choice !== ''
+            ));
+            $answer = trim((string) $question['answer']);
+            $answerIndex = array_search(mb_strtolower($answer), array_map('mb_strtolower', $choices), true);
+            if ($answerIndex === false && preg_match('/^[A-F]$/i', $answer)) {
+                $answerIndex = ord(strtoupper($answer)) - 65;
+            }
+            if (count($choices) < 2 || $answerIndex === false || !isset($choices[$answerIndex])) {
+                return back()
+                    ->withErrors(["questions.{$index}.answer" => 'Choose the correct answer from the choices.'])
+                    ->withInput();
+            }
+        }
+
+        $questions = $this->normalizeQuizQuestions($assignment->type, $data['questions']);
+        if (count($questions) !== count($data['questions'])) {
+            return back()
+                ->withErrors(['questions' => 'Every question needs text, at least two choices, and a valid correct answer.'])
+                ->withInput();
+        }
+
+        $assignment->update([
+            'title' => $data['title'],
+            'instructions' => $data['instructions'] ?? null,
+            'points_possible' => $data['points_possible'],
+            'due_at' => $data['due_at'] ?? null,
+            'duration_minutes' => $assignment->type === 'exam' ? $data['duration_minutes'] : null,
+            'questions' => $questions,
+        ]);
+
+        return back()->with('status', 'Draft questions saved. You can continue editing or publish when ready.');
+    }
+
+    private function notifyAssignmentStudents(ClassAssignment $assignment): void
+    {
+        $sectionId = $assignment->sectionSubject?->section_id
+            ?? $assignment->sectionSubject()->value('section_id');
+        $userIds = DB::table('section_students')
+            ->where('section_id', $sectionId)
+            ->where('status', 'enrolled')
+            ->pluck('user_id');
+
+        foreach ($userIds as $userId) {
+            SchoolNotification::create([
+                'user_id' => $userId,
+                'type' => 'assignment_posted',
+                'title' => 'New class work',
+                'body' => "{$assignment->title} is now available.",
+                'channels' => ['in_app'],
+                'data' => ['assignment_id' => $assignment->id],
+            ]);
+        }
     }
 
     public function market(Request $request)
@@ -282,7 +404,7 @@ class DashboardController extends Controller
 
     private function normalizeQuizQuestions(string $type, array $questions): array
     {
-        if ($type !== 'quiz') {
+        if (!in_array($type, ['quiz', 'exam'], true)) {
             return [];
         }
 

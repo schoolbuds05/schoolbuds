@@ -16,6 +16,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
+use Smalot\PdfParser\Parser as PdfParser;
 use ZipArchive;
 
 class AssignmentController extends Controller
@@ -40,18 +41,42 @@ class AssignmentController extends Controller
 
         $data = $request->validate([
             'section_subject_id' => ['required', 'integer', 'exists:section_subjects,id'],
-            'type' => ['required', Rule::in(['assignment', 'quiz'])],
+            'type' => ['required', Rule::in(['assignment', 'quiz', 'exam'])],
             'title' => ['required', 'string', 'max:160'],
             'instructions' => ['nullable', 'string', 'max:5000'],
             'points_possible' => ['required', 'numeric', 'min:1', 'max:1000'],
             'due_at' => ['nullable', 'date'],
+            'duration_minutes' => ['required_if:type,exam', 'nullable', 'integer', 'min:1', 'max:300'],
             'allow_file_upload' => ['nullable', 'boolean'],
-            'questions' => ['nullable', 'array'],
+            'questions' => ['required_if:type,exam', 'nullable', 'array', 'min:1', 'max:50'],
             'questions.*.question' => ['required_with:questions', 'string', 'max:1000'],
-            'questions.*.choices' => ['nullable', 'array'],
-            'questions.*.answer' => ['nullable', 'string', 'max:500'],
+            'questions.*.choices' => ['required_if:type,exam', 'nullable', 'array', 'min:2', 'max:6'],
+            'questions.*.choices.*' => ['required_if:type,exam', 'string', 'max:500'],
+            'questions.*.answer' => ['required_if:type,exam', 'nullable', 'string', 'max:500'],
             'status' => ['nullable', Rule::in(['draft', 'published', 'closed'])],
         ]);
+
+        if ($data['type'] === 'exam') {
+            foreach ($data['questions'] as $index => &$question) {
+                $answer = mb_strtolower(trim((string) ($question['answer'] ?? '')));
+                $choices = array_map(
+                    fn ($choice) => mb_strtolower(trim((string) $choice)),
+                    $question['choices'] ?? []
+                );
+                $answerIndex = array_search($answer, $choices, true);
+                if ($answerIndex === false && preg_match('/^[A-F]$/i', $answer)) {
+                    $answerIndex = ord(strtoupper($answer)) - 65;
+                }
+                if ($answer === '' || !isset($question['choices'][$answerIndex])) {
+                    return response()->json([
+                        'message' => 'Each exam answer must match one of its choices or use its A-F letter.',
+                        'errors' => ["questions.{$index}.answer" => ['Choose a correct answer from the question choices.']],
+                    ], 422);
+                }
+                $question['answer'] = $question['choices'][$answerIndex];
+            }
+            unset($question);
+        }
 
         $sectionSubject = $this->teacherSectionSubject($request, (int) $data['section_subject_id']);
 
@@ -62,7 +87,9 @@ class AssignmentController extends Controller
             'status' => $data['status'] ?? 'published',
         ]);
 
-        $this->notifyEnrolledStudents($assignment, 'New class work', "{$assignment->title} is now available.");
+        if ($assignment->status === 'published') {
+            $this->notifyEnrolledStudents($assignment, 'New class work', "{$assignment->title} is now available.");
+        }
 
         return response()->json($assignment->load(['sectionSubject.section', 'sectionSubject.subject']), 201);
     }
@@ -73,18 +100,31 @@ class AssignmentController extends Controller
 
         $data = $request->validate([
             'module_text' => ['nullable', 'string', 'max:30000'],
-            'module_file' => ['nullable', 'file', 'mimes:txt,pdf,doc,docx', 'max:10240'],
-            'question_count' => ['nullable', 'integer', 'min:3', 'max:20'],
+            'module_file' => ['nullable', 'file', 'mimes:txt,pdf,docx', 'max:10240'],
+            'question_count' => ['nullable', 'integer', 'min:3', 'max:50'],
         ]);
 
         $content = trim((string) ($data['module_text'] ?? ''));
         if ($request->hasFile('module_file')) {
-            $content .= "\n\n" . $this->extractModuleText($request->file('module_file')->getRealPath(), $request->file('module_file')->getClientOriginalExtension());
+            try {
+                $content .= "\n\n" . $this->extractModuleText(
+                    $request->file('module_file')->getRealPath(),
+                    $request->file('module_file')->getClientOriginalExtension()
+                );
+            } catch (\Exception $exception) {
+                report($exception);
+
+                return response()->json([
+                    'message' => 'Could not read the uploaded file. Make sure the PDF is not password-protected or corrupted.',
+                ], 422);
+            }
         }
 
         $content = trim($content);
         if ($content === '') {
-            return response()->json(['message' => 'Add module text or upload a readable TXT/DOCX file.'], 422);
+            return response()->json([
+                'message' => 'No readable text was found. Scanned or image-only PDFs are not supported; add lesson text or upload a text-based PDF, TXT, or DOCX file.',
+            ], 422);
         }
 
         $key = config('services.groq.key');
@@ -93,60 +133,94 @@ class AssignmentController extends Controller
         }
 
         $count = (int) ($data['question_count'] ?? 10);
-        try {
-            $response = Http::withOptions([
-                'verify' => config('services.groq.ca_bundle') ?: true,
-            ])->withHeaders([
-                'Authorization' => 'Bearer ' . $key,
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post('https://api.groq.com/openai/v1/chat/completions', [
-                'model' => 'openai/gpt-oss-20b',
-                'max_tokens' => 4096,
-                'temperature' => 0.4,
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => 'Return only valid JSON. Generate multiple-choice quiz questions from teacher module content.',
+        $questions = [];
+        foreach (array_chunk(range(1, $count), 10) as $batch) {
+            $batchCount = count($batch);
+            try {
+                $response = Http::withOptions([
+                    'verify' => config('services.groq.ca_bundle') ?: true,
+                ])->withHeaders([
+                    'Authorization' => 'Bearer ' . $key,
+                    'Content-Type' => 'application/json',
+                ])->timeout(60)->post('https://api.groq.com/openai/v1/chat/completions', [
+                    'model' => 'openai/gpt-oss-20b',
+                    'max_tokens' => 4096,
+                    'temperature' => 0.4,
+                    'messages' => [
+                        [
+                            'role' => 'system',
+                            'content' => 'Return only valid JSON. Generate multiple-choice quiz questions from teacher module content.',
+                        ],
+                        [
+                            'role' => 'user',
+                            'content' => "Generate exactly {$batchCount} multiple-choice questions. JSON shape: [{\"question\":\"...\",\"choices\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"correct choice\",\"explanation\":\"...\"}]. Module:\n" . mb_substr($content, 0, 24000),
+                        ],
                     ],
-                    [
-                        'role' => 'user',
-                        'content' => "Generate {$count} multiple-choice questions. JSON shape: [{\"question\":\"...\",\"choices\":[\"A\",\"B\",\"C\",\"D\"],\"answer\":\"correct choice\",\"explanation\":\"...\"}]. Module:\n" . mb_substr($content, 0, 24000),
-                    ],
-                ],
-            ]);
-        } catch (ConnectionException $exception) {
-            report($exception);
+                ]);
+            } catch (ConnectionException $exception) {
+                report($exception);
 
-            return response()->json([
-                'message' => "PHP could not verify Groq's TLS certificate. If your antivirus or network inspects HTTPS, configure PHP with that trusted root certificate using GROQ_CA_BUNDLE.",
-            ], 503);
+                return response()->json([
+                    'message' => "PHP could not verify Groq's TLS certificate. If your antivirus or network inspects HTTPS, configure PHP with that trusted root certificate using GROQ_CA_BUNDLE.",
+                ], 503);
+            }
+
+            if (!$response->successful()) {
+                $errorMessage = $response->json('error.message');
+                logger()->error('Groq quiz generation request failed.', [
+                    'status' => $response->status(),
+                    'error' => $errorMessage,
+                ]);
+
+                return response()->json([
+                    'message' => $response->status() === 429
+                        ? 'Groq is temporarily rate-limited. Please wait a moment and try again.'
+                        : ($errorMessage ?: 'Groq could not generate the quiz. Please try again.'),
+                ], $response->status() === 429 ? 429 : 503);
+            }
+
+            $raw = preg_replace('/```json|```/', '', (string) $response->json('choices.0.message.content'));
+            $batchQuestions = json_decode(trim($raw), true);
+            if (!is_array($batchQuestions)) {
+                return response()->json(['message' => 'AI response could not be parsed. Try shorter module text.'], 422);
+            }
+
+            $questions = array_merge($questions, $batchQuestions);
         }
 
-        if (!$response->successful()) {
-            $errorMessage = $response->json('error.message');
-            logger()->error('Groq quiz generation request failed.', [
-                'status' => $response->status(),
-                'error' => $errorMessage,
-            ]);
+        $questions = collect($questions)
+            ->map(function ($item) {
+                if (!is_array($item) || blank($item['question'] ?? null) || !is_array($item['choices'] ?? null)) {
+                    return null;
+                }
+                $choices = array_values(array_filter($item['choices'], fn ($choice) => is_string($choice) && trim($choice) !== ''));
+                if (count($choices) < 2 || count($choices) > 6) {
+                    return null;
+                }
+                $answer = mb_strtolower(trim((string) ($item['answer'] ?? '')));
+                $answerIndex = array_search($answer, array_map('mb_strtolower', $choices), true);
+                if ($answerIndex === false && preg_match('/^[A-F]$/i', $answer)) {
+                    $answerIndex = ord(strtoupper($answer)) - 65;
+                }
+                if ($answerIndex === false || !isset($choices[$answerIndex])) {
+                    return null;
+                }
+                $item['choices'] = $choices;
+                $item['answer'] = $choices[$answerIndex];
 
+                return $item;
+            })
+            ->filter()
+            ->take($count)
+            ->values();
+        if ($questions->count() !== $count) {
             return response()->json([
-                'message' => $response->status() === 429
-                    ? 'Groq is temporarily rate-limited. Please wait a moment and try again.'
-                    : ($errorMessage ?: 'Groq could not generate the quiz. Please try again.'),
-            ], $response->status() === 429 ? 429 : 503);
-        }
-
-        $raw = preg_replace('/```json|```/', '', (string) $response->json('choices.0.message.content'));
-        $questions = json_decode(trim($raw), true);
-        if (!is_array($questions)) {
-            return response()->json(['message' => 'AI response could not be parsed. Try shorter module text.'], 422);
+                'message' => "The AI returned {$questions->count()} of {$count} requested questions. Please retry or choose a smaller number.",
+            ], 422);
         }
 
         return response()->json([
-            'questions' => collect($questions)
-                ->filter(fn ($item) => is_array($item) && !blank($item['question'] ?? null))
-                ->values()
-                ->all(),
+            'questions' => $questions->all(),
         ]);
     }
 
@@ -175,25 +249,165 @@ class AssignmentController extends Controller
         return response()->json($assignment);
     }
 
+    public function startExam(Request $request, ClassAssignment $assignment)
+    {
+        if ($assignment->type !== 'exam' || $assignment->status !== 'published') {
+            return response()->json(['message' => 'This exam is not available.'], 422);
+        }
+
+        $student = $this->studentFor($request->user());
+        if (!$student || !$this->studentCanAccess($request->user(), $assignment)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        if (!$assignment->duration_minutes || empty($assignment->questions)) {
+            return response()->json(['message' => 'This exam does not have a valid time limit. Contact your teacher.'], 422);
+        }
+
+        $submission = DB::transaction(function () use ($request, $assignment, $student) {
+            $submission = AssignmentSubmission::firstOrCreate(
+                [
+                    'class_assignment_id' => $assignment->id,
+                    'student_id' => $student->id,
+                ],
+                [
+                    'user_id' => $request->user()->id,
+                    'status' => 'in_progress',
+                ]
+            );
+            $submission = AssignmentSubmission::whereKey($submission->id)->lockForUpdate()->firstOrFail();
+
+            if (!$submission->started_at && !$submission->submitted_at) {
+                $submission->update(['started_at' => now()]);
+            }
+
+            if (!$submission->submitted_at && $this->examExpired($assignment, $submission)) {
+                $this->finishTimedExam($assignment, $submission, $submission->answers ?? []);
+            }
+
+            return $submission->fresh();
+        });
+
+        return response()->json([
+            'submission' => $submission,
+            'expires_at' => $submission->started_at
+                ? $submission->started_at->copy()->addMinutes((int) $assignment->duration_minutes)->toISOString()
+                : null,
+        ]);
+    }
+
+    public function saveExamProgress(Request $request, ClassAssignment $assignment)
+    {
+        if ($assignment->type !== 'exam') {
+            return response()->json(['message' => 'Progress saving is only available for exams.'], 422);
+        }
+        if ($assignment->status !== 'published' || !$assignment->duration_minutes) {
+            return response()->json(['message' => 'This exam is not accepting answers.'], 422);
+        }
+
+        $student = $this->studentFor($request->user());
+        if (!$student || !$this->studentCanAccess($request->user(), $assignment)) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $data = $request->validate([
+            'answers' => ['required', 'array', 'max:50'],
+            'answers.*' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $submission = DB::transaction(function () use ($request, $assignment, $student, $data) {
+            $submission = AssignmentSubmission::query()
+                ->where('class_assignment_id', $assignment->id)
+                ->where('student_id', $student->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($assignment->status !== 'published') {
+                abort(response()->json(['message' => 'This exam is not accepting answers.'], 422));
+            }
+            if (!$submission || !$submission->started_at) {
+                abort(response()->json(['message' => 'Start the exam before saving answers.'], 409));
+            }
+            if ($submission->submitted_at) {
+                abort(response()->json(['message' => 'This exam has already been submitted.'], 409));
+            }
+
+            if ($this->examExpired($assignment, $submission)) {
+                $this->finishTimedExam($assignment, $submission, $submission->answers ?? []);
+            } else {
+                $submission->update([
+                    'user_id' => $request->user()->id,
+                    'answers' => $data['answers'],
+                ]);
+            }
+
+            return $submission->fresh();
+        });
+
+        return response()->json($submission);
+    }
+
     public function update(Request $request, ClassAssignment $assignment)
     {
         $this->authorizeTeacherAssignment($request, $assignment);
 
         $data = $request->validate([
-            'type' => ['nullable', Rule::in(['assignment', 'quiz'])],
+            'type' => ['nullable', Rule::in(['assignment', 'quiz', 'exam'])],
             'title' => ['nullable', 'string', 'max:160'],
             'instructions' => ['nullable', 'string', 'max:5000'],
             'points_possible' => ['nullable', 'numeric', 'min:1', 'max:1000'],
             'due_at' => ['nullable', 'date'],
+            'duration_minutes' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:300'],
             'allow_file_upload' => ['nullable', 'boolean'],
-            'questions' => ['nullable', 'array'],
+            'questions' => ['nullable', 'array', 'max:50'],
             'questions.*.question' => ['required_with:questions', 'string', 'max:1000'],
-            'questions.*.choices' => ['nullable', 'array'],
+            'questions.*.choices' => ['nullable', 'array', 'min:2', 'max:6'],
+            'questions.*.choices.*' => ['string', 'max:500'],
             'questions.*.answer' => ['nullable', 'string', 'max:500'],
             'status' => ['nullable', Rule::in(['draft', 'published', 'closed'])],
         ]);
 
+        if (($data['type'] ?? $assignment->type) === 'exam') {
+            $duration = $data['duration_minutes'] ?? $assignment->duration_minutes;
+            $questions = $data['questions'] ?? $assignment->questions ?? [];
+            if (!$duration || count($questions) < 1) {
+                return response()->json(['message' => 'Exams require a time limit and at least one question.'], 422);
+            }
+            foreach ($questions as $index => &$question) {
+                $answer = mb_strtolower(trim((string) ($question['answer'] ?? '')));
+                $choices = array_map(
+                    fn ($choice) => mb_strtolower(trim((string) $choice)),
+                    $question['choices'] ?? []
+                );
+                $answerIndex = array_search($answer, $choices, true);
+                if ($answerIndex === false && preg_match('/^[A-F]$/i', $answer)) {
+                    $answerIndex = ord(strtoupper($answer)) - 65;
+                }
+                if (
+                    blank($question['question'] ?? null)
+                    || count($question['choices'] ?? []) < 2
+                    || count($question['choices'] ?? []) > 6
+                    || $answerIndex === false
+                    || !isset($question['choices'][$answerIndex])
+                ) {
+                    return response()->json([
+                        'message' => 'Each exam answer must match one of its choices or use its A-F letter.',
+                        'errors' => ["questions.{$index}.answer" => ['Choose a correct answer from the question choices.']],
+                    ], 422);
+                }
+                $question['answer'] = $question['choices'][$answerIndex];
+            }
+            unset($question);
+            if (array_key_exists('questions', $data)) {
+                $data['questions'] = $questions;
+            }
+        }
+
+        $wasDraft = $assignment->status === 'draft';
         $assignment->update($data);
+        if ($wasDraft && $assignment->status === 'published') {
+            $this->notifyEnrolledStudents($assignment, 'New class work', "{$assignment->title} is now available.");
+        }
 
         return response()->json($assignment->fresh()->load(['sectionSubject.section', 'sectionSubject.subject']));
     }
@@ -278,6 +492,14 @@ class AssignmentController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        $existingSubmission = AssignmentSubmission::where('class_assignment_id', $assignment->id)
+            ->where('student_id', $student->id)
+            ->first();
+
+        if ($existingSubmission?->submitted_at) {
+            return response()->json(['message' => 'This work has already been submitted.'], 409);
+        }
+
         $data = $request->validate([
             'answer_text' => ['nullable', 'string', 'max:10000'],
             'file_url' => ['nullable', 'string', 'max:1000'],
@@ -292,42 +514,91 @@ class AssignmentController extends Controller
         $hasFileAnswer = trim((string) ($data['file_url'] ?? '')) !== '';
         $hasQuizAnswer = collect($data['answers'] ?? [])
             ->contains(fn ($answer) => trim((string) $answer) !== '');
+        $timedOut = false;
+        if ($assignment->type === 'exam') {
+            if (!$existingSubmission?->started_at) {
+                return response()->json(['message' => 'Start the exam before submitting.'], 409);
+            }
+            $timedOut = $this->examExpired($assignment, $existingSubmission);
+            if ($timedOut) {
+                $data['answers'] = $existingSubmission->answers ?? [];
+                $hasQuizAnswer = collect($data['answers'])
+                    ->contains(fn ($answer) => trim((string) $answer) !== '');
+            }
+        }
 
         if (!$hasTextAnswer && !$hasFileAnswer && !$hasQuizAnswer) {
-            return response()->json(['message' => 'Please add an answer before submitting.'], 422);
+            if ($timedOut) {
+                $data['answers'] = [];
+            } else {
+                return response()->json(['message' => 'Please add an answer before submitting.'], 422);
+            }
         }
 
         $plagiarismScore = $this->similarityScore($assignment, $student, $data['answer_text'] ?? '');
-        $autoScore = $assignment->type === 'quiz'
+        $autoScore = in_array($assignment->type, ['quiz', 'exam'], true)
             ? $this->autoScoreQuiz($assignment, $data['answers'] ?? [])
             : null;
-        $existingSubmission = AssignmentSubmission::where('class_assignment_id', $assignment->id)
-            ->where('student_id', $student->id)
-            ->first();
-        $violationCount = max((int) ($data['violation_count'] ?? 0), (int) ($existingSubmission?->violation_count ?? 0));
-        $isFlagged = $request->boolean('auto_submit') || $violationCount >= 3 || $existingSubmission?->status === 'flagged';
+        $submission = DB::transaction(function () use ($request, $assignment, $student, $data, $autoScore, $plagiarismScore) {
+            $submission = AssignmentSubmission::firstOrCreate(
+                [
+                    'class_assignment_id' => $assignment->id,
+                    'student_id' => $student->id,
+                ],
+                [
+                    'user_id' => $request->user()->id,
+                    'status' => 'in_progress',
+                    'submitted_at' => null,
+                ]
+            );
+            $submission = AssignmentSubmission::whereKey($submission->id)->lockForUpdate()->firstOrFail();
 
-        $submission = AssignmentSubmission::updateOrCreate(
-            [
-                'class_assignment_id' => $assignment->id,
-                'student_id' => $student->id,
-            ],
-            [
+            if ($submission->submitted_at) {
+                return null;
+            }
+
+            $violationCount = max((int) ($data['violation_count'] ?? 0), (int) ($submission->violation_count ?? 0));
+            $isFlagged = $request->boolean('auto_submit')
+                || $violationCount >= 3
+                || $submission->status === 'flagged';
+            $examExpired = $assignment->type === 'exam' && $this->examExpired($assignment, $submission);
+            $answers = $data['answers'] ?? null;
+            if ($examExpired) {
+                $answers = $submission->answers ?? [];
+            }
+            $score = in_array($assignment->type, ['quiz', 'exam'], true)
+                ? $this->autoScoreQuiz($assignment, $answers ?? [])
+                : $autoScore;
+
+            $submission->fill([
                 'user_id' => $request->user()->id,
                 'answer_text' => $data['answer_text'] ?? null,
                 'file_url' => $data['file_url'] ?? null,
-                'answers' => $data['answers'] ?? null,
-                'score' => $autoScore,
+                'answers' => $answers,
+                'score' => $score,
                 'plagiarism_score' => $plagiarismScore,
                 'violation_count' => $violationCount,
-                'violations' => $data['violations'] ?? $existingSubmission?->violations,
-                'status' => $isFlagged ? 'flagged' : ($autoScore === null ? 'submitted' : 'graded'),
-                'submitted_at' => now(),
-                'auto_submitted_at' => $isFlagged ? ($existingSubmission?->auto_submitted_at ?? now()) : null,
-                'flagged_at' => $isFlagged ? ($existingSubmission?->flagged_at ?? now()) : null,
-                'graded_at' => $isFlagged || $autoScore === null ? null : now(),
-            ]
-        );
+                'violations' => $data['violations'] ?? $submission->violations,
+                'status' => $isFlagged ? 'flagged' : ($score === null ? 'submitted' : 'graded'),
+                'submitted_at' => $examExpired
+                    ? $submission->started_at->copy()->addMinutes((int) $assignment->duration_minutes)
+                    : now(),
+                'auto_submitted_at' => $isFlagged ? ($submission->auto_submitted_at ?? now()) : null,
+                'flagged_at' => $isFlagged ? ($submission->flagged_at ?? now()) : null,
+                'graded_at' => $isFlagged || $score === null
+                    ? null
+                    : ($examExpired
+                        ? $submission->started_at->copy()->addMinutes((int) $assignment->duration_minutes)
+                        : now()),
+            ]);
+            $submission->save();
+
+            return $submission;
+        });
+
+        if (!$submission) {
+            return response()->json(['message' => 'This work has already been submitted.'], 409);
+        }
 
         SchoolNotification::create([
             'user_id' => $assignment->teacher_id,
@@ -343,8 +614,8 @@ class AssignmentController extends Controller
 
     public function recordViolation(Request $request, ClassAssignment $assignment)
     {
-        if ($assignment->type !== 'quiz') {
-            return response()->json(['message' => 'Violations can only be recorded for quizzes.'], 422);
+        if (!in_array($assignment->type, ['quiz', 'exam'], true)) {
+            return response()->json(['message' => 'Violations can only be recorded for quizzes and exams.'], 422);
         }
 
         $student = $this->studentFor($request->user());
@@ -355,40 +626,81 @@ class AssignmentController extends Controller
         $data = $request->validate([
             'type' => ['required', 'string', 'max:80'],
             'details' => ['nullable', 'array'],
+            'answers' => ['nullable', 'array'],
+            'answers.*' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $submission = AssignmentSubmission::firstOrCreate(
-            [
-                'class_assignment_id' => $assignment->id,
-                'student_id' => $student->id,
-            ],
-            [
-                'user_id' => $request->user()->id,
-                'status' => 'in_progress',
-                'submitted_at' => null,
-            ]
-        );
+        $submission = DB::transaction(function () use ($request, $assignment, $student, $data) {
+            $submission = AssignmentSubmission::firstOrCreate(
+                [
+                    'class_assignment_id' => $assignment->id,
+                    'student_id' => $student->id,
+                ],
+                [
+                    'user_id' => $request->user()->id,
+                    'status' => 'in_progress',
+                    'submitted_at' => null,
+                ]
+            );
+            $submission = AssignmentSubmission::whereKey($submission->id)->lockForUpdate()->firstOrFail();
 
-        $violations = $submission->violations ?? [];
-        $violations[] = [
-            'type' => $data['type'],
-            'details' => $data['details'] ?? [],
-            'recorded_at' => now()->toISOString(),
-        ];
+            if ($submission->submitted_at) {
+                return null;
+            }
 
-        $count = count($violations);
-        $updates = [
-            'violation_count' => $count,
-            'violations' => $violations,
-        ];
+            if ($assignment->type === 'exam') {
+                if (!$submission->started_at) {
+                    abort(response()->json(['message' => 'Start the exam before recording activity.'], 409));
+                }
+                if ($this->examExpired($assignment, $submission)) {
+                    $this->finishTimedExam($assignment, $submission, $submission->answers ?? []);
+                    return $submission->fresh();
+                }
+            }
 
-        if ($count >= 3 && $submission->status !== 'flagged') {
-            $updates['status'] = 'flagged';
-            $updates['auto_submitted_at'] = now();
-            $updates['flagged_at'] = now();
+            $violations = $submission->violations ?? [];
+            $violations[] = [
+                'type' => $data['type'],
+                'details' => $data['details'] ?? [],
+                'recorded_at' => now()->toISOString(),
+            ];
+
+            $count = count($violations);
+            $updates = [
+                'violation_count' => $count,
+                'violations' => $violations,
+            ];
+
+            if ($count >= 3) {
+                $answers = $data['answers'] ?? $submission->answers ?? [];
+                $updates['status'] = 'flagged';
+                $updates['answers'] = $answers;
+                $updates['score'] = $this->autoScoreQuiz($assignment, $answers);
+                $updates['submitted_at'] = now();
+                $updates['auto_submitted_at'] = $submission->auto_submitted_at ?? now();
+                $updates['flagged_at'] = $submission->flagged_at ?? now();
+            }
+
+            $submission->update($updates);
+
+            return $submission;
+        });
+
+        if (!$submission) {
+            return response()->json(['message' => 'This quiz has already been submitted.'], 409);
         }
 
-        $submission->update($updates);
+        $autoSubmitted = $submission->status === 'flagged' && (bool) $submission->submitted_at;
+        if ($autoSubmitted) {
+            SchoolNotification::create([
+                'user_id' => $assignment->teacher_id,
+                'type' => 'assignment_submitted',
+                'title' => 'Submission received',
+                'body' => "{$student->first_name} {$student->last_name} submitted {$assignment->title}.",
+                'channels' => ['in_app'],
+                'data' => ['assignment_id' => $assignment->id, 'submission_id' => $submission->id],
+            ]);
+        }
 
         return response()->json($submission->fresh());
     }
@@ -503,9 +815,7 @@ class AssignmentController extends Controller
         }
 
         if ($extension === 'pdf') {
-            $bytes = (string) file_get_contents($path);
-            preg_match_all('/\(([^()]*)\)\s*Tj/', $bytes, $matches);
-            return trim(implode("\n", $matches[1] ?? []));
+            return trim((new PdfParser())->parseFile($path)->getText());
         }
 
         return '';
@@ -601,6 +911,39 @@ class AssignmentController extends Controller
         $correct = $assignment->correctAnswersCount($answers);
 
         return round(($correct / max(1, $questions->count())) * (float) $assignment->points_possible, 2);
+    }
+
+    private function examExpired(ClassAssignment $assignment, AssignmentSubmission $submission): bool
+    {
+        return $assignment->type === 'exam'
+            && $submission->started_at !== null
+            && now()->greaterThanOrEqualTo(
+                $submission->started_at->copy()->addMinutes((int) $assignment->duration_minutes)
+            );
+    }
+
+    private function finishTimedExam(ClassAssignment $assignment, AssignmentSubmission $submission, array $answers): void
+    {
+        $deadline = $submission->started_at->copy()->addMinutes((int) $assignment->duration_minutes);
+        $submission->update([
+            'answers' => $answers,
+            'score' => $this->autoScoreQuiz($assignment, $answers),
+            'status' => 'graded',
+            'submitted_at' => $deadline,
+            'graded_at' => $deadline,
+        ]);
+
+        $student = $submission->student;
+        if ($student) {
+            SchoolNotification::create([
+                'user_id' => $assignment->teacher_id,
+                'type' => 'assignment_submitted',
+                'title' => 'Submission received',
+                'body' => "{$student->first_name} {$student->last_name} submitted {$assignment->title}.",
+                'channels' => ['in_app'],
+                'data' => ['assignment_id' => $assignment->id, 'submission_id' => $submission->id],
+            ]);
+        }
     }
 
     private function questionsForStudent(ClassAssignment $assignment, ?AssignmentSubmission $submission): array

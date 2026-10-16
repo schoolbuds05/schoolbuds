@@ -16,6 +16,7 @@ use App\Models\SectionSubject;
 use App\Models\User;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class SubjectSectionController extends Controller
@@ -374,7 +375,9 @@ class SubjectSectionController extends Controller
         $this->authorizeRegistrar($request);
 
         $request->validate([
-            'subject_id' => 'required|exists:subjects,id',
+            'subject_id' => 'required_without:subject_ids|nullable|integer|exists:subjects,id',
+            'subject_ids' => 'required_without:subject_id|array|min:1',
+            'subject_ids.*' => 'required|integer|distinct|exists:subjects,id',
             'teacher_id' => 'nullable|exists:users,id',
             'day'        => 'nullable|string|max:100',
             'days'       => 'nullable|array',
@@ -389,12 +392,20 @@ class SubjectSectionController extends Controller
             $data['day'] = implode(', ', $request->days);
         }
 
-        $sectionSubject = SectionSubject::updateOrCreate(
-            ['section_id' => $id, 'subject_id' => $request->subject_id],
-            $data
-        );
+        $subjectIds = $request->input('subject_ids', [$request->input('subject_id')]);
 
-        return response()->json($sectionSubject->load('subject', 'teacher'), 201);
+        $sectionSubjects = DB::transaction(function () use ($id, $subjectIds, $data) {
+            return collect($subjectIds)->map(function ($subjectId) use ($id, $data) {
+                return SectionSubject::updateOrCreate(
+                    ['section_id' => $id, 'subject_id' => $subjectId],
+                    $data
+                )->load('subject', 'teacher');
+            });
+        });
+
+        return count($subjectIds) === 1
+            ? response()->json($sectionSubjects->first(), 201)
+            : response()->json($sectionSubjects->values(), 201);
     }
 
     // DELETE /api/sections/{id}/subjects/{subjectId} — remove subject from section

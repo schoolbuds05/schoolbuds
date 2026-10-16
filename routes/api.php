@@ -81,6 +81,8 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::get('/assignments', [AssignmentController::class, 'studentIndex']);
     Route::get('/assignments/{assignment}', [AssignmentController::class, 'show']);
+    Route::post('/assignments/{assignment}/start', [AssignmentController::class, 'startExam']);
+    Route::put('/assignments/{assignment}/progress', [AssignmentController::class, 'saveExamProgress']);
     Route::post('/assignments/{assignment}/violation', [AssignmentController::class, 'recordViolation']);
     Route::post('/assignments/{assignment}/submit', [AssignmentController::class, 'submit']);
 

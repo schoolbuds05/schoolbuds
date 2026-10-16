@@ -14,6 +14,7 @@ class ClassAssignment extends Model
         'instructions',
         'points_possible',
         'due_at',
+        'duration_minutes',
         'allow_file_upload',
         'questions',
         'status',
@@ -22,6 +23,7 @@ class ClassAssignment extends Model
     protected $casts = [
         'points_possible' => 'decimal:2',
         'due_at' => 'datetime',
+        'duration_minutes' => 'integer',
         'allow_file_upload' => 'boolean',
         'questions' => 'array',
     ];

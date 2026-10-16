@@ -352,28 +352,34 @@
                         <div>
                             <p class="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-500">{{ $section->name }}</p>
                             <h2 class="mt-1 text-xl font-black text-slate-900">Manage subjects</h2>
-                            <p class="mt-1 text-sm text-slate-500">{{ $subjectCount }} assigned subject(s)</p>
+                            <p class="mt-1 text-sm text-slate-500">{{ $subjectCount }} assigned subject(s). Select multiple subjects to add them together.</p>
                         </div>
                         <button type="button" data-modal-close="subjects-modal-{{ $section->id }}" class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-200">Close</button>
                     </div>
                     <div class="grid max-h-[calc(90vh-90px)] gap-5 overflow-y-auto p-5 xl:grid-cols-[1fr_1.15fr]">
                         <div>
-                            <h3 class="text-sm font-black text-slate-900">Add subject schedule</h3>
+                            <h3 class="text-sm font-black text-slate-900">Add subjects</h3>
                             <form method="POST" action="{{ route('registrar.sections.subjects.store', $section) }}" class="mt-3 space-y-3">
                                 @csrf
-                                <select name="subject_id" class="w-full rounded-lg border-slate-300 text-sm" required>
-                                    <option value="">Select subject</option>
-                                    @foreach($eligibleSubjects as $subject)
-                                        @php
-                                            $scope = $isCollege ? ($subject->course ?: 'Any course') : ($subject->strand ?: 'Any strand');
-                                            $level = $subject->year_level ?: 'Any level';
-                                        @endphp
-                                        <option value="{{ $subject->id }}">{{ $subject->code }} - {{ $subject->name }} ({{ $scope }}, {{ $level }})</option>
-                                    @endforeach
-                                </select>
+                                <fieldset>
+                                    <legend class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Select one or more subjects</legend>
+                                    <div class="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-slate-300 bg-white p-2">
+                                        @foreach($eligibleSubjects as $subject)
+                                            @php
+                                                $scope = $isCollege ? ($subject->course ?: 'Any course') : ($subject->strand ?: 'Any strand');
+                                                $level = $subject->year_level ?: 'Any level';
+                                            @endphp
+                                            <label class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50">
+                                                <input type="checkbox" name="subject_ids[]" value="{{ $subject->id }}" {{ $loop->first ? 'required' : '' }} class="mt-0.5 rounded border-slate-300 text-portal-accent">
+                                                <span><span class="font-bold text-slate-800">{{ $subject->code }} - {{ $subject->name }}</span><span class="block text-xs text-slate-500">{{ $scope }}, {{ $level }}</span></span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </fieldset>
                                 @if($eligibleSubjects->isEmpty())
                                     <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">No available subjects match this section course/strand, year/grade and semester.</p>
                                 @endif
+                                <p class="text-xs text-slate-500">You can leave the teacher blank and assign teachers to each subject later.</p>
                                 <select name="teacher_id" class="w-full rounded-lg border-slate-300 text-sm">
                                     <option value="">No teacher</option>
                                     @foreach($teachers as $teacher)
@@ -394,7 +400,7 @@
                                 </div>
                                 <input name="room" placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
                                 <button class="w-full rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-black text-white hover:bg-portal-accent-hover disabled:opacity-50" @disabled($eligibleSubjects->isEmpty())>
-                                    Assign subject
+                                    Assign selected subjects
                                 </button>
                             </form>
                         </div>
@@ -402,21 +408,51 @@
                             <h3 class="text-sm font-black text-slate-900">Currently assigned</h3>
                             <div class="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100">
                                 @forelse($section->sectionSubjects as $assignment)
-                                    <div class="flex items-center justify-between gap-3 p-3">
-                                        <div class="min-w-0">
-                                            <p class="truncate text-sm font-black text-slate-800">{{ $assignment->subject?->code }} - {{ $assignment->subject?->name }}</p>
-                                            <p class="truncate text-xs font-semibold text-slate-500">
-                                                {{ $assignment->teacher?->name ?? 'No teacher' }}
-                                                @if($assignment->day) · {{ $assignment->day }} @endif
-                                                @if($assignment->time_start || $assignment->time_end) · {{ $assignment->time_start }}-{{ $assignment->time_end }} @endif
-                                                @if($assignment->room) · {{ $assignment->room }} @endif
-                                            </p>
+                                    @php $assignmentDays = array_map('trim', explode(',', $assignment->day ?? '')); @endphp
+                                    <div class="p-3">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div class="min-w-0">
+                                                <p class="truncate text-sm font-black text-slate-800">{{ $assignment->subject?->code }} - {{ $assignment->subject?->name }}</p>
+                                                <p class="truncate text-xs font-semibold text-slate-500">
+                                                    {{ $assignment->teacher?->name ?? 'No teacher' }}
+                                                    @if($assignment->day) · {{ $assignment->day }} @endif
+                                                    @if($assignment->time_start || $assignment->time_end) · {{ $assignment->time_start }}-{{ $assignment->time_end }} @endif
+                                                    @if($assignment->room) · {{ $assignment->room }} @endif
+                                                </p>
+                                            </div>
+                                            <form method="POST" action="{{ route('registrar.sections.subjects.destroy', [$section, $assignment]) }}">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Remove</button>
+                                            </form>
                                         </div>
-                                        <form method="POST" action="{{ route('registrar.sections.subjects.destroy', [$section, $assignment]) }}">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Remove</button>
-                                        </form>
+                                        <details class="mt-2">
+                                            <summary class="cursor-pointer text-xs font-bold text-violet-700">Set teacher or edit schedule</summary>
+                                            <form method="POST" action="{{ route('registrar.sections.subjects.store', $section) }}" class="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
+                                                @csrf
+                                                <input type="hidden" name="subject_id" value="{{ $assignment->subject_id }}">
+                                                <select name="teacher_id" class="w-full rounded-lg border-slate-300 text-sm">
+                                                    <option value="">No teacher</option>
+                                                    @foreach($teachers as $teacher)
+                                                        <option value="{{ $teacher->id }}" @selected($assignment->teacher_id === $teacher->id)>{{ $teacher->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                                <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                                                    @foreach(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day)
+                                                        <label class="flex items-center gap-2 font-semibold text-slate-600">
+                                                            <input type="checkbox" name="days[]" value="{{ $day }}" @checked(in_array($day, $assignmentDays, true)) class="rounded border-slate-300 text-violet-600">
+                                                            <span>{{ $day }}</span>
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                    <input type="time" name="time_start" value="{{ $assignment->time_start }}" class="rounded-lg border-slate-300 text-sm">
+                                                    <input type="time" name="time_end" value="{{ $assignment->time_end }}" class="rounded-lg border-slate-300 text-sm">
+                                                </div>
+                                                <input name="room" value="{{ $assignment->room }}" placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
+                                                <button class="w-full rounded-lg bg-portal-accent px-3 py-2 text-xs font-black text-white hover:bg-portal-accent-hover">Save teacher and schedule</button>
+                                            </form>
+                                        </details>
                                     </div>
                                 @empty
                                     <p class="p-4 text-sm font-semibold text-slate-500">No subjects assigned yet.</p>

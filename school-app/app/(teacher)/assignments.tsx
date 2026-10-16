@@ -23,6 +23,8 @@ const EMPTY_FORM = {
   instructions: '',
   points_possible: '100',
   due_at: '',
+  duration_minutes: '60',
+  question_count: '10',
   questions_text: '',
   module_text: '',
 };
@@ -79,7 +81,8 @@ export default function TeacherAssignments() {
         instructions: form.instructions.trim(),
         points_possible: Number(form.points_possible || 100),
         due_at: form.due_at.trim() || null,
-        questions: form.type === 'quiz' ? parseQuestions(form.questions_text) : null,
+        duration_minutes: form.type === 'exam' ? Number(form.duration_minutes || 60) : null,
+        questions: ['quiz', 'exam'].includes(form.type) ? parseQuestions(form.questions_text) : null,
         status: 'published',
       });
       setShowCreate(false);
@@ -101,7 +104,7 @@ export default function TeacherAssignments() {
     try {
       const res = await api.post('/teacher/assignments/generate-quiz', {
         module_text: form.module_text.trim() || form.instructions.trim(),
-        question_count: 10,
+        question_count: Number(form.question_count || 10),
       });
       const questions = res.data?.questions ?? [];
       if (!questions.length) {
@@ -110,9 +113,9 @@ export default function TeacherAssignments() {
       }
       setForm(current => ({
         ...current,
-        type: 'quiz',
+        type: current.type === 'exam' ? 'exam' : 'quiz',
         questions_text: questions.map(item => (
-          `${item.question} | ${(item.choices ?? []).join(', ')} | ${item.answer ?? ''}`
+          `${item.question} | ${JSON.stringify(item.choices ?? [])} | ${item.answer ?? ''}`
         )).join('\n'),
       }));
       Alert.alert('Draft ready', 'Review or edit the generated questions before publishing.');
@@ -126,7 +129,7 @@ export default function TeacherAssignments() {
   const openDetails = async (assignment) => {
     try {
       const res = await api.get(`/assignments/${assignment.id}`);
-      setSelected(res.data);
+      setSelected(current => ({ ...res.data, submissions: current?.submissions ?? [] }));
       const drafts = {};
       (res.data.submissions ?? []).forEach(submission => {
         drafts[submission.id] = {
@@ -138,6 +141,69 @@ export default function TeacherAssignments() {
     } catch (e) {
       Alert.alert('Could not open', e.response?.data?.message || 'Please try again.');
     }
+  };
+
+  const publishAssignment = async () => {
+    if (!selected || selected.status !== 'draft') return;
+
+    try {
+      const res = await api.put(`/teacher/assignments/${selected.id}`, { status: 'published' });
+      setSelected(current => ({ ...res.data, submissions: current?.submissions ?? [] }));
+      setItems(current => current.map(item => item.id === res.data.id
+        ? { ...item, ...res.data }
+        : item));
+      Alert.alert('Published', 'This class work is now available to students.');
+    } catch (e) {
+      Alert.alert('Could not publish', e.response?.data?.message || 'Please try again.');
+    }
+  };
+
+  const saveDraftQuestions = async () => {
+    if (!selected || selected.status !== 'draft') return;
+    if (!selected.title?.trim() || !selected.questions?.length) {
+      Alert.alert('Incomplete draft', 'Add a title and at least one question before saving.');
+      return;
+    }
+
+    try {
+      const res = await api.put(`/teacher/assignments/${selected.id}`, {
+        title: selected.title.trim(),
+        instructions: selected.instructions ?? '',
+        points_possible: Number(selected.points_possible || 100),
+        duration_minutes: selected.type === 'exam' ? Number(selected.duration_minutes) : null,
+        questions: selected.questions,
+      });
+      setSelected(res.data);
+      setItems(current => current.map(item => item.id === res.data.id
+        ? { ...item, ...res.data }
+        : item));
+      Alert.alert('Draft saved', 'You can continue editing or publish it when ready.');
+    } catch (e) {
+      Alert.alert('Could not save draft', e.response?.data?.message || 'Please check each question and its correct answer.');
+    }
+  };
+
+  const updateDraftQuestion = (index, updates) => {
+    setSelected(current => ({
+      ...current,
+      questions: current.questions.map((question, questionIndex) => (
+        questionIndex === index ? { ...question, ...updates } : question
+      )),
+    }));
+  };
+
+  const addDraftQuestion = () => {
+    if ((selected?.questions?.length ?? 0) >= 50) {
+      Alert.alert('Question limit reached', 'Exams and quizzes can have up to 50 questions.');
+      return;
+    }
+    setSelected(current => ({
+      ...current,
+      questions: [
+        ...(current.questions ?? []),
+        { question: '', choices: ['', '', '', ''], answer: '' },
+      ],
+    }));
   };
 
   const gradeSubmission = async (submission) => {
@@ -199,14 +265,16 @@ export default function TeacherAssignments() {
         ) : items.map(item => (
           <TouchableOpacity key={item.id} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => openDetails(item)}>
             <View style={s.row}>
-              <View style={[s.badge, { backgroundColor: item.type === 'quiz' ? '#F3E8FF' : '#E6F1FB' }]}>
-                <Text style={[s.badgeText, { color: item.type === 'quiz' ? '#7C3AED' : theme.primary }]}>{item.type.toUpperCase()}</Text>
+              <View style={[s.badge, { backgroundColor: ['quiz', 'exam'].includes(item.type) ? '#F3E8FF' : '#E6F1FB' }]}>
+                <Text style={[s.badgeText, { color: ['quiz', 'exam'].includes(item.type) ? '#7C3AED' : theme.primary }]}>{item.type.toUpperCase()}</Text>
               </View>
               <Text style={[s.count, { color: theme.textSub }]}>{item.submissions_count ?? 0} submitted</Text>
             </View>
             <Text style={[s.title, { color: theme.text }]}>{item.title}</Text>
             <Text style={[s.sub, { color: theme.textSub }]}>
-              {item.section_subject?.subject?.code || 'Subject'} · {item.section_subject?.section?.name || 'Section'} · {item.due_at ? new Date(item.due_at).toLocaleString() : 'No due date'}
+              {item.section_subject?.subject?.code || 'Subject'} · {item.section_subject?.section?.name || 'Section'}
+              {item.type === 'exam' ? ` · ${item.duration_minutes} min` : ''}
+              {' · '}{item.due_at ? new Date(item.due_at).toLocaleString() : 'No due date'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -232,7 +300,7 @@ export default function TeacherAssignments() {
 
               <Text style={[s.label, { color: theme.textSub }]}>Type</Text>
               <View style={s.choiceWrap}>
-                {['assignment', 'quiz'].map(type => (
+                {['assignment', 'quiz', 'exam'].map(type => (
                   <TouchableOpacity
                     key={type}
                     style={[s.choice, form.type === type && { borderColor: theme.primary, backgroundColor: theme.primaryLight }]}
@@ -247,22 +315,38 @@ export default function TeacherAssignments() {
               <Field label="Instructions" value={form.instructions} onChangeText={value => setForm(current => ({ ...current, instructions: value }))} theme={theme} multiline />
               <Field label="Points" value={form.points_possible} onChangeText={value => setForm(current => ({ ...current, points_possible: value }))} theme={theme} keyboardType="numeric" />
               <Field label="Due date (YYYY-MM-DD HH:mm)" value={form.due_at} onChangeText={value => setForm(current => ({ ...current, due_at: value }))} theme={theme} />
+              {form.type === 'exam' && (
+                <Field
+                  label="Time limit (minutes, 1–300)"
+                  value={form.duration_minutes}
+                  onChangeText={value => setForm(current => ({ ...current, duration_minutes: value }))}
+                  theme={theme}
+                  keyboardType="numeric"
+                />
+              )}
 
-              {form.type === 'quiz' && (
+              {['quiz', 'exam'].includes(form.type) && (
                 <>
                   <Field
-                    label="Module text for AI quiz"
+                    label={`Module text for AI ${form.type}`}
                     value={form.module_text}
                     onChangeText={value => setForm(current => ({ ...current, module_text: value }))}
                     theme={theme}
                     multiline
                     placeholder="Paste module, handout, or lesson notes here"
                   />
+                  <Field
+                    label="AI question count (3–50)"
+                    value={form.question_count}
+                    onChangeText={value => setForm(current => ({ ...current, question_count: value }))}
+                    theme={theme}
+                    keyboardType="numeric"
+                  />
                   <TouchableOpacity style={[s.aiBtn, { borderColor: theme.primary }]} onPress={generateQuiz} disabled={generatingQuiz}>
-                    {generatingQuiz ? <ActivityIndicator color={theme.primary} /> : <Text style={[s.aiText, { color: theme.primary }]}>Generate AI quiz draft</Text>}
+                    {generatingQuiz ? <ActivityIndicator color={theme.primary} /> : <Text style={[s.aiText, { color: theme.primary }]}>Generate AI {form.type} draft</Text>}
                   </TouchableOpacity>
                   <Field
-                    label="Quiz questions"
+                    label={`${form.type === 'exam' ? 'Exam' : 'Quiz'} questions`}
                     value={form.questions_text}
                     onChangeText={value => setForm(current => ({ ...current, questions_text: value }))}
                     theme={theme}
@@ -292,11 +376,99 @@ export default function TeacherAssignments() {
               <Text style={[s.modalTitle, { color: theme.text }]}>{selected?.title}</Text>
               <Text style={[s.sub, { color: theme.textSub }]}>{selected?.submissions?.length ?? 0} submissions</Text>
             </View>
+            {selected?.status === 'draft' ? (
+              <>
+                <TouchableOpacity style={[s.saveBtn, { flex: 0, paddingHorizontal: 12, backgroundColor: theme.primary }]} onPress={saveDraftQuestions}>
+                  <Text style={s.saveText}>Save</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.saveBtn, { flex: 0, paddingHorizontal: 12, backgroundColor: theme.success }]} onPress={publishAssignment}>
+                  <Text style={s.saveText}>Publish</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
             <TouchableOpacity onPress={() => setSelected(null)} style={[s.closeBtn, { backgroundColor: theme.bg }]}>
               <Text style={[s.closeText, { color: theme.text }]}>X</Text>
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={s.body}>
+            {selected?.status === 'draft' && ['quiz', 'exam'].includes(selected.type) ? (
+              <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={[s.title, { color: theme.text }]}>Edit draft questions ({selected.questions?.length ?? 0}/50)</Text>
+                <Field
+                  label="Title"
+                  value={selected.title ?? ''}
+                  onChangeText={value => setSelected(current => ({ ...current, title: value }))}
+                  theme={theme}
+                />
+                <Field
+                  label="Instructions"
+                  value={selected.instructions ?? ''}
+                  onChangeText={value => setSelected(current => ({ ...current, instructions: value }))}
+                  theme={theme}
+                  multiline
+                />
+                <Field
+                  label="Points"
+                  value={String(selected.points_possible ?? '100')}
+                  onChangeText={value => setSelected(current => ({ ...current, points_possible: value }))}
+                  theme={theme}
+                  keyboardType="numeric"
+                />
+                {selected.type === 'exam' ? (
+                  <Field
+                    label="Time limit (minutes)"
+                    value={String(selected.duration_minutes ?? '60')}
+                    onChangeText={value => setSelected(current => ({ ...current, duration_minutes: value }))}
+                    theme={theme}
+                    keyboardType="numeric"
+                  />
+                ) : null}
+                {(selected.questions ?? []).map((question, index) => (
+                  <View key={index} style={[s.card, { backgroundColor: theme.bg, borderColor: theme.border, marginTop: 12 }]}>
+                    <View style={s.row}>
+                      <Text style={[s.title, { color: theme.text }]}>Question {index + 1}</Text>
+                      <TouchableOpacity
+                        onPress={() => setSelected(current => ({
+                          ...current,
+                          questions: current.questions.filter((_, questionIndex) => questionIndex !== index),
+                        }))}
+                      >
+                        <Text style={[s.warning, { color: theme.danger }]}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Field
+                      label="Question"
+                      value={question.question ?? ''}
+                      onChangeText={value => updateDraftQuestion(index, { question: value })}
+                      theme={theme}
+                      multiline
+                    />
+                    {(question.choices ?? []).map((choice, choiceIndex) => (
+                      <Field
+                        key={choiceIndex}
+                        label={`Choice ${String.fromCharCode(65 + choiceIndex)}`}
+                        value={choice}
+                        onChangeText={value => updateDraftQuestion(index, {
+                          choices: question.choices.map((currentChoice, currentIndex) => (
+                            currentIndex === choiceIndex ? value : currentChoice
+                          )),
+                        })}
+                        theme={theme}
+                      />
+                    ))}
+                    <Field
+                      label="Correct answer (exact choice text or A-F)"
+                      value={question.answer ?? ''}
+                      onChangeText={value => updateDraftQuestion(index, { answer: value })}
+                      theme={theme}
+                    />
+                  </View>
+                ))}
+                <TouchableOpacity style={[s.aiBtn, { borderColor: theme.primary, marginTop: 12 }]} onPress={addDraftQuestion}>
+                  <Text style={[s.aiText, { color: theme.primary }]}>+ Add question</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {(selected?.submissions ?? []).length === 0 ? (
               <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Text style={[s.title, { color: theme.text }]}>No submissions yet</Text>
@@ -349,9 +521,19 @@ function parseQuestions(text) {
     .filter(Boolean)
     .map(line => {
       const [question, choices, answer] = line.split('|').map(part => part?.trim());
+      let parsedChoices = [];
+      if (choices?.startsWith('[')) {
+        try {
+          parsedChoices = JSON.parse(choices);
+        } catch {
+          parsedChoices = [];
+        }
+      } else if (choices) {
+        parsedChoices = choices.split(',').map(choice => choice.trim()).filter(Boolean);
+      }
       return {
         question,
-        choices: choices ? choices.split(',').map(choice => choice.trim()).filter(Boolean) : [],
+        choices: parsedChoices,
         answer: answer || '',
       };
     })
