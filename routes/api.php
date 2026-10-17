@@ -128,9 +128,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/registrar/students/{student}/reset-password', [AdminStudentController::class, 'resetPassword']);
             Route::post('/registrar/students/{student}/subjects/{subject}/drop', [AdminStudentController::class, 'dropSubject']);
             Route::post('/registrar/students/{student}/subjects/{subject}/restore', [AdminStudentController::class, 'restoreSubject']);
-            Route::get('/registrar/event-participations',       [RewardController::class, 'eventIndex']);
+        });
+
+        Route::middleware('role:admin')->group(function () {
+            Route::get('/registrar/event-participations', [RewardController::class, 'eventIndex']);
             Route::post('/registrar/event-participations/{participation}/approve', [RewardController::class, 'approveEvent']);
-            Route::post('/registrar/event-participations/{participation}/reject',  [RewardController::class, 'rejectEvent']);
+            Route::post('/registrar/event-participations/{participation}/reject', [RewardController::class, 'rejectEvent']);
         });
     });
 

@@ -14,6 +14,7 @@ class AcademicTermController extends Controller
     public function current()
     {
         $term = AcademicTerm::query()
+            ->orderByDesc('is_active')
             ->latest('updated_at')
             ->first();
 

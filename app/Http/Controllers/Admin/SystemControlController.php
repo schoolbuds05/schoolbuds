@@ -21,6 +21,7 @@ class SystemControlController extends Controller
             ->orderBy('semester')
             ->get();
         $currentTerm = AcademicTerm::query()
+            ->orderByDesc('is_active')
             ->latest('updated_at')
             ->first();
 
