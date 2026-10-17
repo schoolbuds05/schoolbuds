@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
 use App\Models\AcademicTerm;
+use App\Models\ActivityLog;
 use App\Models\ClassAssignment;
 use App\Models\MarketplaceItem;
 use App\Models\MarketplaceMessage;
@@ -201,6 +202,33 @@ class DashboardController extends Controller
         $this->notifyAssignmentStudents($assignment);
 
         return back()->with('status', 'Class work published.');
+    }
+
+    public function archiveAssignment(Request $request, ClassAssignment $assignment)
+    {
+        abort_unless((int) $assignment->teacher_id === (int) $request->user()->id, 403);
+        abort_if($assignment->status === 'archived', 404);
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        DB::transaction(function () use ($request, $assignment, $data) {
+            $assignment->update(['status' => 'archived']);
+
+            ActivityLog::record(
+                $request,
+                'class_work_archived',
+                "{$request->user()->name} archived class work \"{$assignment->title}\".",
+                [
+                    'subject_type' => ClassAssignment::class,
+                    'subject_id' => $assignment->id,
+                    'meta' => ['reason' => trim($data['reason'])],
+                ]
+            );
+        });
+
+        return back()->with('status', 'Class work archived. Its questions and student submissions are preserved.');
     }
 
     public function updateDraftAssignment(Request $request, ClassAssignment $assignment)

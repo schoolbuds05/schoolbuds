@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Student;
 use App\Models\StudentSubject;
 use App\Models\Subject;
+use App\Models\EnrollmentApplication;
+use App\Models\Grade;
+use App\Models\GradeSubmission;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -20,9 +23,26 @@ class EnrollmentPrerequisiteTest extends TestCase
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
+            $table->string('role')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->string('remember_token')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('activity_logs', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('actor_name')->nullable();
+            $table->string('actor_email')->nullable();
+            $table->string('actor_role')->nullable();
+            $table->string('action');
+            $table->text('description');
+            $table->string('subject_type')->nullable();
+            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->string('ip_address')->nullable();
+            $table->text('user_agent')->nullable();
+            $table->json('meta')->nullable();
             $table->timestamps();
         });
 
@@ -44,15 +64,48 @@ class EnrollmentPrerequisiteTest extends TestCase
 
         Schema::create('sections', function (Blueprint $table): void {
             $table->id();
+            $table->string('name')->nullable();
+            $table->string('year_level')->nullable();
+            $table->string('program_type')->nullable();
             $table->string('school_year');
             $table->string('semester');
             $table->boolean('is_active')->default(true);
+            $table->timestamps();
         });
 
         Schema::create('section_subjects', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('section_id');
             $table->unsignedBigInteger('subject_id');
+            $table->timestamps();
+        });
+
+        Schema::create('school_classes', function (Blueprint $table): void {
+            $table->id();
+            $table->string('subject');
+            $table->string('section');
+            $table->string('grade_level');
+            $table->string('school_year');
+            $table->timestamps();
+        });
+
+        Schema::create('grades', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('student_id');
+            $table->unsignedBigInteger('school_class_id');
+            $table->string('school_year');
+            $table->string('quarter');
+            $table->decimal('score', 5, 2)->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('grade_submissions', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('school_class_id');
+            $table->string('school_year');
+            $table->string('quarter');
+            $table->string('status');
+            $table->timestamps();
         });
 
         Schema::create('subject_prerequisite', function (Blueprint $table): void {
@@ -113,6 +166,9 @@ class EnrollmentPrerequisiteTest extends TestCase
     protected function tearDown(): void
     {
         Schema::dropIfExists('student_subjects');
+        Schema::dropIfExists('grades');
+        Schema::dropIfExists('grade_submissions');
+        Schema::dropIfExists('school_classes');
         Schema::dropIfExists('students');
         Schema::dropIfExists('subject_prerequisite');
         Schema::dropIfExists('section_subjects');
@@ -120,6 +176,7 @@ class EnrollmentPrerequisiteTest extends TestCase
         Schema::dropIfExists('subjects');
         Schema::dropIfExists('academic_terms');
         Schema::dropIfExists('enrollment_applications');
+        Schema::dropIfExists('activity_logs');
         Schema::dropIfExists('users');
 
         parent::tearDown();
@@ -188,6 +245,92 @@ class EnrollmentPrerequisiteTest extends TestCase
             ])
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Prerequisite completion cannot be verified because your student record is unavailable. Please contact the Registrar.');
+    }
+
+    public function test_student_cannot_enroll_again_until_every_previous_subject_has_a_final_grade(): void
+    {
+        [$user, $subject] = $this->createApprovedStudentWithSubject();
+
+        $this->actingAs($user)
+            ->getJson('/api/enrollment/eligibility')
+            ->assertOk()
+            ->assertJsonPath('can_enroll', false)
+            ->assertJsonPath('outstanding_subjects.0', $subject->code);
+
+        $this->actingAs($user)
+            ->postJson('/api/enrollment', [])
+            ->assertUnprocessable()
+            ->assertJsonPath('outstanding_subjects.0', $subject->code);
+    }
+
+    public function test_student_can_enroll_again_after_all_previous_subject_grades_are_finalized(): void
+    {
+        [$user, $subject, $student, $schoolClass] = $this->createApprovedStudentWithSubject();
+        GradeSubmission::create([
+            'school_class_id' => $schoolClass->id,
+            'school_year' => '2025-2026',
+            'quarter' => '4',
+            'status' => GradeSubmission::STATUS_FINALIZED,
+        ]);
+        Grade::create([
+            'student_id' => $student->id,
+            'school_class_id' => $schoolClass->id,
+            'school_year' => '2025-2026',
+            'quarter' => '4',
+            'score' => 85,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/enrollment/eligibility')
+            ->assertOk()
+            ->assertJsonPath('can_enroll', true)
+            ->assertJsonPath('outstanding_subjects', []);
+    }
+
+    private function createApprovedStudentWithSubject(): array
+    {
+        $user = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $subject = Subject::create([
+            'code' => 'SUBJ-101',
+            'name' => 'First Subject',
+            'program_type' => 'college',
+            'semester' => '1st',
+        ]);
+        $student = Student::create([
+            'student_id' => 'STU-2001',
+            'first_name' => 'Example',
+            'last_name' => 'Student',
+            'email' => $user->email,
+            'gender' => 'female',
+            'grade_level' => '1',
+            'section' => 'A',
+            'school_year' => '2025-2026',
+            'user_id' => $user->id,
+        ]);
+        EnrollmentApplication::create([
+            'user_id' => $user->id,
+            'school_year' => '2025-2026',
+            'semester' => '1st',
+            'status' => 'approved',
+            'subject_ids' => [$subject->id],
+        ]);
+        $section = \App\Models\Section::create([
+            'name' => 'A',
+            'year_level' => '1',
+            'program_type' => 'college',
+            'school_year' => '2025-2026',
+            'semester' => '1st',
+            'is_active' => true,
+        ]);
+        $section->sectionSubjects()->create(['subject_id' => $subject->id]);
+        $schoolClass = \App\Models\SchoolClass::forceCreate([
+            'subject' => $subject->name,
+            'section' => 'A',
+            'grade_level' => '1',
+            'school_year' => '2025-2026',
+        ]);
+
+        return [$user, $subject, $student, $schoolClass];
     }
 
     private function createSubjectWithPrerequisite(): array

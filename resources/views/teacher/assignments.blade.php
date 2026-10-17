@@ -6,16 +6,21 @@
     <p class="mt-1 text-sm text-slate-500">Create assignments, quizzes, and timed exams for assigned section subjects.</p>
 </div>
 
-@if(session('status'))
-    <div class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{{ session('status') }}</div>
-@endif
-@if($errors->any())
-    <div class="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">
-        <p>Please review the form: {{ $errors->first() }}</p>
-    </div>
-@endif
-
 <div class="space-y-6">
+    @php
+        $assignmentSchoolYears = $assignments
+            ->map(fn ($assignment) => $assignment->sectionSubject?->section?->school_year)
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+        $assignmentSemesters = $assignments
+            ->map(fn ($assignment) => $assignment->sectionSubject?->section?->semester)
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+    @endphp
     <dialog id="create-work-dialog" aria-labelledby="create-work-title" class="m-auto max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl overflow-hidden rounded-2xl p-0 shadow-2xl backdrop:bg-slate-950/50">
         <section class="portal-card max-h-[92vh] overflow-y-auto p-5 sm:p-7">
             <div class="mb-5 flex items-start justify-between gap-4">
@@ -135,23 +140,64 @@
                     <h2 class="font-black text-slate-800">Posted Work</h2>
                     <p class="mt-1 text-xs text-slate-500">Search and filter your assignments, quizzes, and exams.</p>
                 </div>
-                <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-[26rem_auto_auto_auto]">
+                <div class="grid w-full gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] lg:w-auto lg:grid-cols-[16rem_auto_auto]">
                     <label class="sr-only" for="work-search">Search work</label>
-                    <input id="work-search" type="search" class="portal-field w-full sm:col-span-2 lg:col-span-1" placeholder="Search title, class, subject...">
-                    <label class="sr-only" for="work-type-filter">Filter by work type</label>
-                    <select id="work-type-filter" class="portal-field w-full">
-                        <option value="">All types</option>
-                        <option value="assignment">Assignments</option>
-                        <option value="quiz">Quizzes</option>
-                        <option value="exam">Exams</option>
-                    </select>
-                    <label class="sr-only" for="work-status-filter">Filter by status</label>
-                    <select id="work-status-filter" class="portal-field w-full">
-                        <option value="">All statuses</option>
-                        <option value="published">Published</option>
-                        <option value="draft">Draft</option>
-                        <option value="closed">Closed</option>
-                    </select>
+                    <input id="work-search" type="search" class="portal-field w-full" placeholder="Search title, class, subject...">
+                    <details class="relative">
+                        <summary class="flex h-full min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                            Filter
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.22 7.22a.75.75 0 011.06 0L10 10.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 8.28a.75.75 0 010-1.06z" clip-rule="evenodd" />
+                            </svg>
+                        </summary>
+                        <div class="absolute right-0 z-20 mt-2 grid w-80 grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                            <label class="block text-xs font-bold text-slate-600" for="work-school-year-filter">
+                                School year
+                                <select id="work-school-year-filter" class="portal-field mt-1 w-full">
+                                    <option value="">All years</option>
+                                    @foreach($assignmentSchoolYears as $schoolYear)
+                                        <option value="{{ $schoolYear }}">{{ $schoolYear }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label class="block text-xs font-bold text-slate-600" for="work-semester-filter">
+                                Semester
+                                <select id="work-semester-filter" class="portal-field mt-1 w-full">
+                                    <option value="">All semesters</option>
+                                    @foreach($assignmentSemesters as $semester)
+                                        <option value="{{ $semester }}">{{ strtoupper($semester) }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+                            <label class="block text-xs font-bold text-slate-600" for="work-type-filter">
+                                Work type
+                                <select id="work-type-filter" class="portal-field mt-1 w-full">
+                                    <option value="">All types</option>
+                                    <option value="assignment">Assignments</option>
+                                    <option value="quiz">Quizzes</option>
+                                    <option value="exam">Exams</option>
+                                </select>
+                            </label>
+                            <label class="block text-xs font-bold text-slate-600" for="work-status-filter">
+                                Status
+                                <select id="work-status-filter" class="portal-field mt-1 w-full">
+                                    <option value="">All statuses</option>
+                                    <option value="published">Published</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="closed">Closed</option>
+                                    <option value="archived">Archived</option>
+                                </select>
+                            </label>
+                            <label class="block text-xs font-bold text-slate-600" for="work-period-filter">
+                                Time period
+                                <select id="work-period-filter" class="portal-field mt-1 w-full">
+                                    <option value="">All work</option>
+                                    <option value="current">Current work</option>
+                                    <option value="past">Past work</option>
+                                </select>
+                            </label>
+                        </div>
+                    </details>
                     <button
                         type="button"
                         onclick="document.getElementById('create-work-dialog').showModal()"
@@ -168,6 +214,9 @@
                     data-work-card
                     data-work-type="{{ $assignment->type }}"
                     data-work-status="{{ $assignment->status }}"
+                    data-work-period="{{ in_array($assignment->status, ['closed', 'archived'], true) || ($assignment->due_at && $assignment->due_at->isPast()) ? 'past' : 'current' }}"
+                    data-work-school-year="{{ $assignment->sectionSubject?->section?->school_year }}"
+                    data-work-semester="{{ $assignment->sectionSubject?->section?->semester }}"
                     data-work-search="{{ $assignment->title }} {{ $assignment->sectionSubject?->section?->name }} {{ $assignment->sectionSubject?->subject?->name }}"
                     class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
                 >
@@ -187,6 +236,35 @@
                                         Publish
                                     </button>
                                 </form>
+                            @endif
+                            @if($assignment->status !== 'archived')
+                                <button
+                                    type="button"
+                                    onclick="document.getElementById('archive-work-{{ $assignment->id }}').showModal()"
+                                    class="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 hover:bg-rose-50"
+                                >
+                                    Delete
+                                </button>
+                                <dialog id="archive-work-{{ $assignment->id }}" aria-labelledby="archive-work-title-{{ $assignment->id }}" class="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl p-0 shadow-2xl backdrop:bg-slate-950/50">
+                                    <form method="POST" action="{{ route('teacher.assignments.archive', $assignment) }}" class="space-y-4 p-5">
+                                        @csrf
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div>
+                                                <h3 id="archive-work-title-{{ $assignment->id }}" class="font-black text-slate-900">Delete this work?</h3>
+                                                <p class="mt-1 text-sm text-slate-600">This will move “{{ $assignment->title }}” to Archived. Its questions and student submissions will be kept and remain accessible.</p>
+                                            </div>
+                                            <button type="button" onclick="document.getElementById('archive-work-{{ $assignment->id }}').close()" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50" aria-label="Close delete work dialog">Close</button>
+                                        </div>
+                                        <label for="archive-reason-{{ $assignment->id }}" class="block text-sm font-bold text-slate-700">
+                                            Why is this work being deleted?
+                                            <textarea id="archive-reason-{{ $assignment->id }}" name="reason" rows="3" maxlength="1000" class="portal-field mt-1 w-full" required placeholder="Enter a reason"></textarea>
+                                        </label>
+                                        <div class="flex justify-end gap-2">
+                                            <button type="button" onclick="document.getElementById('archive-work-{{ $assignment->id }}').close()" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                                            <button type="submit" class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-black text-white hover:bg-rose-800">Archive work</button>
+                                        </div>
+                                    </form>
+                                </dialog>
                             @endif
                         </div>
                     </div>
@@ -228,6 +306,28 @@
                                             <input name="duration_minutes" type="number" min="1" max="300" value="{{ $assignment->duration_minutes }}" class="portal-field mt-1 w-full" required>
                                         </label>
                                     @endif
+                                </div>
+                                <div class="space-y-3 rounded-xl border border-violet-200 bg-violet-50/60 p-3" data-draft-ai-generator>
+                                    <div>
+                                        <h3 class="text-sm font-black text-violet-900">Generate more questions</h3>
+                                        <p class="mt-1 text-xs text-slate-600">Add generated questions to this draft. You can review or edit them before saving.</p>
+                                    </div>
+                                    <textarea rows="3" class="portal-field w-full" data-draft-module-text placeholder="Paste lesson notes or module content..."></textarea>
+                                    <label class="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-violet-200 bg-white p-2.5">
+                                        <input type="file" accept=".txt,.pdf,.docx" class="sr-only" data-draft-module-file>
+                                        <span class="rounded-lg bg-violet-100 px-3 py-2 text-xs font-black text-violet-700">Choose file</span>
+                                        <span class="min-w-0 flex-1 truncate text-xs text-slate-500" data-draft-module-file-name>No file chosen</span>
+                                    </label>
+                                    <div class="grid gap-2 sm:grid-cols-[1fr_auto]">
+                                        <select class="portal-field w-full" data-draft-question-count aria-label="Number of questions to generate">
+                                            <option value="3">3 questions</option>
+                                            <option value="5">5 questions</option>
+                                            <option value="10" selected>10 questions</option>
+                                            <option value="20">20 questions</option>
+                                        </select>
+                                        <button type="button" class="rounded-lg bg-violet-700 px-4 py-2 text-xs font-black text-white hover:bg-violet-800 disabled:cursor-wait disabled:opacity-60" data-generate-draft-questions>Generate and append</button>
+                                    </div>
+                                    <p class="text-xs text-slate-500" aria-live="polite" data-draft-ai-status>Up to {{ max(0, 50 - count($assignment->questions ?? [])) }} more questions can be added.</p>
                                 </div>
                                 <div data-draft-question-container class="space-y-5">
                                     @foreach($assignment->questions ?? [] as $index => $question)
@@ -366,6 +466,9 @@
         const workSearch = document.getElementById('work-search');
         const workTypeFilter = document.getElementById('work-type-filter');
         const workStatusFilter = document.getElementById('work-status-filter');
+        const workPeriodFilter = document.getElementById('work-period-filter');
+        const workSchoolYearFilter = document.getElementById('work-school-year-filter');
+        const workSemesterFilter = document.getElementById('work-semester-filter');
         const workCards = Array.from(document.querySelectorAll('[data-work-card]'));
         const workNoResults = document.getElementById('work-no-results');
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -375,12 +478,18 @@
             const query = workSearch.value.trim().toLocaleLowerCase();
             const selectedType = workTypeFilter.value;
             const selectedStatus = workStatusFilter.value;
+            const selectedPeriod = workPeriodFilter.value;
+            const selectedSchoolYear = workSchoolYearFilter.value;
+            const selectedSemester = workSemesterFilter.value;
             let visibleCount = 0;
 
             workCards.forEach((card) => {
                 const matches = (!query || card.dataset.workSearch.toLocaleLowerCase().includes(query))
                     && (!selectedType || card.dataset.workType === selectedType)
-                    && (!selectedStatus || card.dataset.workStatus === selectedStatus);
+                    && (!selectedStatus || card.dataset.workStatus === selectedStatus)
+                    && (!selectedPeriod || card.dataset.workPeriod === selectedPeriod)
+                    && (!selectedSchoolYear || card.dataset.workSchoolYear === selectedSchoolYear)
+                    && (!selectedSemester || card.dataset.workSemester === selectedSemester);
                 card.hidden = !matches;
                 if (matches) visibleCount += 1;
             });
@@ -393,6 +502,9 @@
         workSearch.addEventListener('input', filterWork);
         workTypeFilter.addEventListener('change', filterWork);
         workStatusFilter.addEventListener('change', filterWork);
+        workPeriodFilter.addEventListener('change', filterWork);
+        workSchoolYearFilter.addEventListener('change', filterWork);
+        workSemesterFilter.addEventListener('change', filterWork);
 
         createWorkDialog.addEventListener('click', (event) => {
             if (event.target === createWorkDialog) {
@@ -474,7 +586,7 @@
             });
         };
 
-        const addDraftQuestion = (container) => {
+        const addDraftQuestion = (container, data = null) => {
             if (container.children.length >= 50) {
                 return false;
             }
@@ -482,19 +594,20 @@
             const wrapper = document.createElement('div');
             wrapper.dataset.questionRow = '';
             wrapper.className = 'space-y-2 rounded-lg border border-amber-200 bg-white p-3';
+            const choices = Array.isArray(data?.choices) ? data.choices : ['', '', '', ''];
             wrapper.innerHTML = `
                 <div class="flex items-center justify-between gap-3">
                     <span class="text-xs font-black uppercase tracking-wide text-amber-800">Question ${index + 1}</span>
                     <button type="button" data-remove-question class="text-xs font-bold text-rose-600">Remove</button>
                 </div>
-                <textarea name="questions[${index}][question]" rows="3" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Question text" required></textarea>
+                <textarea name="questions[${index}][question]" rows="3" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Question text" required>${escapeHtml(data?.question ?? '')}</textarea>
                 <div class="grid grid-cols-2 gap-2">
-                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice A" required></textarea>
-                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice B" required></textarea>
-                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice C" required></textarea>
-                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice D" required></textarea>
+                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice A" required>${escapeHtml(choices[0] ?? '')}</textarea>
+                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice B" required>${escapeHtml(choices[1] ?? '')}</textarea>
+                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice C" required>${escapeHtml(choices[2] ?? '')}</textarea>
+                    <textarea name="questions[${index}][choices][]" rows="2" class="portal-field w-full resize-y whitespace-pre-wrap" placeholder="Choice D" required>${escapeHtml(choices[3] ?? '')}</textarea>
                 </div>
-                <input type="text" name="questions[${index}][answer]" class="portal-field w-full" placeholder="Correct answer (exact text or A-D)" required>
+                <input type="text" name="questions[${index}][answer]" class="portal-field w-full" value="${escapeHtml(data?.answer ?? '')}" placeholder="Correct answer (exact text or A-D)" required>
             `;
             container.appendChild(wrapper);
             return true;
@@ -515,14 +628,102 @@
 
             if (addButton) {
                 if (!addDraftQuestion(container)) {
-                    aiStatus.textContent = 'Quizzes and exams are limited to 50 questions.';
-                    aiStatus.className = 'text-xs text-amber-600';
+                    const status = form.querySelector('[data-draft-ai-status]');
+                    if (status) {
+                        status.textContent = 'Quizzes and exams are limited to 50 questions.';
+                        status.className = 'text-xs text-amber-600';
+                    }
                 }
                 reindexDraftQuestions(container);
             } else {
                 removeButton.closest('[data-question-row]')?.remove();
                 reindexDraftQuestions(container);
             }
+        });
+
+        document.querySelectorAll('[data-draft-ai-generator]').forEach((generator) => {
+            const form = generator.closest('form');
+            const button = generator.querySelector('[data-generate-draft-questions]');
+            const textInput = generator.querySelector('[data-draft-module-text]');
+            const fileInput = generator.querySelector('[data-draft-module-file]');
+            const fileName = generator.querySelector('[data-draft-module-file-name]');
+            const countSelect = generator.querySelector('[data-draft-question-count]');
+            const status = generator.querySelector('[data-draft-ai-status]');
+            const questionsContainer = form?.querySelector('[data-draft-question-container]');
+
+            fileInput.addEventListener('change', () => {
+                fileName.textContent = fileInput.files[0]?.name || 'No file chosen';
+                fileName.classList.toggle('font-semibold', Boolean(fileInput.files.length));
+                fileName.classList.toggle('text-slate-800', Boolean(fileInput.files.length));
+                fileName.classList.toggle('text-slate-500', !fileInput.files.length);
+            });
+
+            button.addEventListener('click', async () => {
+                const text = textInput.value.trim();
+                const file = fileInput.files[0];
+                const currentCount = questionsContainer.children.length;
+                const remaining = 50 - currentCount;
+
+                if (!text && !file) {
+                    status.textContent = 'Enter lesson text or choose a file before generating.';
+                    status.className = 'text-xs text-amber-600';
+                    return;
+                }
+                if (remaining < 3) {
+                    status.textContent = remaining === 0
+                        ? 'This draft already has the maximum of 50 questions.'
+                        : `Only ${remaining} question(s) remain. At least 3 are required per generation.`;
+                    status.className = 'text-xs text-amber-600';
+                    return;
+                }
+
+                const formData = new FormData();
+                if (text) formData.append('module_text', text);
+                if (file) formData.append('module_file', file);
+                formData.append('question_count', String(Math.min(Number(countSelect.value), remaining)));
+
+                button.disabled = true;
+                status.textContent = 'Generating questions...';
+                status.className = 'text-xs text-slate-500';
+
+                try {
+                    const response = await fetch(generateQuizUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken || '',
+                        },
+                        credentials: 'same-origin',
+                        body: formData,
+                    });
+                    const responseText = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch {
+                        throw new Error(`Question generation failed (${response.status}). The server returned an unexpected response.`);
+                    }
+                    if (!response.ok) {
+                        throw new Error(data.message || 'AI question generation failed.');
+                    }
+                    if (!Array.isArray(data.questions) || data.questions.length === 0) {
+                        throw new Error('No questions were generated. Try adding more lesson content.');
+                    }
+
+                    let addedCount = 0;
+                    data.questions.forEach((question) => {
+                        if (addDraftQuestion(questionsContainer, question)) addedCount += 1;
+                    });
+                    reindexDraftQuestions(questionsContainer);
+                    status.textContent = `Added ${addedCount} question(s). This draft now has ${questionsContainer.children.length}/50 questions.`;
+                    status.className = 'text-xs font-semibold text-emerald-700';
+                } catch (error) {
+                    status.textContent = error.message || 'AI question generation failed.';
+                    status.className = 'text-xs text-rose-600';
+                } finally {
+                    button.disabled = false;
+                }
+            });
         });
 
         const appendGeneratedQuestions = (questions) => {

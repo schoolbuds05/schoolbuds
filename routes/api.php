@@ -44,6 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);
+    Route::get('/enrollment/eligibility', [EnrollmentController::class, 'eligibility']);
     Route::post('/enrollment', [EnrollmentController::class, 'store']);
     Route::post('/enrollment/prerequisites', [EnrollmentController::class, 'prerequisiteStatus']);
     Route::get('/my-course-shift-requests', [CourseShiftRequestController::class, 'mine']);

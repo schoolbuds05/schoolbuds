@@ -4,13 +4,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -25,11 +22,6 @@ export default function StudyLoad() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState('current');
-  const [paymentFee, setPaymentFee] = useState(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('gcash');
-  const [paymentReference, setPaymentReference] = useState('');
-  const [paying, setPaying] = useState(false);
 
   const loadStudyLoad = async (selectedView) => {
     try {
@@ -50,38 +42,6 @@ export default function StudyLoad() {
   useEffect(() => {
     Promise.resolve().then(() => loadStudyLoad(view));
   }, [view]);
-
-  const openPayment = (fee) => {
-    const remaining = Math.max(0, Number(fee.amount || 0) - Number(fee.paid_amount || 0));
-    setPaymentFee(fee);
-    setPaymentAmount(String(remaining));
-    setPaymentMethod('gcash');
-    setPaymentReference('');
-  };
-
-  const submitPayment = async () => {
-    if (!paymentFee) return;
-    if (!Number(paymentAmount)) {
-      Alert.alert('Amount required', 'Enter the amount you paid.');
-      return;
-    }
-
-    setPaying(true);
-    try {
-      await api.post(`/fees/${paymentFee.id}/pay`, {
-        amount: Number(paymentAmount),
-        payment_method: paymentMethod,
-        payment_reference: paymentReference,
-      });
-      setPaymentFee(null);
-      await loadStudyLoad(view);
-      Alert.alert('Payment recorded', 'Your tuition payment has been recorded.');
-    } catch (error) {
-      Alert.alert('Payment failed', error.response?.data?.message || 'Could not record payment.');
-    } finally {
-      setPaying(false);
-    }
-  };
 
   const subjects = useMemo(() => data?.subjects ?? [], [data?.subjects]);
   const sections = data?.sections ?? [];
@@ -172,11 +132,16 @@ export default function StudyLoad() {
           <View style={[styles.tuitionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Tuition & Fees</Text>
-              <Text style={[styles.sectionMeta, { color: theme.textSub }]}>PHP {Number(fees.total_due || 0).toFixed(2)} due</Text>
             </View>
             <View style={styles.tuitionTotals}>
-              <Detail label="Total paid" value={`PHP ${Number(fees.total_paid || 0).toFixed(2)}`} theme={theme} />
-              <Detail label="Remaining" value={`PHP ${Number(fees.total_due || 0).toFixed(2)}`} theme={theme} />
+              <View style={[styles.tuitionSummaryItem, { backgroundColor: theme.bg }]}>
+                <Text style={[styles.detailLabel, { color: theme.textMuted }]}>TOTAL PAID</Text>
+                <Text style={[styles.tuitionSummaryValue, { color: theme.text }]}>PHP {Number(fees.total_paid || 0).toFixed(2)}</Text>
+              </View>
+              <View style={[styles.tuitionSummaryItem, { backgroundColor: theme.primaryLight }]}>
+                <Text style={[styles.detailLabel, { color: theme.primary }]}>REMAINING</Text>
+                <Text style={[styles.tuitionSummaryValue, { color: theme.primary }]}>PHP {Number(fees.total_due || 0).toFixed(2)}</Text>
+              </View>
             </View>
             {(fees.fees ?? []).length === 0 ? (
               <Text style={[styles.emptyText, { color: theme.textSub }]}>No tuition fees posted yet.</Text>
@@ -185,24 +150,31 @@ export default function StudyLoad() {
                 const remaining = Math.max(0, Number(fee.amount || 0) - Number(fee.paid_amount || 0));
                 return (
                   <View key={fee.id} style={[styles.feeRow, { borderColor: theme.border }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.feeTitle, { color: theme.text }]}>{fee.type}</Text>
-                      <Text style={[styles.feeMeta, { color: theme.textSub }]}>
-                        Due {fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'TBA'} · {fee.status}
+                    <View style={styles.feeDetails}>
+                      <Text style={[styles.feeMeta, { color: theme.textMuted }]}>DUE DATE</Text>
+                      <Text style={[styles.feeDueDate, { color: theme.text }]}>
+                        {fee.due_date ? new Date(fee.due_date).toLocaleDateString() : 'To be announced'}
                       </Text>
                     </View>
-                    <View style={styles.feeAction}>
+                    <View style={styles.feeBalance}>
+                      <Text style={[styles.feeMeta, { color: theme.textMuted }]}>BALANCE</Text>
                       <Text style={[styles.feeAmount, { color: theme.text }]}>PHP {remaining.toFixed(2)}</Text>
-                      {fee.status !== 'paid' ? (
-                        <TouchableOpacity style={[styles.payBtn, { backgroundColor: theme.primary }]} onPress={() => openPayment(fee)}>
-                          <Text style={styles.payText}>Pay</Text>
-                        </TouchableOpacity>
-                      ) : null}
+                      <Text style={[styles.feeStatus, { color: fee.status === 'paid' ? theme.success : theme.warning }]}>
+                        {String(fee.status || 'unpaid').toUpperCase()}
+                      </Text>
                     </View>
                   </View>
                 );
               })
             )}
+            {(fees.fees ?? []).length > 0 ? (
+              <View style={[styles.paymentNote, { backgroundColor: theme.primaryLight }]}>
+                <Text style={[styles.paymentNoteLabel, { color: theme.primary }]}>PAYMENT INSTRUCTIONS</Text>
+                <Text style={[styles.paymentNoteText, { color: theme.text }]}>
+                  Please pay at the bank, then go to the registrar for confirmation.
+                </Text>
+              </View>
+            ) : null}
           </View>
           ) : null}
 
@@ -257,48 +229,6 @@ export default function StudyLoad() {
         </ScrollView>
       )}
 
-      <Modal visible={!!paymentFee} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Record Payment</Text>
-            <Text style={[styles.sectionMeta, { color: theme.textSub }]}>{paymentFee?.type}</Text>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
-              value={paymentAmount}
-              onChangeText={setPaymentAmount}
-              keyboardType="numeric"
-              placeholder="Amount"
-              placeholderTextColor={theme.textMuted}
-            />
-            <View style={styles.methodRow}>
-              {['gcash', 'qrph', 'cash', 'bank_transfer'].map(method => (
-                <TouchableOpacity
-                  key={method}
-                  style={[styles.methodPill, { borderColor: paymentMethod === method ? theme.primary : theme.border, backgroundColor: paymentMethod === method ? theme.primaryLight : theme.bg }]}
-                  onPress={() => setPaymentMethod(method)}
-                >
-                  <Text style={[styles.methodText, { color: paymentMethod === method ? theme.primary : theme.textSub }]}>{method.replace('_', ' ').toUpperCase()}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TextInput
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.bg }]}
-              value={paymentReference}
-              onChangeText={setPaymentReference}
-              placeholder="Reference number"
-              placeholderTextColor={theme.textMuted}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.border }]} onPress={() => setPaymentFee(null)} disabled={paying}>
-                <Text style={[styles.cancelText, { color: theme.textSub }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: theme.primary }]} onPress={submitPayment} disabled={paying}>
-                {paying ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Save</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -390,24 +320,18 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '900' },
   emptyText: { fontSize: 13, textAlign: 'center', lineHeight: 20, marginTop: 6 },
-  tuitionCard: { borderRadius: 14, borderWidth: 1, padding: 14 },
-  tuitionTotals: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  feeRow: { borderTopWidth: 1, paddingTop: 12, marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  feeTitle: { fontSize: 14, fontWeight: '900' },
-  feeMeta: { fontSize: 11, fontWeight: '700', marginTop: 3 },
-  feeAction: { alignItems: 'flex-end', gap: 6 },
-  feeAmount: { fontSize: 12, fontWeight: '900' },
-  payBtn: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  payText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', padding: 18 },
-  modalCard: { width: '100%', borderRadius: 16, padding: 16 },
-  input: { borderWidth: 1, borderRadius: 12, minHeight: 46, paddingHorizontal: 12, fontSize: 14, marginTop: 12 },
-  methodRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  methodPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
-  methodText: { fontSize: 11, fontWeight: '900' },
-  modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  cancelBtn: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-  confirmBtn: { flex: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-  cancelText: { fontSize: 13, fontWeight: '900' },
-  confirmText: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  tuitionCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
+  tuitionTotals: { flexDirection: 'row', gap: 10, marginTop: 2 },
+  tuitionSummaryItem: { flex: 1, minWidth: 0, borderRadius: 12, padding: 12, gap: 5 },
+  tuitionSummaryValue: { fontSize: 14, fontWeight: '900' },
+  feeRow: { borderTopWidth: 1, paddingTop: 12, marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  feeDetails: { flex: 1, minWidth: 0 },
+  feeBalance: { alignItems: 'flex-end', gap: 3 },
+  feeMeta: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+  feeDueDate: { fontSize: 13, fontWeight: '800', marginTop: 4 },
+  feeAmount: { fontSize: 13, fontWeight: '900' },
+  feeStatus: { fontSize: 10, fontWeight: '900', marginTop: 1 },
+  paymentNote: { borderRadius: 12, padding: 12, gap: 5, marginTop: 2 },
+  paymentNoteLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  paymentNoteText: { fontSize: 12, fontWeight: '700', lineHeight: 18 },
 });

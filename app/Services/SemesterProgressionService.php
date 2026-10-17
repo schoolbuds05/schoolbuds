@@ -12,6 +12,62 @@ use App\Models\User;
 
 class SemesterProgressionService
 {
+    public function evaluateNextEnrollmentEligibility(User $user): array
+    {
+        $application = EnrollmentApplication::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'approved')
+            ->latest('created_at')
+            ->first(['subject_ids', 'school_year']);
+
+        if (!$application) {
+            return ['can_enroll' => true, 'message' => null, 'outstanding_subjects' => []];
+        }
+
+        $subjectIds = collect($application->subject_ids ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($subjectIds->isEmpty()) {
+            return [
+                'can_enroll' => false,
+                'message' => 'Your previous enrollment subjects could not be verified. Please contact the Registrar.',
+                'outstanding_subjects' => [],
+            ];
+        }
+
+        $student = Student::query()->where('user_id', $user->id)->first();
+        if (!$student) {
+            return [
+                'can_enroll' => false,
+                'message' => 'Your student record is unavailable. Please contact the Registrar to verify your enrollment.',
+                'outstanding_subjects' => [],
+            ];
+        }
+
+        $subjects = Subject::query()->whereIn('id', $subjectIds)->get()->keyBy('id');
+        $outstanding = [];
+
+        foreach ($subjectIds as $subjectId) {
+            $subject = $subjects->get($subjectId);
+            if (!$subject || !$this->hasFinalizedQ4Grade($student, $subject, $application->school_year)) {
+                $outstanding[] = $subject?->code ?: $subject?->name ?: "Subject #{$subjectId}";
+            }
+        }
+
+        if ($outstanding) {
+            return [
+                'can_enroll' => false,
+                'message' => 'You can enroll again after final grades are available for all subjects from your previous enrollment. Still waiting for: ' . implode(', ', $outstanding) . '.',
+                'outstanding_subjects' => $outstanding,
+            ];
+        }
+
+        return ['can_enroll' => true, 'message' => null, 'outstanding_subjects' => []];
+    }
+
     public function evaluateFirstSemester(User $user, string $schoolYear): array
     {
         $subjectIds = EnrollmentApplication::query()

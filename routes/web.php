@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\SystemControlController;
 use App\Http\Controllers\Admin\UserManageController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Registrar\GradeApprovalController;
+use App\Http\Controllers\Registrar\TuitionFeeController;
 use App\Http\Controllers\Registrar\GradeChangeRequestController as RegistrarGradeChangeRequestController;
 use App\Http\Controllers\Registrar\DashboardController as RegistrarDashboardController;
 use App\Http\Controllers\Registrar\EnrollmentReviewController;
@@ -135,6 +136,8 @@ Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')-
 
 Route::middleware(['auth', 'web.roles:admin,registrar'])->prefix('registrar')->name('registrar.')->group(function () {
     Route::get('/dashboard', [RegistrarDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/tuition', [TuitionFeeController::class, 'index'])->middleware('web.roles:registrar')->name('tuition.index');
+    Route::post('/tuition', [TuitionFeeController::class, 'store'])->middleware('web.roles:registrar')->name('tuition.store');
     Route::get('/enrollments', [EnrollmentReviewController::class, 'index'])->name('enrollments.index');
     Route::get('/enrollments/{enrollment}', [EnrollmentReviewController::class, 'show'])->name('enrollments.show');
     Route::get('/enrollments/{enrollment}/approve', [EnrollmentReviewController::class, 'approveRequiresPost'])->name('enrollments.approve.get');
@@ -191,6 +194,7 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
     Route::post('/assignments/generate-quiz', [AssignmentController::class, 'generateQuiz'])->name('assignments.generate-quiz');
     Route::post('/assignments',                 [TeacherDashboard::class, 'storeAssignment'])->name('assignments.store');
     Route::post('/assignments/{assignment}/publish', [TeacherDashboard::class, 'publishAssignment'])->name('assignments.publish');
+    Route::post('/assignments/{assignment}/archive', [TeacherDashboard::class, 'archiveAssignment'])->name('assignments.archive');
     Route::put('/assignments/{assignment}/draft', [TeacherDashboard::class, 'updateDraftAssignment'])->name('assignments.draft.update');
     Route::get('/market',                       [TeacherDashboard::class, 'market'])->name('market');
     Route::post('/market/{item}/buy',           [TeacherDashboard::class, 'buyMarketItem'])->name('market.buy');

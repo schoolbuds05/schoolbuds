@@ -15,6 +15,7 @@ import {
 import HeaderGradient from '../components/ui/HeaderGradient';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
+import * as DocumentPicker from 'expo-document-picker';
 
 const EMPTY_FORM = {
   section_subject_id: '',
@@ -25,7 +26,7 @@ const EMPTY_FORM = {
   due_at: '',
   duration_minutes: '60',
   question_count: '10',
-  questions_text: '',
+  questions: [],
   module_text: '',
 };
 
@@ -34,12 +35,15 @@ export default function TeacherAssignments() {
   const [classes, setClasses] = useState([]);
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [detailPreview, setDetailPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [quizStatus, setQuizStatus] = useState({ message: '', type: 'info' });
   const [form, setForm] = useState(EMPTY_FORM);
+  const [moduleFile, setModuleFile] = useState(null);
   const [gradeDrafts, setGradeDrafts] = useState({});
 
   const load = useCallback(async () => {
@@ -63,13 +67,61 @@ export default function TeacherAssignments() {
 
   const openCreate = () => {
     setForm({ ...EMPTY_FORM, section_subject_id: classes[0]?.id ? String(classes[0].id) : '' });
+    setModuleFile(null);
+    setQuizStatus({ message: '', type: 'info' });
     setShowCreate(true);
+  };
+
+  const pickModuleFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'text/plain',
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const file = result.assets[0];
+      if (!/\.(txt|pdf|docx)$/i.test(file.name || '')) {
+        Alert.alert('Unsupported file', 'Choose a TXT, PDF, or DOCX file.');
+        return;
+      }
+      setModuleFile(file);
+    } catch (e) {
+      Alert.alert('Could not choose file', e.message || 'Please try again.');
+    }
   };
 
   const createAssignment = async () => {
     if (!form.section_subject_id || !form.title.trim()) {
       Alert.alert('Missing details', 'Choose a class and add a title.');
       return;
+    }
+    if (['quiz', 'exam'].includes(form.type)) {
+      if (form.questions.length === 0) {
+        Alert.alert('Questions required', 'Add at least one question or generate questions before publishing.');
+        return;
+      }
+      const incompleteIndex = form.questions.findIndex(question => {
+        const choices = (question.choices ?? []).map(choice => choice.trim()).filter(Boolean);
+        const answer = question.answer.trim().toLowerCase();
+        return !question.question.trim()
+          || choices.length < 2
+          || !choices.some(choice => choice.toLowerCase() === answer)
+            && !/^[A-F]$/.test(answer)
+            || /^[A-F]$/.test(answer) && !choices[answer.charCodeAt(0) - 65];
+      });
+      if (incompleteIndex !== -1) {
+        Alert.alert(
+          'Question needs attention',
+          `Question ${incompleteIndex + 1} needs question text, at least two choices, and a correct answer that matches one of the choices.`
+        );
+        return;
+      }
     }
 
     setSaving(true);
@@ -82,7 +134,12 @@ export default function TeacherAssignments() {
         points_possible: Number(form.points_possible || 100),
         due_at: form.due_at.trim() || null,
         duration_minutes: form.type === 'exam' ? Number(form.duration_minutes || 60) : null,
-        questions: ['quiz', 'exam'].includes(form.type) ? parseQuestions(form.questions_text) : null,
+        questions: ['quiz', 'exam'].includes(form.type)
+          ? form.questions.map(question => ({
+              ...question,
+              choices: (question.choices ?? []).map(choice => choice.trim()).filter(Boolean),
+            }))
+          : null,
         status: 'published',
       });
       setShowCreate(false);
@@ -95,45 +152,106 @@ export default function TeacherAssignments() {
   };
 
   const generateQuiz = async () => {
-    if (!form.module_text.trim() && !form.instructions.trim()) {
+    if (!form.module_text.trim() && !form.instructions.trim() && !moduleFile) {
       Alert.alert('Module text required', 'Paste module or handout text before generating a quiz.');
       return;
     }
 
+    const existingCount = form.questions.length;
+    const remaining = 50 - existingCount;
+    if (remaining < 3) {
+      setQuizStatus({
+        message: remaining === 0
+          ? 'This draft already has the maximum of 50 questions.'
+          : `Only ${remaining} question(s) remain. At least 3 are required per generation.`,
+        type: 'warning',
+      });
+      return;
+    }
+
     setGeneratingQuiz(true);
+    setQuizStatus({ message: 'Generating questions...', type: 'info' });
     try {
-      const res = await api.post('/teacher/assignments/generate-quiz', {
-        module_text: form.module_text.trim() || form.instructions.trim(),
-        question_count: Number(form.question_count || 10),
+      const payload = new FormData();
+      const moduleText = form.module_text.trim() || form.instructions.trim();
+      if (moduleText) payload.append('module_text', moduleText);
+      if (moduleFile) {
+        payload.append('module_file', {
+          uri: moduleFile.uri,
+          name: moduleFile.name,
+          type: moduleFile.mimeType || 'application/octet-stream',
+        });
+      }
+      payload.append('question_count', String(Math.min(Number(form.question_count || 10), remaining)));
+
+      const res = await api.post('/teacher/assignments/generate-quiz', payload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       const questions = res.data?.questions ?? [];
       if (!questions.length) {
-        Alert.alert('No questions generated', 'Try adding more module content.');
+        setQuizStatus({ message: 'No questions were generated. Try adding more module content.', type: 'warning' });
         return;
       }
+      const addedQuestions = questions.slice(0, remaining).map(question => ({
+        question: question.question ?? '',
+        choices: Array.isArray(question.choices) ? question.choices.map(choice => String(choice ?? '')) : ['', '', '', ''],
+        answer: question.answer ?? '',
+      }));
       setForm(current => ({
         ...current,
         type: current.type === 'exam' ? 'exam' : 'quiz',
-        questions_text: questions.map(item => (
-          `${item.question} | ${JSON.stringify(item.choices ?? [])} | ${item.answer ?? ''}`
-        )).join('\n'),
+        questions: [...current.questions, ...addedQuestions],
       }));
-      Alert.alert('Draft ready', 'Review or edit the generated questions before publishing.');
+      setQuizStatus({
+        message: addedQuestions.length < questions.length
+          ? `Added ${addedQuestions.length} question(s); ${form.type}s are limited to 50 questions.`
+          : `${addedQuestions.length} question(s) added. ${form.questions.length + addedQuestions.length} question(s) in the ${form.type}.`,
+        type: addedQuestions.length < questions.length ? 'warning' : 'success',
+      });
     } catch (e) {
-      Alert.alert('Generation failed', e.response?.data?.message || 'Could not generate quiz questions.');
+      setQuizStatus({ message: e.response?.data?.message || 'Could not generate quiz questions.', type: 'error' });
     } finally {
       setGeneratingQuiz(false);
     }
   };
 
+  const addQuestion = () => {
+    if (form.questions.length >= 50) {
+      setQuizStatus({ message: 'Quizzes and exams are limited to 50 questions.', type: 'warning' });
+      return;
+    }
+    setForm(current => ({
+      ...current,
+      questions: [...current.questions, { question: '', choices: ['', '', '', ''], answer: '' }],
+    }));
+    setQuizStatus({ message: '', type: 'info' });
+  };
+
+  const updateQuestion = (index, updates) => {
+    setForm(current => ({
+      ...current,
+      questions: current.questions.map((question, questionIndex) => (
+        questionIndex === index ? { ...question, ...updates } : question
+      )),
+    }));
+  };
+
+  const removeQuestion = index => {
+    setForm(current => ({
+      ...current,
+      questions: current.questions.filter((_, questionIndex) => questionIndex !== index),
+    }));
+  };
+
   const openDetails = async (assignment) => {
     try {
       const res = await api.get(`/assignments/${assignment.id}`);
-      setSelected(current => ({ ...res.data, submissions: current?.submissions ?? [] }));
+      setDetailPreview(null);
+      setSelected(res.data);
       const drafts = {};
       (res.data.submissions ?? []).forEach(submission => {
         drafts[submission.id] = {
-          score: submission.score ? String(submission.score) : '',
+          score: submission.score !== null && submission.score !== undefined ? String(submission.score) : '',
           feedback: submission.feedback ?? '',
         };
       });
@@ -335,24 +453,112 @@ export default function TeacherAssignments() {
                     multiline
                     placeholder="Paste module, handout, or lesson notes here"
                   />
-                  <Field
-                    label="AI question count (3–50)"
-                    value={form.question_count}
-                    onChangeText={value => setForm(current => ({ ...current, question_count: value }))}
-                    theme={theme}
-                    keyboardType="numeric"
-                  />
+                  <View style={s.filePickerRow}>
+                    <TouchableOpacity
+                      style={[s.aiBtn, s.filePickerButton, { borderColor: theme.primary }]}
+                      onPress={pickModuleFile}
+                    >
+                      <Text style={[s.aiText, { color: theme.primary }]}>
+                        {moduleFile ? 'Change module file' : 'Choose TXT, PDF, or DOCX'}
+                      </Text>
+                    </TouchableOpacity>
+                    {moduleFile ? (
+                      <View style={s.selectedFileRow}>
+                        <Text style={[s.selectedFileName, { color: theme.textSub }]} numberOfLines={1}>
+                          {moduleFile.name}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => setModuleFile(null)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Remove selected module file"
+                        >
+                          <Text style={[s.removeFileText, { color: theme.danger }]}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={[s.label, { color: theme.textSub }]}>AI question count</Text>
+                  <View style={s.choiceWrap}>
+                    {[5, 10, 15, 20, 30, 40, 50].map(count => (
+                      <TouchableOpacity
+                        key={count}
+                        style={[s.choice, form.question_count === String(count) && { borderColor: theme.primary, backgroundColor: theme.primaryLight }]}
+                        onPress={() => setForm(current => ({ ...current, question_count: String(count) }))}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: form.question_count === String(count) }}
+                      >
+                        <Text style={[s.choiceText, { color: form.question_count === String(count) ? theme.primary : theme.textSub }]}>{count}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                   <TouchableOpacity style={[s.aiBtn, { borderColor: theme.primary }]} onPress={generateQuiz} disabled={generatingQuiz}>
                     {generatingQuiz ? <ActivityIndicator color={theme.primary} /> : <Text style={[s.aiText, { color: theme.primary }]}>Generate AI {form.type} draft</Text>}
                   </TouchableOpacity>
-                  <Field
-                    label={`${form.type === 'exam' ? 'Exam' : 'Quiz'} questions`}
-                    value={form.questions_text}
-                    onChangeText={value => setForm(current => ({ ...current, questions_text: value }))}
-                    theme={theme}
-                    multiline
-                    placeholder="One per line: Question | choice A, choice B | correct answer"
-                  />
+                  {quizStatus.message ? (
+                    <Text style={[s.quizStatus, { color: quizStatus.type === 'success' ? theme.success : quizStatus.type === 'error' ? theme.danger : theme.warning }]}>
+                      {quizStatus.message}
+                    </Text>
+                  ) : null}
+                  <View style={s.questionBuilderHeader}>
+                    <Text style={[s.label, { color: theme.textSub, marginTop: 0 }]}>
+                      {form.type === 'exam' ? 'Exam Questions' : 'Quiz Questions'} ({form.questions.length}/50)
+                    </Text>
+                    <TouchableOpacity onPress={addQuestion} accessibilityRole="button" accessibilityLabel="Add question">
+                      <Text style={[s.addQuestionText, { color: theme.primary }]}>+ Add question</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {form.questions.map((question, index) => (
+                    <View key={index} style={[s.questionCard, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                      <View style={s.questionCardHeader}>
+                        <Text style={[s.questionNumber, { color: theme.primary }]}>Question {index + 1}</Text>
+                        <TouchableOpacity
+                          onPress={() => removeQuestion(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove question ${index + 1}`}
+                        >
+                          <Text style={[s.removeFileText, { color: theme.danger }]}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Field
+                        label="Question text"
+                        value={question.question}
+                        onChangeText={value => updateQuestion(index, { question: value })}
+                        theme={theme}
+                        multiline
+                        placeholder="Enter the question"
+                      />
+                      <View style={s.questionChoices}>
+                        {question.choices.map((choice, choiceIndex) => (
+                          <Field
+                            key={choiceIndex}
+                            label={`Choice ${String.fromCharCode(65 + choiceIndex)}`}
+                            value={choice}
+                            onChangeText={value => updateQuestion(index, {
+                              choices: question.choices.map((current, currentIndex) => currentIndex === choiceIndex ? value : current),
+                            })}
+                            theme={theme}
+                            multiline
+                            placeholder={`Enter choice ${String.fromCharCode(65 + choiceIndex)}`}
+                          />
+                        ))}
+                      </View>
+                      {question.choices.length < 6 ? (
+                        <TouchableOpacity
+                          onPress={() => updateQuestion(index, { choices: [...question.choices, ''] })}
+                          accessibilityRole="button"
+                        >
+                          <Text style={[s.addQuestionText, { color: theme.primary }]}>+ Add choice</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <Field
+                        label="Correct answer (exact choice text)"
+                        value={question.answer}
+                        onChangeText={value => updateQuestion(index, { answer: value })}
+                        theme={theme}
+                        placeholder="Enter the correct answer"
+                      />
+                    </View>
+                  ))}
                 </>
               )}
 
@@ -372,23 +578,38 @@ export default function TeacherAssignments() {
       <Modal visible={!!selected} animationType="slide">
         <View style={[s.detail, { backgroundColor: theme.bg }]}>
           <View style={[s.detailHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.modalTitle, { color: theme.text }]}>{selected?.title}</Text>
-              <Text style={[s.sub, { color: theme.textSub }]}>{selected?.submissions?.length ?? 0} submissions</Text>
+            <View style={s.detailHeaderTop}>
+              <Text style={[s.detailTitle, { color: theme.text }]} numberOfLines={2}>{selected?.title}</Text>
+              <TouchableOpacity
+                onPress={() => setSelected(null)}
+                style={[s.closeBtn, { backgroundColor: theme.bg, borderColor: theme.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close class work details"
+                hitSlop={6}
+              >
+                <Text style={[s.closeText, { color: theme.text }]}>×</Text>
+              </TouchableOpacity>
             </View>
-            {selected?.status === 'draft' ? (
-              <>
-                <TouchableOpacity style={[s.saveBtn, { flex: 0, paddingHorizontal: 12, backgroundColor: theme.primary }]} onPress={saveDraftQuestions}>
-                  <Text style={s.saveText}>Save</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[s.saveBtn, { flex: 0, paddingHorizontal: 12, backgroundColor: theme.success }]} onPress={publishAssignment}>
-                  <Text style={s.saveText}>Publish</Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
-            <TouchableOpacity onPress={() => setSelected(null)} style={[s.closeBtn, { backgroundColor: theme.bg }]}>
-              <Text style={[s.closeText, { color: theme.text }]}>X</Text>
-            </TouchableOpacity>
+            <View style={s.detailHeaderBottom}>
+              <View style={[s.submissionCount, { backgroundColor: theme.primaryLight }]}>
+                <Text style={[s.submissionCountNumber, { color: theme.primary }]}>
+                  {selected?.submissions?.length ?? 0}
+                </Text>
+                <Text style={[s.submissionCountLabel, { color: theme.primary }]}>
+                  {(selected?.submissions?.length ?? 0) === 1 ? 'submission' : 'submissions'}
+                </Text>
+              </View>
+              {selected?.status === 'draft' ? (
+                <View style={s.detailActions}>
+                  <TouchableOpacity style={[s.headerAction, { backgroundColor: theme.primary }]} onPress={saveDraftQuestions}>
+                    <Text style={s.saveText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[s.headerAction, { backgroundColor: theme.success }]} onPress={publishAssignment}>
+                    <Text style={s.saveText}>Publish</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
           </View>
           <ScrollView contentContainerStyle={s.body}>
             {selected?.status === 'draft' && ['quiz', 'exam'].includes(selected.type) ? (
@@ -469,14 +690,82 @@ export default function TeacherAssignments() {
                 </TouchableOpacity>
               </View>
             ) : null}
+            {['quiz', 'exam'].includes(selected?.type) && (selected?.questions ?? []).length > 0 ? (
+              <TouchableOpacity
+                style={[s.previewButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+                onPress={() => setDetailPreview({ type: 'questions' })}
+              >
+                <View style={[s.previewIcon, { backgroundColor: theme.primaryLight }]}>
+                  <Text style={[s.previewIconText, { color: theme.primary }]}>Q</Text>
+                </View>
+                <View style={s.previewCopy}>
+                  <Text style={[s.title, { color: theme.text }]}>View question set</Text>
+                  <Text style={[s.sub, { color: theme.textSub }]}>{selected.questions.length} questions and answer key</Text>
+                </View>
+                <Text style={[s.previewArrow, { color: theme.textSub }]}>›</Text>
+              </TouchableOpacity>
+            ) : null}
             {(selected?.submissions ?? []).length === 0 ? (
               <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <Text style={[s.title, { color: theme.text }]}>No submissions yet</Text>
               </View>
             ) : selected.submissions.map(submission => (
               <View key={submission.id} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <Text style={[s.title, { color: theme.text }]}>{submission.student?.first_name} {submission.student?.last_name}</Text>
-                <Text style={[s.sub, { color: theme.textSub }]}>{submission.answer_text || 'Quiz answers submitted.'}</Text>
+                <View style={s.submissionCardHeader}>
+                  <View style={s.submissionStudent}>
+                    <Text style={[s.title, { color: theme.text }]}>{submission.student?.first_name} {submission.student?.last_name}</Text>
+                    {submission.student?.student_id ? (
+                      <Text style={[s.sub, { color: theme.textSub }]}>{submission.student.student_id}</Text>
+                    ) : null}
+                  </View>
+                  <View style={[
+                    s.statusBadge,
+                    { backgroundColor: submission.status === 'flagged' ? theme.dangerLight : submission.status === 'graded' ? theme.successLight : theme.primaryLight },
+                  ]}>
+                    <Text style={[
+                      s.statusBadgeText,
+                      { color: submission.status === 'flagged' ? theme.danger : submission.status === 'graded' ? theme.success : theme.primary },
+                    ]}>
+                      {String(submission.status || 'submitted').replace(/_/g, ' ').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+                {['quiz', 'exam'].includes(selected?.type) ? (
+                  <View style={[s.scoreSummary, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                    <Text style={[s.scoreSummaryText, { color: theme.danger }]}>
+                      Correct: {correctAnswerCount(selected.questions ?? [], submission.answers ?? [])}/{selected.questions?.length ?? 0}
+                      {' · '}Mistakes: {(selected.questions?.length ?? 0) - correctAnswerCount(selected.questions ?? [], submission.answers ?? [])}
+                    </Text>
+                    <Text style={[s.scoreSummaryText, { color: theme.text }]}>
+                      Score: {submission.score !== null && submission.score !== undefined
+                        ? `${Number(submission.score)}/${Number(selected.points_possible)} points`
+                        : 'Not graded'}
+                    </Text>
+                  </View>
+                ) : null}
+                {Number(submission.violation_count ?? 0) > 0 ? (
+                  <View style={[
+                    s.violationNotice,
+                    { backgroundColor: Number(submission.violation_count) >= 3 ? theme.dangerLight : theme.warningLight },
+                  ]}>
+                    <Text style={[
+                      s.violationText,
+                      { color: Number(submission.violation_count) >= 3 ? theme.danger : theme.warning },
+                    ]}>
+                      {Number(submission.violation_count) >= 3 ? 'Flagged after repeated app switching' : 'App-switch warnings'} · {submission.violation_count}/3
+                    </Text>
+                  </View>
+                ) : null}
+                {['quiz', 'exam'].includes(selected?.type) && (selected.questions ?? []).length > 0 ? (
+                  <TouchableOpacity
+                    style={[s.reviewAnswersButton, { borderColor: theme.primary }]}
+                    onPress={() => setDetailPreview({ type: 'answers', submission })}
+                  >
+                    <Text style={[s.reviewAnswersText, { color: theme.primary }]}>Review student answers</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={[s.sub, { color: theme.textSub }]}>{submission.answer_text || 'No written answer provided.'}</Text>
+                )}
                 {submission.plagiarism_score !== null && submission.plagiarism_score !== undefined ? (
                   <Text style={[s.warning, { color: Number(submission.plagiarism_score) >= 80 ? theme.danger : theme.textMuted }]}>
                     Similarity: {Number(submission.plagiarism_score).toFixed(1)}%
@@ -489,6 +778,76 @@ export default function TeacherAssignments() {
                 </TouchableOpacity>
               </View>
             ))}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!detailPreview}
+        animationType="slide"
+        onRequestClose={() => setDetailPreview(null)}
+      >
+        <View style={[s.detail, { backgroundColor: theme.bg }]}>
+          <View style={[s.previewHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+            <View style={s.detailHeaderTop}>
+              <View style={s.previewCopy}>
+                <Text style={[s.detailTitle, { color: theme.text }]}>
+                  {detailPreview?.type === 'answers' ? 'Student answers' : 'Question set'}
+                </Text>
+                {detailPreview?.type === 'answers' ? (
+                  <Text style={[s.sub, { color: theme.textSub }]}>
+                    {detailPreview.submission.student?.first_name} {detailPreview.submission.student?.last_name}
+                  </Text>
+                ) : (
+                  <Text style={[s.sub, { color: theme.textSub }]}>
+                    {selected?.questions?.length ?? 0} questions · Answer key
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity
+                onPress={() => setDetailPreview(null)}
+                style={[s.closeBtn, { backgroundColor: theme.bg, borderColor: theme.border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close preview"
+                hitSlop={6}
+              >
+                <Text style={[s.closeText, { color: theme.text }]}>×</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <ScrollView contentContainerStyle={s.body}>
+            {(selected?.questions ?? []).map((question, index) => {
+              const isReviewingAnswers = detailPreview?.type === 'answers';
+              const studentAnswer = detailPreview?.submission?.answers?.[index];
+
+              return (
+                <View key={`preview-question-${index}`} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Text style={[s.questionText, { color: theme.text }]}>{index + 1}. {question.question}</Text>
+                  {(question.choices ?? []).map((choice, choiceIndex) => (
+                    <Text key={`preview-choice-${choiceIndex}`} style={[s.questionOption, { color: theme.textSub }]}>
+                      {String.fromCharCode(65 + choiceIndex)}. {choice}
+                    </Text>
+                  ))}
+                  {isReviewingAnswers ? (
+                    <>
+                      <View style={[s.previewAnswer, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                        <Text style={[s.label, { color: theme.textSub }]}>Student answer</Text>
+                        <Text style={[s.previewAnswerText, { color: theme.text }]}>{studentAnswer || 'Not answered'}</Text>
+                      </View>
+                      <View style={[s.correctAnswerBox, { backgroundColor: theme.successLight }]}>
+                        <Text style={[s.correctAnswerLabel, { color: theme.success }]}>Correct answer</Text>
+                        <Text style={[s.correctAnswerValue, { color: theme.success }]}>{question.answer || 'Not set'}</Text>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={[s.correctAnswerBox, { backgroundColor: theme.successLight }]}>
+                      <Text style={[s.correctAnswerLabel, { color: theme.success }]}>Correct answer</Text>
+                      <Text style={[s.correctAnswerValue, { color: theme.success }]}>{question.answer || 'Not set'}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </ScrollView>
         </View>
       </Modal>
@@ -514,30 +873,12 @@ function Field({ label, value, onChangeText, theme, multiline, placeholder, keyb
   );
 }
 
-function parseQuestions(text) {
-  return text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean)
-    .map(line => {
-      const [question, choices, answer] = line.split('|').map(part => part?.trim());
-      let parsedChoices = [];
-      if (choices?.startsWith('[')) {
-        try {
-          parsedChoices = JSON.parse(choices);
-        } catch {
-          parsedChoices = [];
-        }
-      } else if (choices) {
-        parsedChoices = choices.split(',').map(choice => choice.trim()).filter(Boolean);
-      }
-      return {
-        question,
-        choices: parsedChoices,
-        answer: answer || '',
-      };
-    })
-    .filter(item => item.question);
+function correctAnswerCount(questions, answers) {
+  return questions.filter((question, index) => {
+    const expected = String(question.answer ?? '').trim().toLowerCase();
+    const actual = String(answers[index] ?? '').trim().toLowerCase();
+    return expected !== '' && actual === expected;
+  }).length;
 }
 
 const s = StyleSheet.create({
@@ -566,13 +907,58 @@ const s = StyleSheet.create({
   choiceText: { fontSize: 12, fontWeight: '800' },
   aiBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
   aiText: { fontSize: 13, fontWeight: '900' },
+  filePickerRow: { gap: 8 },
+  filePickerButton: { borderStyle: 'dashed' },
+  selectedFileRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectedFileName: { flex: 1, fontSize: 12, fontWeight: '700' },
+  removeFileText: { fontSize: 12, fontWeight: '900' },
+  quizStatus: { fontSize: 12, fontWeight: '700', lineHeight: 18 },
+  questionBuilderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 8 },
+  addQuestionText: { fontSize: 12, fontWeight: '900' },
+  questionCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 },
+  questionCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  questionNumber: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  questionChoices: { gap: 8 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   secondaryBtn: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
   secondaryText: { fontWeight: '900' },
   saveBtn: { flex: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '900' },
   detail: { flex: 1 },
-  detailHeader: { paddingTop: 48, paddingBottom: 14, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center' },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
-  closeText: { fontSize: 13, fontWeight: '900' },
+  detailHeader: { paddingTop: 48, paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, gap: 12 },
+  detailHeaderTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  detailTitle: { flex: 1, fontSize: 19, fontWeight: '900', lineHeight: 25 },
+  detailHeaderBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  submissionCount: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
+  submissionCountNumber: { fontSize: 13, fontWeight: '900' },
+  submissionCountLabel: { fontSize: 12, fontWeight: '800' },
+  detailActions: { flexDirection: 'row', gap: 8 },
+  headerAction: { borderRadius: 10, paddingHorizontal: 13, paddingVertical: 9, alignItems: 'center' },
+  closeBtn: { width: 44, height: 44, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  closeText: { fontSize: 28, lineHeight: 30, fontWeight: '500', marginTop: -2 },
+  previewHeader: { paddingTop: 48, paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1 },
+  previewButton: { borderWidth: 1, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  previewIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  previewIconText: { fontSize: 16, fontWeight: '900' },
+  previewCopy: { flex: 1 },
+  previewArrow: { fontSize: 26, fontWeight: '500' },
+  reviewAnswersButton: { borderWidth: 1, borderRadius: 10, paddingVertical: 11, alignItems: 'center', marginTop: 12 },
+  reviewAnswersText: { fontSize: 13, fontWeight: '900' },
+  previewAnswer: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 12 },
+  previewAnswerText: { fontSize: 14, fontWeight: '700', marginTop: 4 },
+  submissionCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  submissionStudent: { flex: 1 },
+  statusBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  statusBadgeText: { fontSize: 10, fontWeight: '900' },
+  scoreSummary: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, marginTop: 10, gap: 4 },
+  scoreSummaryText: { fontSize: 12, fontWeight: '800' },
+  violationNotice: { borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, marginTop: 9 },
+  violationText: { fontSize: 12, fontWeight: '900' },
+  questionText: { fontSize: 14, fontWeight: '800', lineHeight: 20 },
+  questionOption: { fontSize: 13, lineHeight: 19, paddingLeft: 8 },
+  correctAnswerBox: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, marginTop: 8 },
+  correctAnswerLabel: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.3 },
+  correctAnswerValue: { fontSize: 13, fontWeight: '900', marginTop: 3, lineHeight: 19 },
+  studentAnswers: { marginTop: 8 },
+  answerRow: { borderTopWidth: 1, paddingVertical: 10, gap: 2 },
 });

@@ -11,7 +11,6 @@ const MORE_ROUTES = [
   { name: 'subjects', label: 'Subjects', icon: 'book-outline' },
   { name: 'subject-requests', label: 'Requests', icon: 'document-text-outline' },
   { name: 'reports', label: 'Reports', icon: 'bar-chart-outline' },
-  { name: 'controls', label: 'Controls', icon: 'settings-outline' },
   { name: 'profile', label: 'Profile', icon: 'person-outline' },
 ];
 

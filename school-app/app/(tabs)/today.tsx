@@ -1,7 +1,7 @@
 // @ts-nocheck
 // app/(tabs)/today.tsx — Student dashboard (fully polished)
 
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
@@ -33,6 +33,7 @@ export default function Today() {
   const [notifications, setNotifications] = useState(null);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [enrollmentSettings, setEnrollmentSettings] = useState(null);
+  const [enrollmentEligibility, setEnrollmentEligibility] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,6 +81,27 @@ export default function Today() {
     }
   }, []);
 
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+
+    const checkEnrollmentEligibility = async () => {
+      try {
+        const response = await api.get('/enrollment/eligibility');
+        if (!cancelled) setEnrollmentEligibility(response.data);
+      } catch (error) {
+        if (!cancelled) {
+          setEnrollmentEligibility({
+            can_enroll: false,
+            message: error.response?.data?.message || 'Unable to verify enrollment eligibility. Please try again later.',
+          });
+        }
+      }
+    };
+
+    checkEnrollmentEligibility();
+    return () => { cancelled = true; };
+  }, []));
+
   useEffect(() => {
     AsyncStorage.multiGet(['role', 'position']).then(pairs => {
       const role = pairs[0][1];
@@ -120,8 +142,10 @@ export default function Today() {
   const applicationForActiveTerm = activeTerm
     && enrollmentApplication?.school_year === activeTerm.school_year
     && enrollmentApplication?.semester?.toLowerCase() === activeTerm.semester?.toLowerCase();
-  const applicationAlreadySubmitted = applicationForActiveTerm
-    && ['pending', 'approved'].includes(enrollmentApplication?.status);
+  const applicationPendingForActiveTerm = applicationForActiveTerm
+    && enrollmentApplication?.status === 'pending';
+  const applicationApprovedForActiveTerm = applicationForActiveTerm
+    && enrollmentApplication?.status === 'approved';
   const enrollment = student?.enrollment;
   const yearLevelLabel = (value) => {
     const year = String(value || '').replace(/[^0-9]/g, '');
@@ -286,20 +310,31 @@ export default function Today() {
         </View>
       </View>
 
-      {enrollmentSettings?.enrollment_open && activeTerm ? (
+      {enrollmentSettings?.enrollment_open && activeTerm && !applicationApprovedForActiveTerm ? (
         <View style={[styles.card, { backgroundColor: theme.card }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Enrollment is open</Text>
           <Text style={[styles.emptyStateText, { color: theme.textSub, marginTop: 6 }]}>
             {activeTerm.semester?.toUpperCase()} Semester - A.Y. {activeTerm.school_year}
           </Text>
-          <TouchableOpacity
-            style={[styles.emptyStateAction, { backgroundColor: theme.primary, marginTop: 12 }]}
-            onPress={() => router.push(applicationAlreadySubmitted ? '/enrollment-status' : '/enrollment')}
-          >
-            <Text style={styles.emptyStateActionText}>
-              {applicationAlreadySubmitted ? 'View Application' : 'Enroll for This Term'}
+          {applicationPendingForActiveTerm ? (
+            <TouchableOpacity
+              style={[styles.emptyStateAction, { backgroundColor: theme.primary, marginTop: 12 }]}
+              onPress={() => router.push('/enrollment-status')}
+            >
+              <Text style={styles.emptyStateActionText}>View Application</Text>
+            </TouchableOpacity>
+          ) : enrollmentEligibility?.can_enroll ? (
+            <TouchableOpacity
+              style={[styles.emptyStateAction, { backgroundColor: theme.primary, marginTop: 12 }]}
+              onPress={() => router.push('/enrollment')}
+            >
+              <Text style={styles.emptyStateActionText}>Enroll for This Term</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.emptyStateText, { color: theme.textSub, marginTop: 12 }]}>
+              {enrollmentEligibility?.message || 'Checking enrollment eligibility...'}
             </Text>
-          </TouchableOpacity>
+          )}
         </View>
       ) : null}
 
@@ -729,5 +764,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-
-

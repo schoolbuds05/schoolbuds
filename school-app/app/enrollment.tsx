@@ -7,7 +7,7 @@ import {
   TouchableOpacity, ActivityIndicator, Alert,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { setToken } from '../src/api';
@@ -167,6 +167,8 @@ export default function EnrollmentScreen() {
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [enrollmentSettings, setEnrollmentSettings] = useState(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(true);
+  const [enrollmentEligibility, setEnrollmentEligibility] = useState(null);
   const [prerequisiteStatuses, setPrerequisiteStatuses] = useState({});
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [subjects, setSubjects]         = useState([]);
@@ -206,6 +208,42 @@ export default function EnrollmentScreen() {
   const [lookupMessage, setLookupMessage] = useState('');
 
   const set = useCallback((key, val) => setForm(p => ({ ...p, [key]: val })), []);
+
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+
+    const checkEligibility = async () => {
+      setEligibilityLoading(true);
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+          if (!cancelled) {
+            setEnrollmentEligibility({
+              can_enroll: false,
+              message: 'Please log in with your student account to check enrollment eligibility.',
+            });
+          }
+          return;
+        }
+
+        setToken(token);
+        const response = await api.get('/enrollment/eligibility');
+        if (!cancelled) setEnrollmentEligibility(response.data);
+      } catch (error) {
+        if (!cancelled) {
+          setEnrollmentEligibility({
+            can_enroll: false,
+            message: error.response?.data?.message || 'Unable to verify your enrollment eligibility. Please try again later.',
+          });
+        }
+      } finally {
+        if (!cancelled) setEligibilityLoading(false);
+      }
+    };
+
+    checkEligibility();
+    return () => { cancelled = true; };
+  }, []));
 
   useEffect(() => {
     const loadEnrollmentSettings = async () => {
@@ -790,6 +828,37 @@ export default function EnrollmentScreen() {
           </View>
           <TouchableOpacity style={s.statusLink} onPress={() => router.push('/enrollment-status')}>
             <Text style={s.statusLinkText}>{'Already applied? Check your status \u2192'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (eligibilityLoading || !enrollmentEligibility) {
+    return (
+      <View style={s.container}>
+        <ScrollView contentContainerStyle={[s.body, s.closedBody]} showsVerticalScrollIndicator={false}>
+          {renderHeader()}
+          <View style={s.noticeCard}>
+            <ActivityIndicator color={C.primary} />
+            <Text style={s.noticeText}>Checking your enrollment eligibility...</Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (!enrollmentEligibility.can_enroll) {
+    return (
+      <View style={s.container}>
+        <ScrollView contentContainerStyle={[s.body, s.closedBody]} showsVerticalScrollIndicator={false}>
+          {renderHeader()}
+          <View style={s.closedCard}>
+            <Text style={s.closedTitle}>Enrollment is not available yet</Text>
+            <Text style={s.closedText}>{enrollmentEligibility.message}</Text>
+          </View>
+          <TouchableOpacity style={s.statusLink} onPress={() => router.push('/enrollment-status')}>
+            <Text style={s.statusLinkText}>Check application status</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>

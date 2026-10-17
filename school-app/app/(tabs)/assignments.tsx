@@ -271,7 +271,7 @@ export default function StudentAssignments() {
         ) : items.map(item => (
           <TouchableOpacity key={item.id} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => open(item)}>
             <View style={s.row}>
-              <View style={[s.badge, { backgroundColor: item.submission ? '#E1F5EE' : '#FAEEDA' }]}>
+              <View style={[s.badge, { backgroundColor: item.submission ? theme.successLight : theme.warningLight }]}>
                 <Text style={[s.badgeText, { color: item.submission ? theme.success : theme.warning }]}>
                   {item.submission ? item.submission.status.toUpperCase() : 'OPEN'}
                 </Text>
@@ -291,16 +291,22 @@ export default function StudentAssignments() {
 
       <Modal visible={!!selected} animationType="slide">
         <View style={[s.detail, { backgroundColor: theme.bg }]}>
-          <View style={[s.detailHeader, { paddingTop: insets.top + 10, paddingLeft: Math.max(insets.left, 16), paddingRight: Math.max(insets.right, 16), backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+          <View style={[s.detailHeader, { paddingTop: insets.top + 10, paddingLeft: Math.max(insets.left, 16), paddingRight: Math.max(insets.right, 16), backgroundColor: theme.primary, borderBottomColor: theme.primary }]}>
             <View style={s.detailHeading}>
-              <Text style={[s.modalTitle, { color: theme.text }]}>{selected?.title}</Text>
-              <Text style={[s.sub, { color: theme.textSub }]}>
+              <Text style={[s.modalTitle, { color: '#FFFFFF' }]}>{selected?.title}</Text>
+              <Text style={[s.detailMeta, { color: '#FFFFFF' }]}>
                 {selected?.type} · {Number(selected?.points_possible || 0).toFixed(0)} pts
                 {selected?.type === 'exam' ? ` · ${selected.duration_minutes} min` : ''}
               </Text>
             </View>
-            <TouchableOpacity style={[s.closeBtn, { backgroundColor: theme.bg }]} onPress={() => setSelected(null)}>
-              <Text style={[s.closeText, { color: theme.text }]}>X</Text>
+            <TouchableOpacity
+              style={s.closeBtn}
+              onPress={() => setSelected(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Close class work"
+              hitSlop={6}
+            >
+              <Text style={s.closeText}>×</Text>
             </TouchableOpacity>
           </View>
           <ScrollView
@@ -308,15 +314,15 @@ export default function StudentAssignments() {
             keyboardShouldPersistTaps="handled"
           >
             {selected?.type === 'exam' && !submissionFinal && remainingSeconds !== null ? (
-              <View style={[s.warningCard, { borderColor: remainingSeconds < 60 ? theme.danger : theme.primary }]}>
+              <View style={[s.warningCard, { backgroundColor: remainingSeconds < 60 ? theme.dangerLight : theme.primaryLight, borderColor: remainingSeconds < 60 ? theme.danger : theme.primary }]}>
                 <Text style={[s.warningText, { color: remainingSeconds < 60 ? theme.danger : theme.primary }]}>
                   Time remaining: {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, '0')}
                 </Text>
               </View>
             ) : null}
             {['quiz', 'exam'].includes(selected?.type) && violations.length ? (
-              <View style={[s.warningCard, { borderColor: theme.warning }]}>
-                <Text style={[s.warningText, { color: theme.warning }]}>{selected.type === 'exam' ? 'Exam' : 'Quiz'} warnings: {violations.length}/3</Text>
+              <View style={[s.warningCard, { backgroundColor: violations.length >= 3 ? theme.dangerLight : theme.warningLight, borderColor: violations.length >= 3 ? theme.danger : theme.warning }]}>
+                <Text style={[s.warningText, { color: violations.length >= 3 ? theme.danger : theme.warning }]}>{selected.type === 'exam' ? 'Exam' : 'Quiz'} warnings: {violations.length}/3</Text>
               </View>
             ) : null}
             <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -347,11 +353,14 @@ export default function StudentAssignments() {
                       const borderColor = quizReviewReady
                         ? isCorrectChoice ? theme.success : isSelected ? theme.danger : theme.border
                         : isSelected ? theme.primary : theme.border;
+                      const backgroundColor = quizReviewReady
+                        ? isCorrectChoice ? theme.successLight : isSelected ? theme.dangerLight : theme.card
+                        : isSelected ? theme.primaryLight : theme.card;
 
                       return (
                         <TouchableOpacity
                           key={choice}
-                          style={[s.choice, { borderColor, backgroundColor: isSelected ? theme.primaryLight : theme.bg }]}
+                          style={[s.choice, { borderColor, backgroundColor }]}
                           onPress={() => !quizReviewReady && !submissionFinal && setAnswers(current => ({ ...current, [index]: choice }))}
                           disabled={quizReviewReady || submissionFinal}
                         >
@@ -415,7 +424,7 @@ const s = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   body: { padding: 16, gap: 12, paddingBottom: 100 },
   card: { borderWidth: 1, borderRadius: 14, padding: 15 },
-  warningCard: { borderWidth: 1, borderRadius: 12, padding: 12, backgroundColor: '#FFF7ED' },
+  warningCard: { borderWidth: 1, borderRadius: 12, padding: 12 },
   warningText: { fontSize: 12, fontWeight: '900' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
@@ -425,16 +434,17 @@ const s = StyleSheet.create({
   sub: { fontSize: 12, fontWeight: '600', marginTop: 5, lineHeight: 18 },
   score: { fontSize: 12, fontWeight: '900', marginTop: 10 },
   detail: { flex: 1 },
-  detailHeader: { minHeight: 76, paddingBottom: 14, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  detailHeader: { minHeight: 76, paddingBottom: 16, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   detailHeading: { flex: 1, minWidth: 0 },
   detailBody: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
   modalTitle: { fontSize: 18, fontWeight: '900', flexShrink: 1 },
-  closeText: { fontSize: 13, fontWeight: '900' },
-  closeBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  detailMeta: { fontSize: 12, fontWeight: '700', marginTop: 5, lineHeight: 18, opacity: 0.88 },
+  closeText: { fontSize: 27, lineHeight: 30, fontWeight: '500', marginTop: -2, color: '#FFFFFF' },
+  closeBtn: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)' },
   questionTitle: { fontSize: 16, fontWeight: '900', lineHeight: 23 },
   input: { borderWidth: 1, borderRadius: 12, minHeight: 46, paddingHorizontal: 12, fontSize: 14, marginTop: 12 },
   textarea: { minHeight: 140, paddingTop: 12 },
-  choice: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginTop: 10, width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  choice: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, marginTop: 10, width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   choiceLetter: { fontSize: 14, fontWeight: '900', lineHeight: 20 },
   choiceText: { flex: 1, fontSize: 14, fontWeight: '400', lineHeight: 20 },
   submitBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },

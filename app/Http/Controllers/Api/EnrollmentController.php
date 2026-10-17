@@ -40,6 +40,14 @@ class EnrollmentController extends Controller
             return response()->json(['message' => 'Please register or log in before enrolling.'], 401);
         }
 
+        $eligibility = $progression->evaluateNextEnrollmentEligibility($studentUser);
+        if (!$eligibility['can_enroll']) {
+            return response()->json([
+                'message' => $eligibility['message'],
+                'outstanding_subjects' => $eligibility['outstanding_subjects'],
+            ], 422);
+        }
+
         $request->merge([
             'email' => $studentUser->email,
         ]);
@@ -284,6 +292,14 @@ class EnrollmentController extends Controller
             'academic_status' => $application->academic_status,
             'irregular_due_to_failed_subjects' => $evaluation['requires_irregular'] ?? false,
         ], 201);
+    }
+
+    public function eligibility(Request $request, SemesterProgressionService $progression)
+    {
+        $studentUser = $request->user();
+        abort_unless($studentUser->role === User::ROLE_STUDENT || $studentUser->hasRole(User::ROLE_STUDENT), 403);
+
+        return response()->json($progression->evaluateNextEnrollmentEligibility($studentUser));
     }
 
     // GET /api/enrollment/status?email=xxx

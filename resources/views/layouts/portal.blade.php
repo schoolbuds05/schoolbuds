@@ -16,6 +16,7 @@
         'Registrar' => [
             ['label' => 'Dashboard', 'route' => 'registrar.dashboard', 'match' => 'registrar/dashboard', 'roles' => ['admin', 'registrar']],
             ['label' => 'Enrollment', 'route' => 'registrar.enrollments.index', 'match' => 'registrar/enrollments*', 'roles' => ['admin', 'registrar']],
+            ['label' => 'Post Tuition', 'route' => 'registrar.tuition.index', 'match' => 'registrar/tuition*', 'roles' => ['registrar']],
             ['label' => 'Student', 'route' => 'registrar.students.index', 'match' => 'registrar/students*', 'roles' => ['admin', 'registrar']],
             ['label' => 'Course', 'route' => 'registrar.courses.index', 'match' => 'registrar/courses*', 'roles' => ['admin', 'registrar']],
             ['label' => 'Subject', 'route' => 'registrar.subjects.index', 'match' => 'registrar/subjects*', 'roles' => ['admin', 'registrar']],
