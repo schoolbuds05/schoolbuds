@@ -1,91 +1,115 @@
-# First deployment: Laravel Cloud + Android
+# Deploy SchoolBuds to Railway and build an Android APK
 
-This repository contains two deployable applications:
+The repository root is the Laravel API/web app. The Expo Android app is in
+`school-app`. Railway hosts Laravel and its database; EAS builds the APK.
 
-- The Laravel web portal and API at the repository root.
-- The Expo Android application in `school-app`.
+## 1. Deploy Laravel to Railway
 
-## 1. Prepare source control
+1. Push this repository to a private GitHub repository. Do not commit either
+   `.env` file.
+2. In Railway, create a project and deploy the GitHub repository as a service.
+   Set the service root directory to `/` if Railway asks. It should detect the
+   Laravel app and use its PHP web server.
+3. Add a MySQL service to the same Railway project.
+4. Add these variables to the Laravel service. For the database values, use
+   Railway's **Add Reference** picker to reference the matching MySQL service
+   variables; do not type placeholder credentials.
 
-Laravel Cloud deploys from a Git repository. Create a private GitHub repository, then push this project. Do not commit either `.env` file. The existing `.gitignore` files exclude them.
+   ```dotenv
+   APP_NAME=SchoolBuds
+   APP_ENV=production
+   APP_KEY=base64:GENERATE_A_UNIQUE_KEY
+   APP_DEBUG=false
+   APP_URL=https://api.schoolbuds.online
+   LOG_CHANNEL=stderr
+   LOG_LEVEL=warning
 
-## 2. Deploy Laravel
+   DB_CONNECTION=mysql
+   DB_HOST=${{MySQL.MYSQLHOST}}
+   DB_PORT=${{MySQL.MYSQLPORT}}
+   DB_DATABASE=${{MySQL.MYSQLDATABASE}}
+   DB_USERNAME=${{MySQL.MYSQLUSER}}
+   DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
 
-1. Create a Laravel Cloud account and create an application from the repository.
-2. Add a production environment and attach a managed MySQL database.
-3. Set the environment variables below in Laravel Cloud. Generate a new `APP_KEY` with `php artisan key:generate --show`; never reuse the local value.
-4. Use these deploy commands:
-
-   ```sh
-   php artisan migrate --force
-   php artisan storage:link
-   php artisan optimize
+   CACHE_STORE=database
+   SESSION_DRIVER=database
+   QUEUE_CONNECTION=database
+   FILESYSTEM_DISK=public
    ```
 
-5. Deploy. Laravel Cloud will assign an HTTPS `*.laravel.cloud` address. Save the address **without** `/api`; it is the mobile app's API origin.
+   If your MySQL service has a different Railway name, select that service's
+   variables in the reference picker. Generate a new application key locally
+   with `php artisan key:generate --show`, then paste the output into Railway's
+   `APP_KEY` variable. Never put a real production key in this file or Git.
 
-Required Laravel Cloud variables:
+5. The included `railway.json` builds the Laravel frontend assets, creates the
+   public-storage symlink, runs database migrations before deploying, and
+   checks Laravel's `/up` health endpoint. Review the Railway deployment logs
+   and confirm the deployment is healthy.
+6. In the Laravel service's **Settings → Networking**, generate a Railway
+   domain first so you can test the service. Confirm that
+   `https://YOUR-RAILWAY-DOMAIN/api/courses` responds.
 
-```dotenv
-APP_NAME=SchoolBuds
-APP_ENV=production
-APP_KEY=base64:GENERATE_A_NEW_VALUE
-APP_DEBUG=false
-APP_URL=https://YOUR-APP.laravel.cloud
-LOG_LEVEL=warning
+## 2. Connect `schoolbuds.online`
 
-DB_CONNECTION=mysql
-DB_HOST=SET_BY_LARAVEL_CLOUD
-DB_PORT=3306
-DB_DATABASE=SET_BY_LARAVEL_CLOUD
-DB_USERNAME=SET_BY_LARAVEL_CLOUD
-DB_PASSWORD=SET_BY_LARAVEL_CLOUD
+1. In the Laravel service's Railway **Settings → Networking → Custom Domain**,
+   add `api.schoolbuds.online`.
+2. Railway will show the DNS record values it requires. In Namecheap, open
+   **Domain List → Manage → Advanced DNS → Host Records**, and enter the exact
+   record(s) Railway provides. Do not guess the CNAME target or TXT value.
+3. Keep existing email DNS records. Wait until Railway verifies the domain and
+   HTTPS certificate, then check `https://api.schoolbuds.online/up` and
+   `https://api.schoolbuds.online/api/courses`.
+4. Set `APP_URL=https://api.schoolbuds.online` in Railway. If you use
+   EngineMailer, add its domain authentication records separately, exactly as
+   its dashboard instructs.
 
-CACHE_STORE=database
-SESSION_DRIVER=database
-QUEUE_CONNECTION=database
-FILESYSTEM_DISK=public
+## 3. Keep uploaded files between deployments
+
+This app stores profile photos, enrollment documents, and marketplace images
+on Laravel's `public` storage disk. Railway's normal container filesystem is
+ephemeral. Attach a Railway Volume to the Laravel service at:
+
+```text
+/app/storage/app/public
 ```
 
-Configure production mail values in Cloud's secret environment variables when email features are ready.
+The mount path assumes Railway's Laravel app root is `/app`. Verify the
+deployment's root directory in Railway before using that path. Files stored
+before a volume is attached are not automatically moved onto it.
 
-After deploying, open `https://YOUR-APP.laravel.cloud` and confirm `https://YOUR-APP.laravel.cloud/api/courses` responds. Configure the database and seed accounts before sharing the app.
+## 4. Build an installable APK
 
-## 3. Build a test APK
+The mobile app must use a reachable HTTPS API origin, without `/api`.
 
-1. In `school-app`, copy `.env.example` to `.env.local` for local development. Set `EXPO_PUBLIC_API_URL` to the Laravel Cloud URL from step 2, with no trailing `/api`.
-2. Create an Expo account, then run:
+1. In `school-app`, create `.env.local` from `.env.example` for local
+   development only. Do not use the LAN IP for a release APK.
+2. From a terminal in `school-app`, log in to Expo and set the preview
+   environment variable to your deployed API URL:
 
-   ```sh
-   npm install
+   ```powershell
    npx eas-cli@latest login
-   npx eas-cli@latest build:configure
-   npx eas-cli@latest env:create --name EXPO_PUBLIC_API_URL --value https://YOUR-APP.laravel.cloud --environment preview --visibility plaintext
+   npx eas-cli@latest env:create --name EXPO_PUBLIC_API_URL --value https://api.schoolbuds.online --environment preview --visibility plaintext
    npx eas-cli@latest build --platform android --profile preview
    ```
 
-3. When prompted, let EAS create and store the Android signing key. Download the resulting APK from the EAS build page and install it on your Android phone.
+3. Download the APK from the EAS build page and test sign-in, email flows,
+   uploads, and the main features using mobile data or a different Wi-Fi
+   network.
 
-The `preview` profile produces an installable APK. Do not put passwords or other private values in `EXPO_PUBLIC_*` variables; they are embedded in the app.
+The production EAS profile produces an Android App Bundle (`.aab`) for Google
+Play. Set `EXPO_PUBLIC_API_URL` in EAS's `production` environment before making
+that build.
 
-## 4. Publish to Google Play
+## Email and secrets
 
-1. Create a Google Play Console developer account and a new app.
-2. Add the production API origin to EAS (or use the Expo dashboard's Environment Variables screen):
+Laravel's mailer defaults to `log`, so email is not delivered until a mail
+provider is configured. Add the provider's credentials only as Railway service
+variables. Never put mail credentials, Laravel keys, or other secrets in the
+APK or any `EXPO_PUBLIC_*` variable.
 
-   ```sh
-   npx eas-cli@latest env:create --name EXPO_PUBLIC_API_URL --value https://YOUR-APP.laravel.cloud --environment production --visibility plaintext
-   ```
-3. Build the Play Store bundle:
+## One-month evaluation
 
-   ```sh
-   npx eas-cli@latest build --platform android --profile production
-   ```
-
-4. Upload the generated `.aab` to Play Console's Internal testing track first. Test sign-in, images, payments, password reset, and every role before requesting production release.
-
-The Android package identifier is `com.schoolbuds.app`. It is permanent once published; verify that the name represents your school or organization before the first Play Store upload.
-
-## Custom domain later
-
-When you buy a domain, attach it in Laravel Cloud, change `APP_URL`, and create a new Android build with `EXPO_PUBLIC_API_URL` set to the new HTTPS origin. Existing installed Android builds will continue to call the old Cloud address until updated.
+Keep both the Railway app service and database active for the whole evaluation.
+If you stop or delete them, the APK will no longer be able to log in or load
+server data. Export a database backup before deleting the Railway project.
