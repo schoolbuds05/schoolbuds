@@ -8,7 +8,6 @@ import { useTheme } from '../../src/theme-context';
 
 const MORE_ROUTES = [
   { name: 'activity', label: 'Activity', icon: 'time-outline' },
-  { name: 'market', label: 'Marketplace', icon: 'storefront-outline' },
   { name: 'controls', label: 'Controls', icon: 'settings-outline' },
   { name: 'profile', label: 'Profile', icon: 'person-outline' },
 ];

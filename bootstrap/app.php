@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'web.roles' => \App\Http\Middleware\EnsureWebPortalRole::class,
             'role' => \App\Http\Middleware\EnsureApiRole::class,
+            'marketplace.access' => \App\Http\Middleware\EnsureMarketplaceAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

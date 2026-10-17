@@ -1,2 +1,6 @@
 // @ts-nocheck
-export { default } from '../(tabs)/market';
+import { Redirect } from 'expo-router';
+
+export default function AdminMarketplaceRedirect() {
+  return <Redirect href="/(admin)/dashboard" />;
+}

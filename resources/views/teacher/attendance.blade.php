@@ -7,18 +7,31 @@
         <li aria-hidden="true" class="text-slate-400">/</li>
         <li>
             <a
-                href="{{ route('teacher.classes', $isPastView ? ['view' => 'past'] : ['view' => 'current']) }}"
+                href="{{ route('teacher.classes', $isCurrentClass ? ['view' => 'current'] : ['view' => 'past']) }}"
                 class="font-bold text-rose-700 hover:underline"
-            >{{ $isPastView ? 'Past Classes' : 'Classes' }}</a>
+            >{{ $isCurrentClass ? 'Classes' : 'Past Classes' }}</a>
         </li>
         <li aria-hidden="true" class="text-slate-400">/</li>
-        <li aria-current="page" class="font-semibold text-slate-600">{{ $isPastView ? 'Past Attendance' : 'Attendance' }} · {{ $class->subject }}</li>
+        <li aria-current="page" class="font-semibold text-slate-600">
+            {{ $isPastView ? ($isCurrentClass ? 'Attendance history' : 'Past Attendance') : 'Attendance' }} · {{ $class->subject }}
+        </li>
     </ol>
 </nav>
 
 <div class="mb-6">
-    <h1 class="text-2xl font-black text-slate-900">{{ $isPastView ? 'Past Attendance' : 'Mark Attendance' }}</h1>
+    <h1 class="text-2xl font-black text-slate-900">
+        {{ $isPastView ? ($isCurrentClass ? 'Attendance history' : 'Past Attendance') : 'Mark Attendance' }}
+    </h1>
     <p class="mt-1 text-sm text-slate-500">{{ $class->subject }} · Grade {{ $class->grade_level }} - {{ $class->section }}</p>
+    @if($isCurrentClass)
+        <div class="mt-3">
+            @if($isPastView)
+                <a href="{{ route('teacher.attendance', $class) }}" class="portal-button-primary">Back to mark attendance</a>
+            @else
+                <a href="{{ route('teacher.attendance', ['class' => $class, 'view' => 'past']) }}" class="portal-button-secondary">View attendance history</a>
+            @endif
+        </div>
+    @endif
 </div>
 
 @if($isPastView)
@@ -99,6 +112,7 @@
                     @php($att = $existing[$student->id] ?? null)
                     <tr id="row-{{ $student->id }}">
                         <td class="px-5 py-3">
+                            <input type="hidden" name="attendance[{{ $student->id }}][student_id]" value="{{ $student->id }}">
                             <div class="flex flex-wrap items-center gap-2">
                                 <p class="font-bold text-slate-800">{{ $student->first_name }} {{ $student->last_name }}</p>
                                 @if($student->is_irregular)

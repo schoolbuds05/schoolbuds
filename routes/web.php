@@ -196,7 +196,7 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
     Route::post('/assignments/{assignment}/publish', [TeacherDashboard::class, 'publishAssignment'])->name('assignments.publish');
     Route::post('/assignments/{assignment}/archive', [TeacherDashboard::class, 'archiveAssignment'])->name('assignments.archive');
     Route::put('/assignments/{assignment}/draft', [TeacherDashboard::class, 'updateDraftAssignment'])->name('assignments.draft.update');
-    Route::get('/market',                       [TeacherDashboard::class, 'market'])->name('market');
+    Route::get('/market',                       [TeacherDashboard::class, 'market'])->middleware('marketplace.access')->name('market');
     Route::post('/market/{item}/buy',           [TeacherDashboard::class, 'buyMarketItem'])->name('market.buy');
     Route::get('/chat',                         [TeacherDashboard::class, 'chat'])->name('chat');
     Route::post('/chat',                        [TeacherDashboard::class, 'sendChat'])->name('chat.send');
@@ -221,14 +221,14 @@ Route::middleware(['auth', 'web.roles:faculty,head_department'])->prefix('depart
 
 Route::middleware(['auth', 'web.roles:admin,property_custodian'])->prefix('property-custodian')->name('property-custodian.')->group(function () {
     Route::get('/dashboard', [PropertyCustodianDashboardController::class, 'index'])->name('dashboard');
-    Route::get('/market', [PropertyCustodianDashboardController::class, 'market'])->name('market');
+    Route::get('/market', [PropertyCustodianDashboardController::class, 'market'])->middleware('marketplace.access')->name('market');
     Route::get('/reports', [PropertyCustodianDashboardController::class, 'reports'])->name('reports');
-    Route::post('/marketplace', [PropertyCustodianDashboardController::class, 'storeMarketplaceItem'])->name('marketplace.store');
-    Route::put('/marketplace/{item}', [PropertyCustodianDashboardController::class, 'updateMarketplaceItem'])->name('marketplace.update');
-    Route::delete('/marketplace/{item}', [PropertyCustodianDashboardController::class, 'destroyMarketplaceItem'])->name('marketplace.destroy');
-    Route::post('/marketplace/orders/{order}/mark-paid', [PropertyCustodianDashboardController::class, 'markOrderPaid'])->name('marketplace.orders.mark-paid');
-    Route::post('/marketplace/orders/{order}/refund/approve', [PropertyCustodianDashboardController::class, 'approveRefund'])->name('marketplace.orders.refund.approve');
-    Route::post('/marketplace/orders/{order}/refund/reject', [PropertyCustodianDashboardController::class, 'rejectRefund'])->name('marketplace.orders.refund.reject');
+    Route::post('/marketplace', [PropertyCustodianDashboardController::class, 'storeMarketplaceItem'])->middleware('marketplace.access')->name('marketplace.store');
+    Route::put('/marketplace/{item}', [PropertyCustodianDashboardController::class, 'updateMarketplaceItem'])->middleware('marketplace.access')->name('marketplace.update');
+    Route::delete('/marketplace/{item}', [PropertyCustodianDashboardController::class, 'destroyMarketplaceItem'])->middleware('marketplace.access')->name('marketplace.destroy');
+    Route::post('/marketplace/orders/{order}/mark-paid', [PropertyCustodianDashboardController::class, 'markOrderPaid'])->middleware('marketplace.access')->name('marketplace.orders.mark-paid');
+    Route::post('/marketplace/orders/{order}/refund/approve', [PropertyCustodianDashboardController::class, 'approveRefund'])->middleware('marketplace.access')->name('marketplace.orders.refund.approve');
+    Route::post('/marketplace/orders/{order}/refund/reject', [PropertyCustodianDashboardController::class, 'rejectRefund'])->middleware('marketplace.access')->name('marketplace.orders.refund.reject');
 });
 
 require __DIR__.'/auth.php';

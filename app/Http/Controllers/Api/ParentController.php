@@ -19,11 +19,12 @@ class ParentController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $today = today()->toDateString();
         $children = Student::query()
             ->where('parent_user_id', $request->user()->id)
             ->orderBy('last_name')
             ->get()
-            ->map(function (Student $student) use ($points) {
+            ->map(function (Student $student) use ($points, $today) {
                 $this->applyDisplaySection($student);
 
                 $grades = Grade::where('student_id', $student->id)
@@ -31,9 +32,51 @@ class ParentController extends Controller
                     ->get()
                     ->groupBy('quarter');
 
-                $attendance = Attendance::where('student_id', $student->id)->get();
-                $totalDays = $attendance->count();
-                $presentDays = $attendance->where('status', 'present')->count();
+                $statuses = ['present', 'late', 'absent', 'excused'];
+                $attendanceRecords = Attendance::query()
+                    ->where('student_id', $student->id)
+                    ->with('schoolClass:id,subject')
+                    ->orderByDesc('date')
+                    ->orderBy('school_class_id')
+                    ->get(['id', 'status', 'date', 'school_class_id']);
+                $attendanceCounts = array_replace(
+                    array_fill_keys($statuses, 0),
+                    $attendanceRecords
+                        ->groupBy('status')
+                        ->map(fn ($records) => $records->count())
+                        ->all()
+                );
+                $todayAttendanceCounts = array_replace(
+                    array_fill_keys($statuses, 0),
+                    $attendanceRecords
+                        ->where('date', $today)
+                        ->groupBy('status')
+                        ->map(fn ($records) => $records->count())
+                        ->all()
+                );
+                $attendanceHistory = $attendanceRecords
+                    ->groupBy('status')
+                    ->map(fn ($records) => $records->map(fn (Attendance $record) => [
+                        'date' => substr((string) $record->date, 0, 10),
+                        'subject' => $record->schoolClass?->subject,
+                    ])->values())
+                    ->all();
+                $attendanceBySubject = $attendanceRecords
+                    ->groupBy(fn (Attendance $record) => $record->schoolClass?->subject ?: 'Other')
+                    ->map(function ($records, string $subject): array {
+                        $total = $records->count();
+                        $present = $records->where('status', 'present')->count();
+
+                        return [
+                            'subject' => $subject,
+                            'present' => $present,
+                            'total' => $total,
+                            'attendance_pct' => round(($present / $total) * 100, 1),
+                        ];
+                    })
+                    ->values();
+                $totalDays = array_sum($attendanceCounts);
+                $presentDays = $attendanceCounts['present'];
 
                 $fees = Fee::where('student_id', $student->id)->get();
 
@@ -41,6 +84,14 @@ class ParentController extends Controller
                     'student' => $student,
                     'grades' => $grades,
                     'attendance_pct' => $totalDays > 0 ? round(($presentDays / $totalDays) * 100, 1) : 0,
+                    'attendance_counts' => $attendanceCounts,
+                    'attendance_history' => $attendanceHistory,
+                    'attendance_by_subject' => $attendanceBySubject,
+                    'today_attendance' => [
+                        'date' => $today,
+                        'counts' => $todayAttendanceCounts,
+                        'recorded' => array_sum($todayAttendanceCounts),
+                    ],
                     'fees' => $fees,
                     'fee_summary' => [
                         'total' => (float) $fees->sum('amount'),

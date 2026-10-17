@@ -56,6 +56,7 @@ class AttendanceController extends Controller
             'existing',
             'date',
             'today',
+            'isCurrentClass',
             'isPastView',
             'attendanceDates',
         ));

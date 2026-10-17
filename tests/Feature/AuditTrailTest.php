@@ -103,7 +103,9 @@ class AuditTrailTest extends TestCase
 
         $this->assertSame('Audit User', $login->actor_name);
         $this->assertSame('web', $login->meta['guard']);
+        $this->assertSame('web_portal', $login->meta['client']);
         $this->assertSame('audit@example.com', $failed->meta['email']);
+        $this->assertSame('web_portal', $failed->meta['client']);
         $this->assertArrayNotHasKey('password', $failed->meta);
         $this->assertNull($failed->user_id);
     }

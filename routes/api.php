@@ -169,30 +169,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/teacher-chat/{contact}/messages',   [TeacherChatController::class, 'send']);
 
     // Marketplace
-    Route::get('/marketplace/my-items',        [MarketplaceController::class, 'myItems']);
-    Route::get('/marketplace/my-orders',       [MarketplaceController::class, 'myOrders']);
-    Route::get('/marketplace/my-chats',        [MarketplaceController::class, 'myChats']);
-    Route::get('/marketplace/sales',           [MarketplaceController::class, 'sales']);
-    Route::get('/marketplace/payment-options', [MarketplaceController::class, 'paymentOptions']);
-    Route::get('/marketplace/settings', [MarketplaceController::class, 'settings']);
-    Route::put('/marketplace/settings', [MarketplaceController::class, 'updateSettings']);
-    Route::post('/marketplace/{item}/approve', [MarketplaceController::class, 'approve']);
-    Route::post('/marketplace/{item}/reject', [MarketplaceController::class, 'reject']);
-    Route::post('/marketplace/orders/{order}/mark-paid', [MarketplaceController::class, 'markOrderPaid']);
-    Route::post('/marketplace/orders/{order}/refund', [MarketplaceController::class, 'refundOrder']);
-    Route::post('/marketplace/orders/{order}/refund/approve', [MarketplaceController::class, 'approveRefund']);
-    Route::post('/marketplace/orders/{order}/refund/reject', [MarketplaceController::class, 'rejectRefund']);
-    Route::post('/marketplace/orders/{order}/received', [MarketplaceController::class, 'markOrderReceived']);
-    Route::post('/marketplace/orders/{order}/cancel', [MarketplaceController::class, 'cancelOrder']);
-    Route::get('/marketplace/orders/{order}/receipt', [MarketplaceController::class, 'receipt']);
-    Route::get('/marketplace',                 [MarketplaceController::class, 'index']);
-    Route::post('/marketplace',                [MarketplaceController::class, 'store']);
-    Route::get('/marketplace/{item}',          [MarketplaceController::class, 'show']);
-    Route::post('/marketplace/{item}/buy',     [MarketplaceController::class, 'buy']);
-    Route::put('/marketplace/{item}',          [MarketplaceController::class, 'update']);
-    Route::delete('/marketplace/{item}',       [MarketplaceController::class, 'destroy']);
-    Route::post('/marketplace/{item}/message', [MarketplaceController::class, 'sendMessage']);
-    Route::get('/marketplace/{item}/messages', [MarketplaceController::class, 'getMessages']);
+    Route::middleware('marketplace.access')->group(function () {
+        Route::get('/marketplace/my-items',        [MarketplaceController::class, 'myItems']);
+        Route::get('/marketplace/my-orders',       [MarketplaceController::class, 'myOrders']);
+        Route::get('/marketplace/my-chats',        [MarketplaceController::class, 'myChats']);
+        Route::get('/marketplace/sales',           [MarketplaceController::class, 'sales']);
+        Route::get('/marketplace/payment-options', [MarketplaceController::class, 'paymentOptions']);
+        Route::get('/marketplace/settings', [MarketplaceController::class, 'settings']);
+        Route::put('/marketplace/settings', [MarketplaceController::class, 'updateSettings']);
+        Route::post('/marketplace/{item}/approve', [MarketplaceController::class, 'approve']);
+        Route::post('/marketplace/{item}/reject', [MarketplaceController::class, 'reject']);
+        Route::post('/marketplace/orders/{order}/mark-paid', [MarketplaceController::class, 'markOrderPaid']);
+        Route::post('/marketplace/orders/{order}/refund', [MarketplaceController::class, 'refundOrder']);
+        Route::post('/marketplace/orders/{order}/refund/approve', [MarketplaceController::class, 'approveRefund']);
+        Route::post('/marketplace/orders/{order}/refund/reject', [MarketplaceController::class, 'rejectRefund']);
+        Route::post('/marketplace/orders/{order}/received', [MarketplaceController::class, 'markOrderReceived']);
+        Route::post('/marketplace/orders/{order}/cancel', [MarketplaceController::class, 'cancelOrder']);
+        Route::get('/marketplace/orders/{order}/receipt', [MarketplaceController::class, 'receipt']);
+        Route::get('/marketplace',                 [MarketplaceController::class, 'index']);
+        Route::post('/marketplace',                [MarketplaceController::class, 'store']);
+        Route::get('/marketplace/{item}',          [MarketplaceController::class, 'show']);
+        Route::post('/marketplace/{item}/buy',     [MarketplaceController::class, 'buy']);
+        Route::put('/marketplace/{item}',          [MarketplaceController::class, 'update']);
+        Route::delete('/marketplace/{item}',       [MarketplaceController::class, 'destroy']);
+        Route::post('/marketplace/{item}/message', [MarketplaceController::class, 'sendMessage']);
+        Route::get('/marketplace/{item}/messages', [MarketplaceController::class, 'getMessages']);
+    });
 
     // Property custodian
     Route::get('/property-custodian/dashboard', [PropertyCustodianController::class, 'dashboard']);

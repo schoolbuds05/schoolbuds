@@ -18,6 +18,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import HeaderGradient from '../components/ui/HeaderGradient';
 import api from '../../src/api';
+import { useTheme } from '../../src/theme-context';
 
 const HEADER_TOP = Platform.OS === 'android'
   ? (StatusBar.currentHeight ?? 24) + 10 : 52;
@@ -46,6 +47,7 @@ const POSITION_OPTIONS = {
 const emptyForm = { name: '', email: '', password: '', role: 'faculty', position: '', department: '' };
 
 export default function AdminUsers() {
+  const { theme } = useTheme();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState(ROLES);
   const [positions, setPositions] = useState(POSITION_OPTIONS);
@@ -205,7 +207,10 @@ export default function AdminUsers() {
               returnKeyType="search"
             />
           </View>
-          <TouchableOpacity style={s.addButton} onPress={openCreate}>
+          <TouchableOpacity
+            style={[s.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
+            onPress={openCreate}
+          >
             <Text style={s.addButtonText}>+ Add staff</Text>
           </TouchableOpacity>
         </View>
@@ -340,18 +345,23 @@ export default function AdminUsers() {
                     <TouchableOpacity
                       style={[
                         s.roleOption,
-                        !form.position && {
+                        (!form.position || form.position === defaultPositionValue(form.role)) && {
                           backgroundColor: defaultPositionStyle(form.role).bg,
                           borderColor: defaultPositionStyle(form.role).color,
                         },
                       ]}
                       onPress={() => setField('position', '')}
                     >
-                      <Text style={[s.roleOptionText, !form.position && { color: defaultPositionStyle(form.role).color }]}>
+                      <Text style={[
+                        s.roleOptionText,
+                        (!form.position || form.position === defaultPositionValue(form.role)) && { color: defaultPositionStyle(form.role).color },
+                      ]}>
                         {defaultPositionLabel(form.role)}
                       </Text>
                     </TouchableOpacity>
-                    {positions[form.role].map(position => (
+                    {positions[form.role]
+                      .filter(position => position.value !== defaultPositionValue(form.role))
+                      .map(position => (
                       <TouchableOpacity
                         key={position.value}
                         style={[
@@ -385,7 +395,11 @@ export default function AdminUsers() {
                 </>
               )}
 
-              <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.7 }]} onPress={saveUser} disabled={saving}>
+              <TouchableOpacity
+                style={[s.saveBtn, { backgroundColor: theme.primary }, saving && { opacity: 0.7 }]}
+                onPress={saveUser}
+                disabled={saving}
+              >
                 {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveText}>{editing ? 'Save changes' : 'Create user'}</Text>}
               </TouchableOpacity>
             </ScrollView>
@@ -425,6 +439,10 @@ function defaultPositionLabel(role) {
   return role === 'faculty' ? 'Teacher / Instructor' : 'None';
 }
 
+function defaultPositionValue(role) {
+  return role === 'faculty' ? 'teacher' : '';
+}
+
 function defaultPositionStyle(role) {
   return role === 'faculty'
     ? { bg: '#ECFDF5', color: '#047857' }
@@ -444,7 +462,7 @@ const s = StyleSheet.create({
   searchCard: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, height: 50, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
   searchIcon: { marginRight: 10 },
   searchInputCard: { flex: 1, color: '#0F172A', height: 50, fontSize: 14 },
-  addButton: { minWidth: 110, backgroundColor: '#4F46E5', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', shadowColor: '#4F46E5', shadowOpacity: 0.18, shadowRadius: 14, elevation: 3 },
+  addButton: { minWidth: 110, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.18, shadowRadius: 14, elevation: 3 },
   addButtonText: { color: '#fff', fontWeight: '900', fontSize: 13 },
   list: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
   userCard: { backgroundColor: '#fff', borderRadius: 18, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
@@ -480,6 +498,6 @@ const s = StyleSheet.create({
   rolePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   roleOption: { minWidth: '30%', flexGrow: 1, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 8, alignItems: 'center' },
   roleOptionText: { color: '#475569', fontSize: 12, fontWeight: '900' },
-  saveBtn: { marginTop: 22, backgroundColor: '#0F172A', borderRadius: 14, padding: 15, alignItems: 'center' },
+  saveBtn: { marginTop: 22, borderRadius: 14, padding: 15, alignItems: 'center' },
   saveText: { color: '#fff', fontWeight: '900', fontSize: 14 },
 });

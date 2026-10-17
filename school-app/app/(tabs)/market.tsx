@@ -8,6 +8,7 @@ import {
   Platform, StatusBar, Image, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Redirect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -1321,6 +1322,10 @@ export default function Market() {
   };
 
   // ── Render ───────────────────────────────────────────────────
+  if (role === 'admin') {
+    return <Redirect href="/(admin)/dashboard" />;
+  }
+
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       <HeaderGradient

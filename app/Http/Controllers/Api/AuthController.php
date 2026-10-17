@@ -89,7 +89,7 @@ class AuthController extends Controller
             ActivityLog::record($request, 'auth_login_failed', 'Failed API login attempt.', [
                 'subject_type' => $user?->getMorphClass(),
                 'subject_id' => $user?->getKey(),
-                'meta' => ['email' => $email, 'client' => 'mobile_api'],
+                'meta' => ['email' => $email, 'client' => 'mobile_app'],
             ]);
 
             return response()->json(['message' => 'Invalid credentials'], 401);
@@ -115,7 +115,11 @@ class AuthController extends Controller
             'user' => $user,
             'subject_type' => User::class,
             'subject_id' => $user->id,
-            'meta' => ['role' => $role, 'position' => $position],
+            'meta' => [
+                'role' => $role,
+                'position' => $position,
+                'client' => 'mobile_app',
+            ],
         ]);
 
         return response()->json([

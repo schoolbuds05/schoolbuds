@@ -40,7 +40,10 @@ class AppServiceProvider extends ServiceProvider
                 'user' => $event->user,
                 'subject_type' => $event->user::class,
                 'subject_id' => $event->user->getAuthIdentifier(),
-                'meta' => ['guard' => $event->guard],
+                'meta' => [
+                    'guard' => $event->guard,
+                    'client' => 'web_portal',
+                ],
             ]);
         });
 
@@ -50,7 +53,11 @@ class AppServiceProvider extends ServiceProvider
             ActivityLog::record(request(), 'auth_login_failed', 'Failed web login attempt.', [
                 'subject_type' => $event->user ? $event->user::class : null,
                 'subject_id' => $event->user?->getKey(),
-                'meta' => ['email' => $email, 'guard' => $event->guard],
+                'meta' => [
+                    'email' => $email,
+                    'guard' => $event->guard,
+                    'client' => 'web_portal',
+                ],
             ]);
         });
 
@@ -58,7 +65,10 @@ class AppServiceProvider extends ServiceProvider
             $email = substr((string) $event->request->input('email', 'unknown'), 0, 255);
 
             ActivityLog::record($event->request, 'auth_login_locked_out', 'Web login rate limit reached.', [
-                'meta' => ['email' => $email],
+                'meta' => [
+                    'email' => $email,
+                    'client' => 'web_portal',
+                ],
             ]);
         });
     }

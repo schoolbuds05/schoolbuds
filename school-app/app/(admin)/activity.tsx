@@ -16,6 +16,7 @@ import { useTheme } from '../../src/theme-context';
 
 const ACTION_META = {
   login: { label: 'Login', color: '#15803D', bg: '#DCFCE7' },
+  auth_login: { label: 'Login', color: '#15803D', bg: '#DCFCE7' },
   logout: { label: 'Logout', color: '#475569', bg: '#F1F5F9' },
   profile_photo_updated: { label: 'Profile', color: '#0369A1', bg: '#E0F2FE' },
   admin_user_created: { label: 'Created', color: '#4338CA', bg: '#EEF2FF' },
@@ -154,12 +155,24 @@ function ActivityCard({ log, theme }) {
         </View>
       </View>
       <Text style={[s.description, { color: theme.text }]}>{log.description}</Text>
+      {clientLabel(log) ? (
+        <Text style={[s.clientLabel, { color: theme.textMuted }]}>{clientLabel(log)}</Text>
+      ) : null}
       <View style={s.cardBottom}>
         <Text style={[s.timeText, { color: theme.textMuted }]}>{formatDate(log.created_at)}</Text>
         {log.ip_address ? <Text style={[s.timeText, { color: theme.textMuted }]}>IP {log.ip_address}</Text> : null}
       </View>
     </View>
   );
+}
+
+function clientLabel(log) {
+  const client = log.meta?.client || log.meta?.guard;
+
+  if (client === 'mobile_app' || client === 'mobile_api') return 'Mobile App';
+  if (client === 'web_portal' || client === 'web') return 'Web Portal';
+  if (log.action === 'login') return 'Mobile App';
+  return null;
 }
 
 function labelFor(action) {
@@ -195,6 +208,7 @@ const s = StyleSheet.create({
   badge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   badgeText: { fontSize: 10, fontWeight: '900' },
   description: { fontSize: 13, lineHeight: 19, marginTop: 12, fontWeight: '600' },
+  clientLabel: { fontSize: 11, fontWeight: '700', marginTop: 5 },
   cardBottom: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginTop: 12 },
   timeText: { fontSize: 11, fontWeight: '700' },
   empty: { borderWidth: 1, borderRadius: 12, padding: 28, alignItems: 'center' },

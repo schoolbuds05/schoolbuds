@@ -97,6 +97,37 @@ class TeacherCurrentClassesTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_current_class_attendance_history_breadcrumb_returns_to_current_classes(): void
+    {
+        $teacher = User::factory()->create([
+            'role' => User::ROLE_FACULTY,
+            'position' => User::POSITION_TEACHER,
+        ]);
+
+        AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '1st',
+        ]);
+        $this->createOffering($teacher, 'Current Attendance Mathematics', '2026-2027', '1st');
+        $this->actingAs($teacher)->get(route('teacher.classes'))->assertOk();
+
+        $class = SchoolClass::query()
+            ->where('teacher_id', $teacher->id)
+            ->where('subject', 'Current Attendance Mathematics')
+            ->firstOrFail();
+
+        $this->get(route('teacher.attendance', ['class' => $class, 'view' => 'past']))
+            ->assertOk()
+            ->assertSee('>Classes</a>', false)
+            ->assertDontSee('>Past Classes</a>', false)
+            ->assertSee('Attendance history')
+            ->assertSee('Back to mark attendance');
+
+        $this->get(route('teacher.attendance', $class))
+            ->assertOk()
+            ->assertSee('View attendance history');
+    }
+
     public function test_teacher_classes_are_empty_when_no_academic_term_is_configured(): void
     {
         $teacher = User::factory()->create([

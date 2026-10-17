@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -28,6 +29,22 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_mobile_api_login_is_labeled_in_the_activity_log(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->postJson('/api/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(
+            'mobile_app',
+            ActivityLog::query()->where('action', 'login')->firstOrFail()->meta['client']
+        );
     }
 
     public function test_users_can_not_authenticate_with_invalid_password(): void

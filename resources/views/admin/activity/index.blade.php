@@ -53,6 +53,14 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
                 @forelse($logs as $log)
+                    @php
+                        $client = $log->meta['client'] ?? $log->meta['guard'] ?? null;
+                        $clientLabel = match ($client) {
+                            'mobile_app', 'mobile_api' => 'Mobile App',
+                            'web_portal', 'web' => 'Web Portal',
+                            default => $log->action === 'login' ? 'Mobile App' : null,
+                        };
+                    @endphp
                     <tr class="align-top">
                         <td class="whitespace-nowrap px-4 py-4 text-xs font-semibold text-slate-500">
                             {{ $log->created_at?->format('Y-m-d H:i') }}
@@ -68,6 +76,9 @@
                             <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
                                 {{ ucwords(str_replace('_', ' ', $log->action)) }}
                             </span>
+                            @if($clientLabel)
+                                <p class="mt-1 text-xs font-semibold text-slate-500">{{ $clientLabel }}</p>
+                            @endif
                         </td>
                         <td class="max-w-xl px-4 py-4 text-slate-700">
                             <p>{{ $log->description }}</p>

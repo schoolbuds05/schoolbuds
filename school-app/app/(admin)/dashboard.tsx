@@ -115,9 +115,6 @@ export default function AdminDashboard() {
         <TouchableOpacity style={[s.primaryAction, { backgroundColor: theme.primary }]} onPress={() => router.push('/(admin)/users')}>
           <Text style={[s.primaryActionText, { color: theme.card }]}>Manage users</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[s.secondaryAction, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => router.push('/(admin)/market')}>
-          <Text style={[s.secondaryActionText, { color: theme.text }]}>Review marketplace</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={[s.panel, { backgroundColor: theme.card, borderColor: theme.border }]}> 
