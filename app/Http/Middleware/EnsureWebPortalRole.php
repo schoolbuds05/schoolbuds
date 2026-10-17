@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureWebPortalRole
@@ -21,12 +20,6 @@ class EnsureWebPortalRole
             return $next($request);
         }
 
-        Auth::guard('web')->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect()->route('login')->withErrors([
-            'email' => 'Only admin, registrar, teacher, and property custodian accounts can sign in to the web portal.',
-        ]);
+        abort(Response::HTTP_FORBIDDEN);
     }
 }

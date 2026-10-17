@@ -134,7 +134,7 @@ Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')-
     Route::post('/departments/{department}/teachers/{user}/remove', [DepartmentController::class, 'removeTeacher'])->name('departments.teachers.remove');
 });
 
-Route::middleware(['auth', 'web.roles:admin,registrar'])->prefix('registrar')->name('registrar.')->group(function () {
+Route::middleware(['auth', 'web.roles:registrar'])->prefix('registrar')->name('registrar.')->group(function () {
     Route::get('/dashboard', [RegistrarDashboardController::class, 'index'])->name('dashboard');
     Route::get('/tuition', [TuitionFeeController::class, 'index'])->middleware('web.roles:registrar')->name('tuition.index');
     Route::post('/tuition', [TuitionFeeController::class, 'store'])->middleware('web.roles:registrar')->name('tuition.store');

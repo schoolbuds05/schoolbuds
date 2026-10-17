@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Services\GradeWorkflowService;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
 
 class GradeController extends Controller
@@ -112,6 +113,8 @@ class GradeController extends Controller
 
     public function byStudent(Student $student)
     {
+        Gate::authorize('viewRecords', $student);
+
         $grades = Grade::where('student_id', $student->id)
             ->with('schoolClass')
             ->orderBy('quarter')

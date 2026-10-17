@@ -8,6 +8,7 @@ use App\Models\SchoolNotification;
 use App\Models\Student;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class FeeController extends Controller
 {
@@ -113,6 +114,8 @@ class FeeController extends Controller
 
     public function byStudent(Student $student)
     {
+        Gate::authorize('viewRecords', $student);
+
         $fees = Fee::where('student_id', $student->id)
             ->orderBy('due_date')
             ->get();

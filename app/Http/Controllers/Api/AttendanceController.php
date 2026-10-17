@@ -8,6 +8,7 @@ use App\Models\SchoolNotification;
 use App\Models\Student;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class AttendanceController extends Controller
 {
@@ -84,6 +85,8 @@ class AttendanceController extends Controller
 
     public function byStudent(Student $student)
     {
+        Gate::authorize('viewRecords', $student);
+
         $attendance = Attendance::where('student_id', $student->id)
             ->orderBy('date', 'desc')
             ->get();
