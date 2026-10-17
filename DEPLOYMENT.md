@@ -64,6 +64,10 @@ The repository root is the Laravel API/web app. The Expo Android app is in
    EngineMailer, add its domain authentication records separately, exactly as
    its dashboard instructs.
 
+Laravel trusts Railway's forwarding headers so generated links and Vite assets
+use the original HTTPS scheme. Keep `APP_URL` set to the public HTTPS origin so
+URLs generated outside an HTTP request also use HTTPS.
+
 ## 3. Keep uploaded files between deployments
 
 This app stores profile photos, enrollment documents, and marketplace images
