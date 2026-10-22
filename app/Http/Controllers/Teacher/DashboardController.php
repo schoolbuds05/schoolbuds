@@ -28,6 +28,27 @@ class DashboardController extends Controller
         $teacher = auth()->user();
 
         [$activeTerm, $classes] = $this->currentTermTeacherClasses();
+        $todayName = now()->format('l');
+        $classes = $classes->filter(function (SchoolClass $class) use ($todayName) {
+            $segments = collect(explode(' · ', (string) $class->schedule));
+            return $segments->contains(fn ($segment) => str_starts_with(strtolower(trim($segment)), strtolower($todayName)));
+        })->map(function (SchoolClass $class) use ($todayName) {
+            $class->schedule = collect(explode(' · ', (string) $class->schedule))
+                ->filter(fn ($segment) => str_starts_with(strtolower(trim($segment)), strtolower($todayName)))
+                ->implode(' · ');
+            $meeting = SectionSubject::query()
+                ->where('teacher_id', auth()->id())
+                ->whereHas('section', fn ($query) => $query->where('name', $class->section))
+                ->whereHas('subject', fn ($query) => $query->where('name', $class->subject))
+                ->with('schedules')
+                ->first();
+            if ($meeting) {
+                $todayMeeting = $meeting->schedules
+                    ->first(fn ($slot) => str_contains(strtolower((string) $slot->day), strtolower($todayName)));
+                $class->room = $todayMeeting?->room ?: $meeting->room;
+            }
+            return $class;
+        })->values();
         $totalStudents = $classes
             ->flatMap(fn (SchoolClass $class) => $workflow->classStudents($class))
             ->unique('id')
@@ -65,7 +86,7 @@ class DashboardController extends Controller
         if ($activeTerm || $view === 'past') {
             $query = SectionSubject::query()
                 ->where('teacher_id', auth()->id())
-                ->with(['section', 'subject']);
+                ->with(['section', 'subject', 'schedules']);
 
             if ($activeTerm) {
                 $query->whereHas('section', function ($sectionQuery) use ($activeTerm, $view) {
@@ -128,7 +149,7 @@ class DashboardController extends Controller
             ->whereHas('section', fn ($query) => $query
                 ->where('school_year', $activeTerm->school_year)
                 ->where('semester', $activeTerm->semester))
-            ->with(['section', 'subject'])
+            ->with(['section', 'subject', 'schedules'])
             ->orderByDesc('id')
             ->get();
     }
@@ -628,13 +649,14 @@ class DashboardController extends Controller
         $schoolClass->section = $section?->name ?? '';
         $schoolClass->school_year = $section?->school_year ?? '';
         $schoolClass->teacher_id = $sectionSubject->teacher_id;
-        $schoolClass->room = $sectionSubject->room;
-        $schoolClass->schedule = trim(implode(' ', array_filter([
-            $sectionSubject->day,
-            ($sectionSubject->time_start && $sectionSubject->time_end)
-                ? "{$sectionSubject->time_start}-{$sectionSubject->time_end}"
-                : null,
-        ])));
+        $meetings = $sectionSubject->schedules->isNotEmpty()
+            ? $sectionSubject->schedules
+            : collect([(object) ['day' => $sectionSubject->day, 'time_start' => $sectionSubject->time_start, 'time_end' => $sectionSubject->time_end, 'room' => $sectionSubject->room]]);
+        $schoolClass->room = $meetings->pluck('room')->filter()->unique()->implode(', ') ?: $sectionSubject->room;
+        $schoolClass->schedule = $meetings->map(fn ($meeting) => trim(implode(' ', array_filter([
+            $meeting->day,
+            ($meeting->time_start && $meeting->time_end) ? "{$meeting->time_start}-{$meeting->time_end}" : null,
+        ]))))->filter()->implode(' · ');
         $schoolClass->save();
 
         return $schoolClass;

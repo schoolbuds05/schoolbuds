@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../src/api';
 import { Colors, Font, Radius, Shadow, HEADER_TOP } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
+import StudentHomeReference from '../components/ui/StudentHomeReference';
 
 function gradeColor(score, theme, isCollege) {
   if (isCollege) {
@@ -109,7 +110,7 @@ export default function Today() {
       if (['head_department', 'dean'].includes(position) || ['head_department', 'dean'].includes(role)) {
         router.replace('/(leadership)/dashboard');
       } else if (['faculty', 'teacher', 'head_teacher'].includes(role)) {
-        router.replace('/(teacher)/classes');
+        router.replace('/(teacher)/dashboard');
       } else if (role === 'parent') {
         router.replace('/(parent)/dashboard');
       } else if (['staff', 'librarian', 'property_custodian'].includes(role)) {
@@ -176,6 +177,28 @@ export default function Today() {
       : status === 'rejected'
         ? (enrollmentApplication?.remarks || 'Your application was not approved. You may review your status and submit again if needed.')
         : 'Your application has been submitted and is waiting for registrar review.';
+
+    return (
+      <StudentHomeReference
+        student={null}
+        user={{ ...user, name: displayName }}
+        data={data}
+        greeting={greeting}
+        sectionLabel="Student account"
+        gwa="—"
+        points={0}
+        notifications={notifications}
+        theme={theme}
+        refreshing={refreshing}
+        onRefresh={() => { setRefreshing(true); fetchDashboard(); }}
+        onProfile={() => router.push('/(tabs)/profile')}
+        onGrades={() => router.push('/(tabs)/grades')}
+        onNotification={openNotification}
+        enrollmentLabel={hasApplication ? statusLabel : 'Complete your enrollment'}
+        enrollmentMessage={hasApplication ? statusText : 'Your account is ready. Submit your enrollment application to unlock your classes and grades.'}
+        enrollmentAction={() => router.push(hasApplication ? '/enrollment-status' : '/enrollment')}
+      />
+    );
 
     return (
       <ScrollView
@@ -273,6 +296,26 @@ export default function Today() {
     );
   }
 
+  return (
+    <StudentHomeReference
+      student={student}
+      user={user}
+      data={data}
+      greeting={greeting}
+      sectionLabel={sectionLabel}
+      gwa={gwa}
+      points={redeemablePoints}
+      notifications={notifications}
+      theme={theme}
+      refreshing={refreshing}
+      onRefresh={() => { setRefreshing(true); fetchDashboard(); }}
+      onProfile={() => router.push('/(tabs)/profile')}
+      onGrades={() => router.push('/(tabs)/grades')}
+      onNotification={openNotification}
+    />
+  );
+
+  if (false) {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.bg }]}
@@ -525,7 +568,7 @@ export default function Today() {
         </View>
       </Modal>
     </ScrollView>
-  );
+  ); }
 }
 
 const styles = StyleSheet.create({

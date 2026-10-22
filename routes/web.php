@@ -132,9 +132,13 @@ Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')-
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
     Route::put('/departments/{department}', [DepartmentController::class, 'update'])->name('departments.update');
     Route::post('/departments/{department}/teachers/{user}/remove', [DepartmentController::class, 'removeTeacher'])->name('departments.teachers.remove');
+    Route::get('/courses', [RegistrarCourseController::class, 'index'])->name('courses.index');
+    Route::post('/courses', [RegistrarCourseController::class, 'store'])->name('courses.store');
+    Route::put('/courses/{course}', [RegistrarCourseController::class, 'update'])->name('courses.update');
+    Route::delete('/courses/{course}', [RegistrarCourseController::class, 'destroy'])->name('courses.destroy');
 });
 
-Route::middleware(['auth', 'web.roles:registrar'])->prefix('registrar')->name('registrar.')->group(function () {
+Route::middleware(['auth', 'web.roles:registrar,head_department'])->prefix('registrar')->name('registrar.')->group(function () {
     Route::get('/dashboard', [RegistrarDashboardController::class, 'index'])->name('dashboard');
     Route::get('/tuition', [TuitionFeeController::class, 'index'])->middleware('web.roles:registrar')->name('tuition.index');
     Route::post('/tuition', [TuitionFeeController::class, 'store'])->middleware('web.roles:registrar')->name('tuition.store');
@@ -153,12 +157,9 @@ Route::middleware(['auth', 'web.roles:registrar'])->prefix('registrar')->name('r
     Route::put('/students/{student}/parent', [StudentManageController::class, 'updateParent'])->name('students.parent.update');
     Route::post('/students/{student}/fees', [StudentManageController::class, 'storeFee'])->name('students.fees.store');
     Route::post('/students/{student}/fees/{fee}/pay', [StudentManageController::class, 'markFeePaid'])->name('students.fees.pay');
-    Route::get('/courses', [RegistrarCourseController::class, 'index'])->name('courses.index');
-    Route::post('/courses', [RegistrarCourseController::class, 'store'])->name('courses.store');
-    Route::put('/courses/{course}', [RegistrarCourseController::class, 'update'])->name('courses.update');
-    Route::delete('/courses/{course}', [RegistrarCourseController::class, 'destroy'])->name('courses.destroy');
     Route::get('/subjects', [RegistrarSubjectController::class, 'index'])->name('subjects.index');
     Route::post('/subjects', [RegistrarSubjectController::class, 'store'])->name('subjects.store');
+    Route::put('/subjects/bulk', [RegistrarSubjectController::class, 'bulkUpdate'])->name('subjects.bulk-update');
     Route::put('/subjects/{subject}', [RegistrarSubjectController::class, 'update'])->name('subjects.update');
     Route::delete('/subjects/{subject}', [RegistrarSubjectController::class, 'destroy'])->name('subjects.destroy');
     Route::get('/subject-requests', [RegistrarSubjectChangeRequestController::class, 'index'])->name('subject-requests.index');
@@ -169,6 +170,10 @@ Route::middleware(['auth', 'web.roles:registrar'])->prefix('registrar')->name('r
     Route::post('/course-shift-requests/{courseShiftRequest}/review', [EnrollmentReviewController::class, 'reviewCourseShiftRequest'])->name('course-shift-requests.review');
     Route::get('/sections', [RegistrarSectionController::class, 'index'])->name('sections.index');
     Route::post('/sections', [RegistrarSectionController::class, 'store'])->name('sections.store');
+    Route::post('/sections/{section}/submit', [RegistrarSectionController::class, 'submit'])->name('sections.submit');
+    Route::post('/sections/{section}/review', [RegistrarSectionController::class, 'review'])->name('sections.review');
+    Route::post('/sections/{section}/close', [RegistrarSectionController::class, 'close'])->name('sections.close');
+    Route::post('/sections/{section}/reopen', [RegistrarSectionController::class, 'reopen'])->name('sections.reopen');
     Route::put('/sections/{section}', [RegistrarSectionController::class, 'update'])->name('sections.update');
     Route::delete('/sections/{section}', [RegistrarSectionController::class, 'destroy'])->name('sections.destroy');
     Route::post('/sections/{section}/subjects', [RegistrarSectionController::class, 'assignSubject'])->name('sections.subjects.store');
@@ -210,6 +215,15 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
 });
 
 Route::middleware(['auth', 'web.roles:faculty,head_department'])->prefix('department-chair')->name('department-chair.')->group(function () {
+    Route::get('/sections', [RegistrarSectionController::class, 'index'])->name('sections.index');
+    Route::post('/sections', [RegistrarSectionController::class, 'store'])->name('sections.store');
+    Route::post('/sections/{section}/submit', [RegistrarSectionController::class, 'submit'])->name('sections.submit');
+    Route::put('/sections/{section}', [RegistrarSectionController::class, 'update'])->name('sections.update');
+    Route::delete('/sections/{section}', [RegistrarSectionController::class, 'destroy'])->name('sections.destroy');
+    Route::post('/sections/{section}/subjects', [RegistrarSectionController::class, 'assignSubject'])->name('sections.subjects.store');
+    Route::delete('/sections/{section}/subjects/{sectionSubject}', [RegistrarSectionController::class, 'removeSubject'])->name('sections.subjects.destroy');
+    Route::post('/sections/{section}/students', [RegistrarSectionController::class, 'enrollStudent'])->name('sections.students.store');
+    Route::delete('/sections/{section}/students/{student}', [RegistrarSectionController::class, 'removeStudent'])->name('sections.students.destroy');
     Route::get('/teachers', [DepartmentChairController::class, 'teachers'])->name('teachers');
     Route::get('/grades', [DepartmentChairController::class, 'grades'])->name('grades');
     Route::get('/grades/{submission}/review', [DepartmentChairController::class, 'reviewPage'])->name('grades.review.page');

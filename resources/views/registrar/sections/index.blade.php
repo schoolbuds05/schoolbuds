@@ -97,7 +97,7 @@
             </div>
             <button type="button" data-modal-close="section-create-modal" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Close</button>
         </header>
-<form method="POST" action="{{ route('registrar.sections.store') }}" class="section-form max-h-[calc(90vh-5rem)] grid grid-cols-1 gap-3 overflow-y-auto p-5 md:grid-cols-4">
+<form method="POST" action="{{ route(request()->routeIs('department-chair.*') ? 'department-chair.sections.store' : 'registrar.sections.store') }}" class="section-form max-h-[calc(90vh-5rem)] grid grid-cols-1 gap-3 overflow-y-auto p-5 md:grid-cols-4">
     @csrf
     <label class="text-xs font-bold uppercase text-slate-500">
         Section name
@@ -112,7 +112,7 @@
         <select name="course" class="course-field mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
             <option value="">Select course</option>
             @foreach($courses as $course)
-                <option value="{{ $course->name }}">{{ $course->name }}</option>
+                <option value="{{ $course->name }}" @selected(($defaultCourse ?? null) === $course->name)>{{ $course->name }}</option>
             @endforeach
         </select>
     </label>
@@ -151,7 +151,8 @@
 
 <div class="grid grid-cols-1 gap-4">
     @foreach($sections as $section)
-        @php
+@php
+    $sectionRoutePrefix = request()->routeIs('department-chair.*') ? 'department-chair.sections' : 'registrar.sections';
             $enrolledIds = $section->students->pluck('id');
             $assignedSubjectIds = $section->sectionSubjects->pluck('subject_id');
             $eligibleStudents = $students
@@ -203,7 +204,7 @@
             $studentCount = $section->students->count();
             $subjectCount = $section->sectionSubjects->count();
         @endphp
-        <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden" data-section-card>
+        <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden" data-section-card data-section-id="{{ $section->id }}">
             {{-- ── Collapsed summary row (always visible) ── --}}
             <button
                 type="button"
@@ -220,8 +221,8 @@
                 <div class="flex items-center gap-3 shrink-0">
                     <span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{{ $subjectCount }} subj</span>
                     <span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{{ $studentCount }}/{{ $section->max_students }}</span>
-                    <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold {{ $section->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500' }}">
-                        {{ $section->is_active ? 'Active' : 'Inactive' }}
+                    <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-bold {{ $section->workflow_status === 'approved' ? 'bg-emerald-100 text-emerald-700' : ($section->workflow_status === 'pending' ? 'bg-amber-100 text-amber-700' : ($section->workflow_status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600')) }}">
+                        {{ ucfirst($section->workflow_status ?: ($section->is_active ? 'approved' : 'draft')) }}
                     </span>
                     <svg data-arrow class="h-4 w-4 text-slate-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                 </div>
@@ -294,6 +295,28 @@
                         @csrf
                         @method('DELETE')
                     </form>
+                    @if(auth()->user()?->position === 'head_department' && in_array($section->workflow_status, ['draft', 'rejected']))
+                        @if($section->workflow_remarks)
+                            <p class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">Registrar remarks: {{ $section->workflow_remarks }}</p>
+                        @endif
+                        <form method="POST" action="{{ route('department-chair.sections.submit', $section) }}" class="mt-3">
+                            @csrf
+                            <button class="rounded-lg bg-amber-500 px-4 py-2 text-xs font-black text-white">Submit for Registrar review</button>
+                        </form>
+                    @elseif(auth()->user()?->role === 'registrar' || auth()->user()?->role === 'admin')
+                        @if($section->workflow_status === 'pending')
+                            <form method="POST" action="{{ route('registrar.sections.review', $section) }}" class="mt-3 flex flex-wrap items-center gap-2">
+                                @csrf
+                                <input name="remarks" placeholder="Remarks (required when rejecting)" class="min-w-[260px] flex-1 rounded-lg border-slate-300 text-xs">
+                                <button name="decision" value="approve" class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white">Approve & open</button>
+                                <button name="decision" value="reject" class="rounded-lg bg-red-600 px-4 py-2 text-xs font-black text-white">Return to Chair</button>
+                            </form>
+                        @elseif($section->workflow_status === 'approved')
+                            <form method="POST" action="{{ route('registrar.sections.close', $section) }}" class="mt-3">@csrf<button class="rounded-lg bg-slate-700 px-4 py-2 text-xs font-black text-white">Close section</button></form>
+                        @elseif($section->workflow_status === 'closed')
+                            <form method="POST" action="{{ route('registrar.sections.reopen', $section) }}" class="mt-3">@csrf<button class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white">Reopen section</button></form>
+                        @endif
+                    @endif
                 </div>
 
                 {{-- Assigned subjects --}}
@@ -346,7 +369,7 @@
             </div>
 
             {{-- Subjects modal --}}
-            <div id="subjects-modal-{{ $section->id }}" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" data-modal>
+            <div id="subjects-modal-{{ $section->id }}" class="fixed inset-0 z-50 {{ (string) session('open_subjects_modal') === (string) $section->id ? 'flex' : 'hidden' }} items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" data-modal aria-hidden="{{ (string) session('open_subjects_modal') === (string) $section->id ? 'false' : 'true' }}">
                 <div class="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-slate-100 shadow-2xl">
                     <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 p-5">
                         <div>
@@ -361,6 +384,7 @@
                             <h3 class="text-sm font-black text-slate-900">Add subjects</h3>
                             <form method="POST" action="{{ route('registrar.sections.subjects.store', $section) }}" class="mt-3 space-y-3">
                                 @csrf
+                                <input type="search" placeholder="Search subjects..." class="w-full rounded-lg border-slate-300 text-sm">
                                 <fieldset>
                                     <legend class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Select one or more subjects</legend>
                                     <div class="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-slate-300 bg-white p-2">
@@ -370,7 +394,7 @@
                                                 $level = $subject->year_level ?: 'Any level';
                                             @endphp
                                             <label class="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm hover:bg-slate-50">
-                                                <input type="checkbox" name="subject_ids[]" value="{{ $subject->id }}" {{ $loop->first ? 'required' : '' }} class="mt-0.5 rounded border-slate-300 text-portal-accent">
+                                                <input type="checkbox" name="subject_ids[]" value="{{ $subject->id }}" class="mt-0.5 rounded border-slate-300 text-portal-accent">
                                                 <span><span class="font-bold text-slate-800">{{ $subject->code }} - {{ $subject->name }}</span><span class="block text-xs text-slate-500">{{ $scope }}, {{ $level }}</span></span>
                                             </label>
                                         @endforeach
@@ -386,7 +410,7 @@
                                         <option value="{{ $teacher->id }}">{{ $teacher->name }}</option>
                                     @endforeach
                                 </select>
-                                <div class="grid grid-cols-2 gap-2 rounded-lg border border-slate-300 bg-white p-3 text-sm sm:grid-cols-4">
+                                <div class="hidden grid grid-cols-2 gap-2 rounded-lg border border-slate-300 bg-white p-3 text-sm sm:grid-cols-4">
                                     @foreach(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day)
                                         <label class="flex items-center gap-2 font-semibold text-slate-600">
                                             <input type="checkbox" name="days[]" value="{{ $day }}" class="rounded border-slate-300 text-violet-600 focus:ring-violet-500">
@@ -394,11 +418,22 @@
                                         </label>
                                     @endforeach
                                 </div>
-                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div class="hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <input type="time" name="time_start" class="rounded-lg border-slate-300 text-sm">
                                     <input type="time" name="time_end" class="rounded-lg border-slate-300 text-sm">
                                 </div>
-                                <input name="room" placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
+                                <input name="room" placeholder="Room" class="hidden w-full rounded-lg border-slate-300 text-sm">
+                                <div data-meeting-list class="space-y-2"></div>
+                                <button type="button" data-add-meeting class="hidden w-full rounded-lg border border-dashed border-violet-300 px-3 py-2 text-xs font-black text-violet-700">+ Add another meeting time</button>
+                                <div data-meeting-modal class="fixed inset-0 z-[60] hidden items-center justify-center bg-slate-950/50 p-4">
+                                    <div class="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-2xl">
+                                        <h3 class="text-base font-black text-slate-900">Add meeting time</h3>
+                                        <select data-modal-day class="w-full rounded-lg border-slate-300 text-sm"><option value="">Select day</option>@foreach(['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $day)<option value="{{ $day }}">{{ $day }}</option>@endforeach</select>
+                                        <div class="grid grid-cols-2 gap-2"><input data-modal-start type="time" class="rounded-lg border-slate-300 text-sm"><input data-modal-end type="time" class="rounded-lg border-slate-300 text-sm"></div>
+                                        <input data-modal-room placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
+                                        <div class="flex justify-end gap-2"><button type="button" data-modal-cancel class="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">Cancel</button><button type="button" data-modal-save class="rounded-lg bg-violet-600 px-3 py-2 text-xs font-black text-white">Add meeting</button></div>
+                                    </div>
+                                </div>
                                 <button class="w-full rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-black text-white hover:bg-portal-accent-hover disabled:opacity-50" @disabled($eligibleSubjects->isEmpty())>
                                     Assign selected subjects
                                 </button>
@@ -409,12 +444,15 @@
                             <div class="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100">
                                 @forelse($section->sectionSubjects as $assignment)
                                     @php $assignmentDays = array_map('trim', explode(',', $assignment->day ?? '')); @endphp
-                                    <div class="p-3">
+                                    <div class="m-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                                         <div class="flex items-center justify-between gap-3">
                                             <div class="min-w-0">
                                                 <p class="truncate text-sm font-black text-slate-800">{{ $assignment->subject?->code }} - {{ $assignment->subject?->name }}</p>
                                                 <p class="truncate text-xs font-semibold text-slate-500">
                                                     {{ $assignment->teacher?->name ?? 'No teacher' }}
+                                                    @foreach(($assignment->schedules ?? collect())->reject(fn ($schedule) => $schedule->day === $assignment->day && $schedule->time_start === $assignment->time_start && $schedule->time_end === $assignment->time_end && $schedule->room === $assignment->room) as $schedule)
+                                                        <span class="block">· {{ $schedule->day }} {{ $schedule->time_start && $schedule->time_end ? $schedule->time_start.'-'.$schedule->time_end : 'Time TBA' }}{{ $schedule->room ? ' · '.$schedule->room : '' }}</span>
+                                                    @endforeach
                                                     @if($assignment->day) · {{ $assignment->day }} @endif
                                                     @if($assignment->time_start || $assignment->time_end) · {{ $assignment->time_start }}-{{ $assignment->time_end }} @endif
                                                     @if($assignment->room) · {{ $assignment->room }} @endif
@@ -426,10 +464,11 @@
                                                 <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Remove</button>
                                             </form>
                                         </div>
-                                        <details class="mt-2">
-                                            <summary class="cursor-pointer text-xs font-bold text-violet-700">Set teacher or edit schedule</summary>
-                                            <form method="POST" action="{{ route('registrar.sections.subjects.store', $section) }}" class="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
+                                        <details class="mt-2 teacher-editor">
+                                            <summary class="inline-flex cursor-pointer list-none rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Teacher &amp; schedule</summary>
+                            <form method="POST" action="{{ route($sectionRoutePrefix . '.subjects.store', $section) }}" class="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
                                                 @csrf
+                                                <div class="mb-3 flex justify-end"><button type="button" data-teacher-close class="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">Close</button></div>
                                                 <input type="hidden" name="subject_id" value="{{ $assignment->subject_id }}">
                                                 <select name="teacher_id" class="w-full rounded-lg border-slate-300 text-sm">
                                                     <option value="">No teacher</option>
@@ -437,19 +476,40 @@
                                                         <option value="{{ $teacher->id }}" @selected($assignment->teacher_id === $teacher->id)>{{ $teacher->name }}</option>
                                                     @endforeach
                                                 </select>
+                                                <input type="hidden" name="day" value="{{ $assignment->day }}">
+                                                @if($assignment->day || $assignment->time_start || $assignment->time_end || $assignment->room)
                                                 <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                                                     @foreach(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as $day)
                                                         <label class="flex items-center gap-2 font-semibold text-slate-600">
-                                                            <input type="checkbox" name="days[]" value="{{ $day }}" @checked(in_array($day, $assignmentDays, true)) class="rounded border-slate-300 text-violet-600">
+                                                            <input type="checkbox" name="days[]" value="{{ $day }}" @checked(in_array($day, $assignmentDays, true)) disabled class="rounded border-slate-300 text-violet-600">
                                                             <span>{{ $day }}</span>
                                                         </label>
                                                     @endforeach
                                                 </div>
                                                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                                    <input type="time" name="time_start" value="{{ $assignment->time_start }}" class="rounded-lg border-slate-300 text-sm">
-                                                    <input type="time" name="time_end" value="{{ $assignment->time_end }}" class="rounded-lg border-slate-300 text-sm">
+                                                    <input type="time" name="time_start" value="{{ $assignment->time_start }}" readonly class="rounded-lg border-slate-300 bg-slate-100 text-sm">
+                                                    <input type="time" name="time_end" value="{{ $assignment->time_end }}" readonly class="rounded-lg border-slate-300 bg-slate-100 text-sm">
                                                 </div>
-                                                <input name="room" value="{{ $assignment->room }}" placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
+                                                <input name="room" value="{{ $assignment->room }}" placeholder="Room" readonly class="w-full rounded-lg border-slate-300 bg-slate-100 text-sm">
+                                                @endif
+                                                <div data-meeting-list class="space-y-2">
+                                                    @foreach($assignment->schedules ?? [] as $schedule)
+                                                        <div class="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4" data-meeting-row data-day="{{ $schedule->day }}" data-start="{{ $schedule->time_start }}" data-end="{{ $schedule->time_end }}" data-room="{{ $schedule->room }}">
+                                                            <div class="text-sm font-semibold text-slate-700"><span data-meeting-label>{{ $schedule->day }} · {{ $schedule->time_start }}-{{ $schedule->time_end }}{{ $schedule->room ? ' · '.$schedule->room : '' }}</span><input type="hidden" name="schedules[{{ $loop->index }}][day]" value="{{ $schedule->day }}"><input type="hidden" name="schedules[{{ $loop->index }}][time_start]" value="{{ $schedule->time_start }}"><input type="hidden" name="schedules[{{ $loop->index }}][time_end]" value="{{ $schedule->time_end }}"><input type="hidden" name="schedules[{{ $loop->index }}][room]" value="{{ $schedule->room }}"></div>
+                                                            <div class="flex gap-2"><button type="button" data-edit-meeting class="rounded-lg bg-violet-50 px-2 py-1 text-xs font-black text-violet-700">Edit</button><button type="button" data-remove-meeting class="rounded-lg bg-red-50 px-2 py-1 text-xs font-black text-red-700">Delete</button></div>
+                                                        </div>
+                                                    @endforeach
+                                                </div>
+                                                <button type="button" data-add-meeting class="w-full rounded-lg border border-dashed border-violet-300 px-3 py-2 text-xs font-black text-violet-700">+ Add another meeting time</button>
+                                                <div data-meeting-modal class="fixed inset-0 z-[60] hidden items-center justify-center bg-slate-950/50 p-4">
+                                                    <div class="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-2xl">
+                                                        <h3 class="text-base font-black text-slate-900">Add meeting time</h3>
+                                                        <select data-modal-day class="w-full rounded-lg border-slate-300 text-sm"><option value="">Select day</option>@foreach(['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] as $day)<option value="{{ $day }}">{{ $day }}</option>@endforeach</select>
+                                                        <div class="grid grid-cols-2 gap-2"><input data-modal-start type="time" class="rounded-lg border-slate-300 text-sm"><input data-modal-end type="time" class="rounded-lg border-slate-300 text-sm"></div>
+                                                        <input data-modal-room placeholder="Room" class="w-full rounded-lg border-slate-300 text-sm">
+                                                        <div class="flex justify-end gap-2"><button type="button" data-modal-cancel class="rounded-lg bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">Cancel</button><button type="button" data-modal-save class="rounded-lg bg-violet-600 px-3 py-2 text-xs font-black text-white">Add meeting</button></div>
+                                                    </div>
+                                                </div>
                                                 <button class="w-full rounded-lg bg-portal-accent px-3 py-2 text-xs font-black text-white hover:bg-portal-accent-hover">Save teacher and schedule</button>
                                             </form>
                                         </details>
@@ -464,7 +524,7 @@
             </div>
 
             {{-- Students modal --}}
-            <div id="students-modal-{{ $section->id }}" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" data-modal>
+            <div id="students-modal-{{ $section->id }}" class="fixed inset-0 z-50 {{ (string) session('open_students_modal') === (string) $section->id ? 'flex' : 'hidden' }} items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" data-modal aria-hidden="{{ (string) session('open_students_modal') === (string) $section->id ? 'false' : 'true' }}">
                 <div class="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-slate-100 shadow-2xl">
                     <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 p-5">
                         <div>
@@ -572,5 +632,124 @@
         programType.addEventListener('change', syncProgramFields);
         syncProgramFields();
     });
+    document.querySelectorAll('input[type="search"]').forEach((search) => {
+        search.addEventListener('input', () => {
+            const query = search.value.toLowerCase();
+            search.closest('form')?.querySelectorAll('fieldset label').forEach(label => { label.classList.toggle('hidden', query && !label.textContent.toLowerCase().includes(query)); });
+        });
+    });
+    document.querySelectorAll('form[action*="/subjects"]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (!form.querySelector('input[name="subject_ids[]"]')) return;
+            const selected = form.querySelectorAll('input[name="subject_ids[]"]:checked');
+            if (!selected.length) {
+                event.preventDefault();
+                window.alert('Select at least one subject first.');
+            }
+            if (selected.length) {
+                const modal = form.closest('[id^="subjects-modal-"]');
+                if (modal) sessionStorage.setItem('keepSubjectsModal', modal.id);
+            }
+        });
+    });
+    document.querySelectorAll('[data-meeting-list]').forEach((list) => {
+        const card = list.closest('.m-2');
+        const meta = card?.querySelector('p.truncate.text-xs');
+        if (meta) { let keptText = false; Array.from(meta.childNodes).forEach(node => { if (node.nodeType !== Node.TEXT_NODE) return; if (!node.textContent.trim()) return; if (keptText) node.remove(); else keptText = true; }); }
+    });
+
+    document.querySelectorAll('[data-add-meeting]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const modal = button.closest('form')?.querySelector('[data-meeting-modal]');
+            modal?.classList.remove('hidden'); modal?.classList.add('flex');
+        });
+    });
+    document.querySelectorAll('[data-meeting-modal]').forEach((modal) => {
+        const form = modal.closest('form');
+        modal.querySelector('[data-modal-cancel]')?.addEventListener('click', () => { modal._editingRow = null; modal.classList.add('hidden'); modal.classList.remove('flex'); });
+        modal.querySelector('[data-modal-save]')?.addEventListener('click', () => {
+            const day = modal.querySelector('[data-modal-day]').value;
+            if (!day) return;
+            const list = form.querySelector('[data-meeting-list]');
+            const editingRow = modal._editingRow;
+            if (editingRow) {
+                if (!editingRow.querySelector('[data-meeting-label]')) { const marker = document.createElement('span'); marker.dataset.meetingLabel = 'true'; editingRow.appendChild(marker); }
+                editingRow.dataset.day = day;
+                editingRow.dataset.start = modal.querySelector('[data-modal-start]').value;
+                editingRow.dataset.end = modal.querySelector('[data-modal-end]').value;
+                editingRow.dataset.room = modal.querySelector('[data-modal-room]').value;
+                editingRow.querySelector('[data-meeting-label]').textContent = `${day} · ${editingRow.dataset.start}-${editingRow.dataset.end}${editingRow.dataset.room ? ` · ${editingRow.dataset.room}` : ''}`;
+                const values = [day, editingRow.dataset.start, editingRow.dataset.end, editingRow.dataset.room];
+                editingRow.querySelectorAll('input[type="hidden"]').forEach((input, i) => { input.value = values[i]; });
+                modal._editingRow = null;
+                modal.classList.add('hidden'); modal.classList.remove('flex');
+                return;
+            }
+            const index = list.querySelectorAll('[data-meeting-row]').length;
+            const row = document.createElement('div');
+            row.className = 'grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3';
+            row.dataset.meetingRow = 'true';
+            row.innerHTML = `<input type="hidden" name="schedules[${index}][day]" value="${day}"><span class="rounded-lg border border-slate-200 px-2 py-2 text-sm">${day}</span><input type="time" name="schedules[${index}][time_start]" value="${modal.querySelector('[data-modal-start]').value}" class="rounded-lg border-slate-300 text-sm"><input type="time" name="schedules[${index}][time_end]" value="${modal.querySelector('[data-modal-end]').value}" class="rounded-lg border-slate-300 text-sm"><input name="schedules[${index}][room]" value="${modal.querySelector('[data-modal-room]').value}" placeholder="Room" class="rounded-lg border-slate-300 text-sm"><button type="button" data-remove-meeting class="rounded-lg bg-red-50 px-2 py-1 text-xs font-black text-red-700">Delete</button>`;
+            list.appendChild(row);
+            modal.querySelector('[data-modal-day]').value = ''; modal.querySelector('[data-modal-start]').value = ''; modal.querySelector('[data-modal-end]').value = ''; modal.querySelector('[data-modal-room]').value = '';
+            modal.classList.add('hidden'); modal.classList.remove('flex');
+        });
+    });
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-edit-meeting]');
+        if (!button) return;
+        const row = button.closest('[data-meeting-row]');
+        const modal = button.closest('form')?.querySelector('[data-meeting-modal]');
+        if (!row || !modal) return;
+        modal._editingRow = row;
+        modal.querySelector('[data-modal-day]').value = row.dataset.day || '';
+        modal.querySelector('[data-modal-start]').value = row.dataset.start || '';
+        modal.querySelector('[data-modal-end]').value = row.dataset.end || '';
+        modal.querySelector('[data-modal-room]').value = row.dataset.room || '';
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+    });
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-remove-meeting]');
+        if (button) button.closest('[data-meeting-row]')?.remove();
+    });
+    const meetingDays = [['Monday','Mon'],['Tuesday','Tue'],['Wednesday','Wed'],['Thursday','Thu'],['Friday','Fri'],['Saturday','Sat'],['Sunday','Sun']];
+    const renderMeetingCard = (row, index) => {
+        const day = row.dataset.day || '', start = row.dataset.start || '', end = row.dataset.end || '', room = row.dataset.room || '';
+        row.className = 'grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4';
+        row.innerHTML = `<div class="flex items-center justify-between"><span class="text-sm font-black text-slate-700">Meeting ${index + 1}</span><div class="flex gap-3"><button type="button" data-edit-meeting class="text-xs font-black text-violet-700">Edit</button><button type="button" data-remove-meeting class="text-xs font-black text-red-700">Remove</button></div></div><div class="flex flex-wrap gap-2">${meetingDays.map(([full, short]) => `<span class="rounded-full border px-3 py-1 text-xs font-bold ${day.includes(full) ? 'border-red-500 bg-red-600 text-white' : 'border-slate-200 bg-white text-slate-500'}">${short}</span>`).join('')}</div><div class="grid grid-cols-1 gap-2 sm:grid-cols-3"><div><p class="mb-1 text-xs font-semibold text-slate-500">Start</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${start || '—'}</p></div><div><p class="mb-1 text-xs font-semibold text-slate-500">End</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${end || '—'}</p></div><div><p class="mb-1 text-xs font-semibold text-slate-500">Room</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${room || 'Room TBA'}</p></div></div><div class="hidden"><input type="hidden" name="schedules[${index}][day]" value="${day}"><input type="hidden" name="schedules[${index}][time_start]" value="${start}"><input type="hidden" name="schedules[${index}][time_end]" value="${end}"><input type="hidden" name="schedules[${index}][room]" value="${room}"></div>`;
+    };
+    document.querySelectorAll('[data-meeting-row]').forEach((row, index) => renderMeetingCard(row, index));
+    document.querySelectorAll('.teacher-editor').forEach((editor) => {
+        editor.querySelector('[data-teacher-close]')?.addEventListener('click', () => { editor.open = false; });
+        editor.addEventListener('toggle', () => {
+            if (editor.open) {
+                Object.assign(editor.style, { position: 'fixed', inset: '8vh 50% auto', transform: 'translateX(-50%)', width: 'min(560px, 92vw)', maxHeight: '84vh', overflowY: 'auto', zIndex: '70', background: '#fff', padding: '18px', borderRadius: '18px', boxShadow: '0 24px 80px rgba(15,23,42,.35)' });
+            } else {
+                editor.removeAttribute('style');
+            }
+        });
+    });
+
+    const openSectionId = @json(session('open_section'));
+    const keepSubjectsModal = sessionStorage.getItem('keepSubjectsModal');
+    if (keepSubjectsModal) {
+        const modal = document.getElementById(keepSubjectsModal);
+        if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); modal.setAttribute('aria-hidden', 'false'); }
+        sessionStorage.removeItem('keepSubjectsModal');
+    }
+    if (openSectionId) {
+        const card = document.querySelector(`[data-section-card][data-section-id="${openSectionId}"]`);
+        const details = card?.querySelector('[data-section-details]');
+        const arrow = card?.querySelector('[data-arrow]');
+        if (details) details.classList.remove('hidden');
+        if (arrow) arrow.classList.add('rotate-180');
+    }
+    @if(session('open_subjects_modal'))
+        const subjectsModal = document.getElementById('subjects-modal-{{ session('open_subjects_modal') }}');
+        subjectsModal?.classList.remove('hidden'); subjectsModal?.classList.add('flex'); subjectsModal?.setAttribute('aria-hidden', 'false');
+    @elseif(session('open_students_modal'))
+        const studentsModal = document.getElementById('students-modal-{{ session('open_students_modal') }}');
+        studentsModal?.classList.remove('hidden'); studentsModal?.classList.add('flex'); studentsModal?.setAttribute('aria-hidden', 'false');
+    @endif
 </script>
 @endsection

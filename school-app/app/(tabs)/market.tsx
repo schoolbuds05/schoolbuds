@@ -8,12 +8,10 @@ import {
   Platform, StatusBar, Image, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Redirect } from 'expo-router';
+import { Redirect, useRouter, useSegments } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import HeaderGradient from '../components/ui/HeaderGradient';
-import SearchBar from '../components/ui/SearchBar';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
@@ -182,6 +180,10 @@ const DEFAULT_PAYMENT_OPTIONS = {
 };
 
 export default function Market() {
+  const router = useRouter();
+  const segments = useSegments();
+  const isTeacherPortal = segments.includes('(teacher)');
+  const marketBackRoute = isTeacherPortal ? '/(teacher)/more' : '/(tabs)/more';
   const { theme } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
@@ -255,6 +257,7 @@ export default function Market() {
     || role === 'property_custodian'
     || (role === 'staff' && position === 'property_custodian');
   const canBuyItems = MARKET_BUYER_ROLES.includes(role);
+  const shouldShowViewTabs = isWeb || viewMode !== 'browse' || (isTeacherPortal && (canManageListings || canBuyItems));
   const activeCheckoutCount = orders.filter(order => !['completed', 'cancelled', 'refunded'].includes(order.status)).length;
   const headerStats = canManageListings
     ? [
@@ -279,6 +282,13 @@ export default function Market() {
       }))
       .catch(e => console.log('Payment options error:', e.message));
   }, []);
+
+  useEffect(() => {
+    if (role !== 'student') return;
+    api.get('/rewards/me')
+      .then(res => setPointsBalance(Number(res.data?.summary?.points || 0)))
+      .catch(error => console.log('Marketplace rewards balance error:', error.message));
+  }, [role]);
 
   useEffect(() => {
     if (role && !canManageListings && viewMode === 'mine') setViewMode('browse');
@@ -1328,31 +1338,14 @@ export default function Market() {
 
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
-      <HeaderGradient
-        title="Marketplace"
-        subtitle={
-          viewMode === 'mine'
-            ? 'Manage your listings'
-            : viewMode === 'sales'
-            ? 'Track buyers, payments, and stock'
-            : viewMode === 'orders'
-            ? 'View payment status and pickup instructions'
-            : 'Browse fixed-price school marketplace items'
-        }
-        initials="MK"
-        stats={isWeb ? headerStats : []}
-        compact
-      >
-        {viewMode === 'browse' ? (
-          <SearchBar
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search items..."
-            onSubmitEditing={fetchItems}
-          />
-        ) : null}
-      </HeaderGradient>
-      <View style={[s.contentShell, { backgroundColor: theme.card, borderBottomColor: theme.border }, isWeb && s.contentShellWeb]}>
+      {viewMode === 'browse' && !isWeb ? <View style={s.studentMarketHeader}>
+        <View style={s.studentMarketTitleRow}><TouchableOpacity style={[s.marketBack, { backgroundColor: theme.card }]} onPress={() => router.replace(marketBackRoute)}><Text style={[s.marketBackText, { color: theme.text }]}>‹</Text></TouchableOpacity><View style={s.marketTitleCopy}><Text style={[s.marketEyebrow, { color: theme.textSub }]}>{isTeacherPortal ? 'School marketplace' : 'Spend your points'}</Text><Text style={[s.marketTitle, { color: theme.text }]}>Marketplace</Text></View><View style={[s.marketLogoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.marketLogo} resizeMode="contain" /></View></View>
+        {!isTeacherPortal && <View style={[s.pointsBalanceCard, { backgroundColor: theme.card }]}><View style={[s.starCircle, { backgroundColor: theme.warningLight }]}><Text style={[s.starText, { color: theme.warning }]}>★</Text></View><View style={{ flex: 1 }}><Text style={[s.balanceLabel, { color: theme.textSub }]}>Your balance</Text><Text style={[s.balanceValue, { color: theme.text }]}>{Number(pointsBalance || 0).toLocaleString()} points</Text></View><View style={s.balanceActions}><TouchableOpacity style={[s.balanceAction, { borderColor: theme.border }]} onPress={() => router.push('/(tabs)/rewards')}><Text style={[s.rewardsLink, { color: theme.primary }]}>Rewards</Text></TouchableOpacity><TouchableOpacity style={[s.balanceAction, { borderColor: theme.border }]} onPress={() => setViewMode('orders')}><Text style={[s.ordersLink, { color: theme.textSub }]}>Orders</Text></TouchableOpacity></View></View>}
+        <View style={[s.marketSearch, { backgroundColor: theme.card }]}><Text style={[s.searchGlyph, { color: theme.textSub }]}>⌕</Text><TextInput value={search} onChangeText={setSearch} placeholder="Search items" placeholderTextColor={theme.textSub} style={[s.marketSearchInput, { color: theme.text }]} onSubmitEditing={fetchItems} /></View>
+      </View> : !isWeb && viewMode === 'orders' ? <View style={s.ordersHeader}>
+        <View style={s.studentMarketTitleRow}><TouchableOpacity style={[s.marketBack, { backgroundColor: theme.card }]} onPress={() => setViewMode('browse')}><Text style={[s.marketBackText, { color: theme.text }]}>‹</Text></TouchableOpacity><View style={s.marketTitleCopy}><Text style={[s.marketEyebrow, { color: theme.textSub }]}>Your purchases</Text><Text style={[s.marketTitle, { color: theme.text }]}>My Orders</Text></View><View style={[s.marketLogoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.marketLogo} resizeMode="contain" /></View></View>
+      </View> : <View style={[s.desktopHeaderSpacer, { backgroundColor: theme.bg }]} />}
+      {shouldShowViewTabs ? <View style={[s.contentShell, { backgroundColor: theme.card, borderBottomColor: theme.border }, isWeb && s.contentShellWeb]}>
         <ScrollView
           horizontal
           scrollEnabled={!isWeb}
@@ -1399,7 +1392,7 @@ export default function Market() {
             </TouchableOpacity>
           )}
         </ScrollView>
-      </View>
+      </View> : null}
 
       {/* ── Category tabs ── */}
       {viewMode === 'browse' && (
@@ -3089,4 +3082,13 @@ const s = StyleSheet.create({
   payBtn:           { backgroundColor: '#E11D48', borderRadius: 12, padding: 14, alignItems: 'center' },
   confirmCancelBtn: { flex: 1.1, backgroundColor: C.danger, borderRadius: 12, padding: 14, alignItems: 'center' },
   payBtnText:       { color: '#fff', fontWeight: '800' },
+  studentMarketHeader: { paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 10 },
+  ordersHeader: { paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 5 },
+  studentMarketTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  marketBack: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  marketBackText: { fontSize: 29, fontWeight: '400', lineHeight: 31, marginTop: -4 },
+  marketTitleCopy: { flex: 1 }, marketEyebrow: { fontSize: 10, fontWeight: '600', marginBottom: 1 }, marketTitle: { fontSize: 22, fontWeight: '800' },
+  marketLogoWrap: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: .08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }, marketLogo: { width: 31, height: 31, borderRadius: 8 },
+  pointsBalanceCard: { minHeight: 57, borderRadius: 14, paddingHorizontal: 13, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', marginBottom: 11 }, starCircle: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 10 }, starText: { fontSize: 16 }, balanceLabel: { fontSize: 9, fontWeight: '700' }, balanceValue: { fontSize: 14, fontWeight: '900', marginTop: 1 }, balanceActions: { flexDirection: 'row', alignItems: 'center', gap: 6 }, balanceAction: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5 }, rewardsLink: { fontSize: 9, fontWeight: '800' }, ordersLink: { fontSize: 9, fontWeight: '700' },
+  marketSearch: { height: 37, borderRadius: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center' }, searchGlyph: { fontSize: 20, marginRight: 7 }, marketSearchInput: { flex: 1, fontSize: 12, paddingVertical: 0 }, desktopHeaderSpacer: { height: 0 },
 });

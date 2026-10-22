@@ -8,6 +8,7 @@ use App\Models\EnrollmentApplication;
 use App\Models\Grade;
 use App\Models\Attendance;
 use App\Models\Fee;
+use App\Models\AcademicTerm;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -113,6 +114,58 @@ class StudentController extends Controller
             ->where('status', '!=', 'paid')
             ->get();
 
+        // Keep the dashboard's next-class card in sync with the student's
+        // Class Schedule screen. Only sections in the active academic term
+        // and the student's currently enrolled sections are included.
+        $activeTerm = AcademicTerm::query()
+            ->where('is_active', true)
+            ->latest('updated_at')
+            ->first();
+        $schedule = collect();
+
+        if ($activeTerm) {
+            $schedule = DB::table('section_students')
+                ->join('sections', 'sections.id', '=', 'section_students.section_id')
+                ->join('section_subjects', 'section_subjects.section_id', '=', 'sections.id')
+                ->leftJoin('section_subject_schedules as schedules', 'schedules.section_subject_id', '=', 'section_subjects.id')
+                ->join('subjects', 'subjects.id', '=', 'section_subjects.subject_id')
+                ->leftJoin('users as teachers', 'teachers.id', '=', 'section_subjects.teacher_id')
+                ->where('section_students.user_id', $user->id)
+                ->where('section_students.status', 'enrolled')
+                ->where('sections.school_year', $activeTerm->school_year)
+                ->where('sections.semester', $activeTerm->semester)
+                ->where('sections.is_active', true)
+                ->orderByRaw('COALESCE(schedules.time_start, section_subjects.time_start)')
+                ->distinct()
+                ->get([
+                    'sections.id as section_id',
+                    'sections.name as section_name',
+                    'subjects.id as subject_id',
+                    'subjects.code',
+                    'subjects.name as subject_name',
+                    'subjects.units_lec',
+                    'subjects.units_lab',
+                    DB::raw('COALESCE(schedules.day, section_subjects.day) as day'),
+                    DB::raw('COALESCE(schedules.time_start, section_subjects.time_start) as time_start'),
+                    DB::raw('COALESCE(schedules.time_end, section_subjects.time_end) as time_end'),
+                    DB::raw('COALESCE(schedules.room, section_subjects.room) as room'),
+                    'teachers.name as teacher_name',
+                ])
+                ->map(fn ($item) => (array) $item)
+                ->values();
+        }
+
+        $today = now()->format('D');
+        $todayClasses = $schedule->filter(fn (array $item) => $this->scheduleIncludesDay($item['day'] ?? null, $today))->values();
+        $unitsTotal = $schedule->unique('subject_id')->sum(fn (array $item) => (float) ($item['units_lec'] ?? 0) + (float) ($item['units_lab'] ?? 0));
+        $currentMinutes = now()->hour * 60 + now()->minute;
+        $currentClass = $todayClasses->first(function (array $item) use ($currentMinutes) {
+            $start = $this->scheduleTimeMinutes($item['time_start'] ?? null);
+            $end = $this->scheduleTimeMinutes($item['time_end'] ?? null);
+            return $start !== null && $end !== null && $start <= $currentMinutes && $currentMinutes < $end;
+        });
+        $nextClass = $todayClasses->first(fn (array $item) => ($this->scheduleTimeMinutes($item['time_start'] ?? null) ?? -1) > $currentMinutes);
+
         return response()->json([
             'student'        => $student,
             'user'           => $user,
@@ -121,7 +174,62 @@ class StudentController extends Controller
             'attendance_pct' => $attendancePct,
             'pending_fees'   => $fees,
             'reward_summary' => $points->summaryFor($student, $student->school_year),
+            'units_total'    => $unitsTotal,
+            'schedule'       => $schedule,
+            'today_classes'  => $todayClasses,
+            'current_class'  => $currentClass,
+            'next_class'     => $nextClass,
         ]);
+    }
+
+    private function scheduleIncludesDay(?string $value, string $today): bool
+    {
+        if (!$value) {
+            return false;
+        }
+
+        $day = strtoupper(trim($value));
+        $today = strtoupper(substr($today, 0, 3));
+        $aliases = [
+            'SUN' => ['SUN', 'SUNDAY'],
+            'MON' => ['MON', 'MONDAY'],
+            'TUE' => ['TUE', 'TUES', 'TUESDAY'],
+            'WED' => ['WED', 'WEDNESDAY'],
+            'THU' => ['THU', 'THUR', 'THURS', 'THURSDAY'],
+            'FRI' => ['FRI', 'FRIDAY'],
+            'SAT' => ['SAT', 'SATURDAY'],
+        ];
+
+        foreach (preg_split('/[\\s,\\/;&-]+/', $day, -1, PREG_SPLIT_NO_EMPTY) as $token) {
+            foreach ($aliases[$today] ?? [] as $alias) {
+                if ($token === $alias) {
+                    return true;
+                }
+            }
+        }
+
+        // Common compact schedule codes used by the section editor.
+        return ($today === 'MON' && str_contains($day, 'M'))
+            || ($today === 'TUE' && (str_contains($day, 'TUE') || str_contains($day, 'TTH')))
+            || ($today === 'WED' && str_contains($day, 'W'))
+            || ($today === 'THU' && (str_contains($day, 'TH') || str_contains($day, 'TTH')))
+            || ($today === 'FRI' && str_contains($day, 'F'))
+            || ($today === 'SAT' && str_contains($day, 'S'))
+            || ($today === 'SUN' && str_contains($day, 'SU'));
+    }
+
+    private function scheduleTimeMinutes(?string $value): ?int
+    {
+        if (!$value || !preg_match('/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i', trim($value), $match)) {
+            return null;
+        }
+
+        $hour = (int) $match[1];
+        $minute = (int) ($match[2] ?? 0);
+        $suffix = strtolower($match[3] ?? '');
+        if ($suffix === 'pm' && $hour < 12) $hour += 12;
+        if ($suffix === 'am' && $hour === 12) $hour = 0;
+        return ($hour % 24) * 60 + $minute;
     }
 
     private function applyDisplaySection(Student $student): void

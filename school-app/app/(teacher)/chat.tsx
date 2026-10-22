@@ -14,7 +14,7 @@ import HeaderGradient from '../components/ui/HeaderGradient';
 const C = {
   green: '#1D9E75',
   greenLight: '#E1F5EE',
-  bg: '#F4F6F9',
+  bg: '#F9E9EC',
   card: '#FFFFFF',
   border: '#EFEFEF',
   text: '#1A1A2E',
@@ -98,17 +98,6 @@ export default function TeacherChat() {
   if (!isThread) {
     return (
       <View style={s.container}>
-        <HeaderGradient
-          title="Chat"
-          subtitle="Answer questions from your assigned students"
-          initials="TC"
-          stats={[
-            { label: 'Contacts', value: contacts.length, accent: '#A5F3FC' },
-            { label: 'Messages', value: messages.length, accent: '#FDE68A' },
-            { label: 'Status', value: loading ? 'Loading' : 'Ready', accent: '#FBCFE8' },
-          ]}
-        />
-
         {loading ? (
           <View style={s.center}><ActivityIndicator color={C.green} /></View>
         ) : contacts.length === 0 ? (
@@ -121,7 +110,25 @@ export default function TeacherChat() {
           <FlatList
             data={contacts}
             keyExtractor={item => String(item.id)}
-            contentContainerStyle={{ padding: 16 }}
+            contentContainerStyle={s.contactsContent}
+            ListHeaderComponent={
+              <>
+                <View style={s.contactsHero}>
+                  <View style={s.contactsTitleRow}>
+                    <View><Text style={s.contactsEyebrow}>Answer questions from your students</Text><Text style={s.contactsTitle}>Chat</Text></View>
+                    <View style={s.heroIcon}><Text style={s.heroLeaf}>🍃</Text></View>
+                  </View>
+                  <View style={s.contactsStats}>
+                    <View style={s.contactsStat}><Text style={s.contactsStatValue}>{contacts.length}</Text><Text style={s.contactsStatLabel}>Contacts</Text></View>
+                    <View style={s.contactsDivider} />
+                    <View style={s.contactsStat}><Text style={s.contactsStatValue}>{messages.length}</Text><Text style={s.contactsStatLabel}>Messages</Text></View>
+                    <View style={s.contactsDivider} />
+                    <View style={s.contactsStat}><Text style={s.contactsStatValue}>Ready</Text><Text style={s.contactsStatLabel}>Status</Text></View>
+                  </View>
+                </View>
+                <View style={s.studentsHeading}><Text style={s.studentsTitle}>Your students</Text><Text style={s.studentsCount}>{contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'}</Text></View>
+              </>
+            }
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={s.contactCard}
@@ -144,11 +151,11 @@ export default function TeacherChat() {
                     <Text style={s.lastMessage} numberOfLines={1}>{item.last_message}</Text>
                   ) : null}
                 </View>
-                {item.unread > 0 && (
+                {item.unread > 0 ? (
                   <View style={s.unreadBadge}>
                     <Text style={s.unreadText}>{item.unread}</Text>
                   </View>
-                )}
+                ) : <Text style={s.contactChevron}>›</Text>}
               </TouchableOpacity>
             )}
           />
@@ -254,21 +261,37 @@ const s = StyleSheet.create({
   sub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
   backBtn: { marginBottom: 6 },
   backText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
+  contactsContent: { paddingHorizontal: 15, paddingTop: 34, paddingBottom: 20 },
+  contactsHero: { backgroundColor: '#F2C8D0', borderRadius: 18, paddingHorizontal: 13, paddingTop: 2, paddingBottom: 11, marginHorizontal: -7 },
+  contactsTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  contactsEyebrow: { color: '#765B61', fontSize: 10, fontWeight: '600' },
+  contactsTitle: { color: '#2A1B1F', fontSize: 20, fontWeight: '900', lineHeight: 24 },
+  heroIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 2 },
+  heroLeaf: { fontSize: 21 },
+  contactsStats: { flexDirection: 'row', minHeight: 51, alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, marginTop: 10 },
+  contactsStat: { flex: 1, alignItems: 'center' },
+  contactsStatValue: { color: '#2A1B1F', fontSize: 14, fontWeight: '900' },
+  contactsStatLabel: { color: '#806E73', fontSize: 8, marginTop: 2 },
+  contactsDivider: { width: 1, height: 34, backgroundColor: '#ECD6DA' },
+  studentsHeading: { marginTop: 16, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  studentsTitle: { color: '#2A1B1F', fontSize: 13, fontWeight: '900' },
+  studentsCount: { color: '#806E73', fontSize: 10, fontWeight: '700' },
   contactCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: C.border,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: C.card, borderRadius: 11, padding: 11, marginBottom: 6,
+    borderWidth: 1, borderColor: '#E7DADD',
   },
   avatar: {
-    width: 46, height: 46, borderRadius: 23,
+    width: 34, height: 34, borderRadius: 17,
     backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: C.green, fontSize: 18, fontWeight: '800' },
-  contactName: { color: C.text, fontSize: 15, fontWeight: '700' },
-  contactRole: { color: C.sub, fontSize: 12, marginTop: 2 },
-  lastMessage: { color: C.muted, fontSize: 12, marginTop: 4 },
+  avatarText: { color: C.green, fontSize: 10, fontWeight: '900' },
+  contactName: { color: C.text, fontSize: 11, fontWeight: '900' },
+  contactRole: { color: C.sub, fontSize: 9, marginTop: 2 },
+  lastMessage: { color: C.muted, fontSize: 9, marginTop: 3 },
+  contactChevron: { color: '#B09299', fontSize: 21, fontWeight: '300' },
   unreadBadge: {
     minWidth: 22, height: 22, borderRadius: 11,
     backgroundColor: C.green, alignItems: 'center', justifyContent: 'center',

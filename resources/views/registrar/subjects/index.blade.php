@@ -89,6 +89,103 @@
     </div>
 </div>
 
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+    <label class="flex items-center gap-2 text-sm font-bold text-slate-700">
+        <input type="checkbox" data-subject-select-all class="rounded border-slate-300 text-portal-accent">
+        Select all on this page
+    </label>
+    <div class="flex items-center gap-3">
+        <span data-subject-selection-count class="text-sm text-slate-500">0 subjects selected</span>
+        <button type="button" data-bulk-edit-open disabled class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover disabled:cursor-not-allowed disabled:opacity-50">Edit selected</button>
+    </div>
+</div>
+
+<div id="subject-bulk-edit-modal" data-modal class="fixed inset-0 z-50 {{ old('form_context') === 'bulk_subject_edit' ? 'flex' : 'hidden' }} items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-hidden="{{ old('form_context') === 'bulk_subject_edit' ? 'false' : 'true' }}" aria-labelledby="subject-bulk-edit-title" tabindex="-1">
+    <section class="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+            <div>
+                <h2 id="subject-bulk-edit-title" class="text-lg font-black text-slate-900">Edit selected subjects</h2>
+                <p class="mt-1 text-sm text-slate-500">Only fields you change will be applied to the selected subjects.</p>
+            </div>
+            <button type="button" data-modal-close="subject-bulk-edit-modal" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Close</button>
+        </header>
+        <form id="subject-bulk-edit-form" method="POST" action="{{ route('registrar.subjects.bulk-update') }}" class="min-h-0 flex-1 overflow-y-auto p-5">
+            @csrf
+            @method('PUT')
+            <input type="hidden" name="form_context" value="bulk_subject_edit">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label class="text-xs font-bold uppercase text-slate-500">
+                    College course
+                    <select name="bulk_course" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <option value="__unchanged__" @selected(old('bulk_course', '__unchanged__') === '__unchanged__')>Keep each current course</option>
+                        <option value="__general__" @selected(old('bulk_course') === '__general__')>General (all college courses)</option>
+                        @foreach($collegeCourseOptions as $courseName)
+                            <option value="{{ $courseName }}" @selected(old('bulk_course') === $courseName)>{{ $courseName }}</option>
+                        @endforeach
+                    </select>
+                    <span class="mt-1 block text-[11px] font-normal normal-case text-slate-400">Applies to selected college subjects; SHS subjects are unchanged.</span>
+                </label>
+                <label class="text-xs font-bold uppercase text-slate-500">
+                    SHS strand
+                    <select name="bulk_strand" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <option value="__unchanged__" @selected(old('bulk_strand', '__unchanged__') === '__unchanged__')>Keep each current strand</option>
+                        <option value="__general__" @selected(old('bulk_strand') === '__general__')>General (all SHS strands)</option>
+                        @foreach($shsStrands as $strand)
+                            <option value="{{ $strand }}" @selected(old('bulk_strand') === $strand)>{{ $strand }}</option>
+                        @endforeach
+                    </select>
+                    <span class="mt-1 block text-[11px] font-normal normal-case text-slate-400">Applies to selected SHS subjects; college subjects are unchanged.</span>
+                </label>
+                <label class="text-xs font-bold uppercase text-slate-500">
+                    Year / grade level
+                    <select name="bulk_year_level" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <option value="__unchanged__" @selected(old('bulk_year_level', '__unchanged__') === '__unchanged__')>Keep each current level</option>
+                        <option value="__clear__" @selected(old('bulk_year_level') === '__clear__')>Any level (clear)</option>
+                        @foreach($yearLevels as $yearLevel)
+                            <option value="{{ $yearLevel }}" @selected(old('bulk_year_level') === $yearLevel)>Level {{ $yearLevel }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label class="text-xs font-bold uppercase text-slate-500">
+                    Semester
+                    <select name="bulk_semester" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <option value="__unchanged__" @selected(old('bulk_semester', '__unchanged__') === '__unchanged__')>Keep each current semester</option>
+                        <option value="__clear__" @selected(old('bulk_semester') === '__clear__')>No semester (clear)</option>
+                        <option value="1st" @selected(old('bulk_semester') === '1st')>1st</option>
+                        <option value="2nd" @selected(old('bulk_semester') === '2nd')>2nd</option>
+                        <option value="summer" @selected(old('bulk_semester') === 'summer')>Summer</option>
+                    </select>
+                </label>
+                <label class="text-xs font-bold uppercase text-slate-500 md:col-span-2">
+                    Prerequisites
+                    <select name="prerequisite_mode" data-prerequisite-mode class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                        <option value="unchanged" @selected(old('prerequisite_mode', 'unchanged') === 'unchanged')>Keep each subject's prerequisites</option>
+                        <option value="replace" @selected(old('prerequisite_mode') === 'replace')>Replace with the selected prerequisites below</option>
+                        <option value="clear" @selected(old('prerequisite_mode') === 'clear')>Clear all prerequisites</option>
+                    </select>
+                </label>
+                <div data-bulk-prerequisite-options class="md:col-span-2">
+                    <p class="mb-2 text-xs font-bold text-slate-600">Choose the prerequisite set to apply when replacing.</p>
+                    <div class="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 grid grid-cols-1 gap-1 md:grid-cols-3">
+                        @foreach($allSubjects as $prerequisiteSubject)
+                            <label class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white">
+                                <input type="checkbox" name="prerequisite_ids[]" value="{{ $prerequisiteSubject->id }}" form="subject-bulk-edit-form" @checked(in_array($prerequisiteSubject->id, old('prerequisite_ids', []))) class="rounded border-slate-300 text-portal-accent">
+                                <span class="font-semibold text-portal-accent">{{ $prerequisiteSubject->code }}</span>
+                                <span class="truncate">{{ $prerequisiteSubject->name }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                    <p class="mt-1 text-[11px] text-slate-400">A subject will never be assigned itself as a prerequisite. Selecting none replaces the set with no prerequisites.</p>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button type="button" data-modal-close="subject-bulk-edit-modal" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                <button type="submit" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Apply to selected</button>
+            </div>
+        </form>
+    </section>
+</div>
+
 <div id="subject-create-modal" data-modal class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="subject-create-title" tabindex="-1">
     <section class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
         <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
@@ -187,12 +284,13 @@
             $totalUnits = (float) $subject->units_lec + (float) $subject->units_lab;
         @endphp
         <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden" data-subject-card>
-            {{-- ── Collapsed summary row (always visible) ── --}}
-            <button
-                type="button"
-                class="subject-toggle flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-slate-50 transition-colors"
-                onclick="this.closest('[data-subject-card]').querySelector('[data-subject-details]').classList.toggle('hidden'); this.querySelector('[data-arrow]').classList.toggle('rotate-180');"
-            >
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="subject_ids[]" value="{{ $subject->id }}" form="subject-bulk-edit-form" data-subject-select @checked(in_array($subject->id, old('subject_ids', []))) aria-label="Select {{ $subject->code }} for bulk editing" class="ml-3 rounded border-slate-300 text-portal-accent">
+                <button
+                    type="button"
+                    class="subject-toggle flex min-w-0 flex-1 items-center justify-between gap-4 p-4 text-left hover:bg-slate-50 transition-colors"
+                    onclick="this.closest('[data-subject-card]').querySelector('[data-subject-details]').classList.toggle('hidden'); this.querySelector('[data-arrow]').classList.toggle('rotate-180');"
+                >
                 <div class="flex items-center gap-3 min-w-0">
                     <span class="inline-flex items-center rounded-lg bg-portal-accent-soft px-2.5 py-1 text-xs font-black text-portal-accent whitespace-nowrap">{{ $subject->code }}</span>
                     <div class="min-w-0">
@@ -207,7 +305,8 @@
                     </span>
                     <svg data-arrow class="h-4 w-4 text-slate-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                 </div>
-            </button>
+                </button>
+            </div>
 
             {{-- ── Expanded details (hidden by default) ── --}}
             <div data-subject-details class="hidden border-t border-slate-100">
@@ -316,6 +415,73 @@
 </div>
 
 <script>
+    const subjectBulkModal = document.getElementById('subject-bulk-edit-modal');
+    const subjectBulkForm = document.getElementById('subject-bulk-edit-form');
+    const subjectSelectionInputs = Array.from(document.querySelectorAll('[data-subject-select]'));
+    const subjectSelectAll = document.querySelector('[data-subject-select-all]');
+    const bulkEditButton = document.querySelector('[data-bulk-edit-open]');
+    const selectionCount = document.querySelector('[data-subject-selection-count]');
+
+    const updateSubjectSelection = () => {
+        const selectedCount = subjectSelectionInputs.filter((input) => input.checked).length;
+        if (selectionCount) {
+            selectionCount.textContent = `${selectedCount} subject${selectedCount === 1 ? '' : 's'} selected`;
+        }
+        if (bulkEditButton) {
+            bulkEditButton.disabled = selectedCount === 0;
+        }
+        if (subjectSelectAll) {
+            subjectSelectAll.checked = subjectSelectionInputs.length > 0 && selectedCount === subjectSelectionInputs.length;
+            subjectSelectAll.indeterminate = selectedCount > 0 && selectedCount < subjectSelectionInputs.length;
+        }
+    };
+
+    subjectSelectionInputs.forEach((input) => input.addEventListener('change', updateSubjectSelection));
+    subjectSelectAll?.addEventListener('change', () => {
+        subjectSelectionInputs.forEach((input) => {
+            input.checked = subjectSelectAll.checked;
+        });
+        updateSubjectSelection();
+    });
+    bulkEditButton?.addEventListener('click', () => {
+        if (subjectSelectionInputs.some((input) => input.checked)) {
+            subjectBulkModal?.classList.remove('hidden');
+            subjectBulkModal?.classList.add('flex');
+            subjectBulkModal?.setAttribute('aria-hidden', 'false');
+        }
+    });
+    document.querySelectorAll('[data-modal-close="subject-bulk-edit-modal"]').forEach((button) => {
+        button.addEventListener('click', () => {
+            subjectBulkModal?.classList.add('hidden');
+            subjectBulkModal?.classList.remove('flex');
+            subjectBulkModal?.setAttribute('aria-hidden', 'true');
+        });
+    });
+    subjectBulkModal?.addEventListener('click', (event) => {
+        if (event.target === subjectBulkModal) {
+            subjectBulkModal.classList.add('hidden');
+            subjectBulkModal.classList.remove('flex');
+            subjectBulkModal.setAttribute('aria-hidden', 'true');
+        }
+    });
+    const prerequisiteMode = subjectBulkForm?.querySelector('[data-prerequisite-mode]');
+    const prerequisiteOptions = subjectBulkForm?.querySelector('[data-bulk-prerequisite-options]');
+    const syncBulkPrerequisiteOptions = () => {
+        const replacing = prerequisiteMode?.value === 'replace';
+        prerequisiteOptions?.classList.toggle('opacity-50', !replacing);
+        prerequisiteOptions?.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            input.disabled = !replacing;
+        });
+    };
+    prerequisiteMode?.addEventListener('change', syncBulkPrerequisiteOptions);
+    syncBulkPrerequisiteOptions();
+    updateSubjectSelection();
+    if (@json(old('form_context') === 'bulk_subject_edit')) {
+        subjectBulkModal?.classList.remove('hidden');
+        subjectBulkModal?.classList.add('flex');
+        subjectBulkModal?.setAttribute('aria-hidden', 'false');
+    }
+
     document.querySelectorAll('.subject-form').forEach((form) => {
         const programType = form.querySelector('.program-type');
         const courseField = form.querySelector('.course-field');

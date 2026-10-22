@@ -5,10 +5,10 @@ import { Platform, StatusBar } from 'react-native';
 
 export const Colors = {
   // Primary palettes
-  blue:        '#378ADD',
-  blueLight:   '#E6F1FB',
-  green:       '#1D9E75',
-  greenLight:  '#E1F5EE',
+  blue:        '#B5233D',
+  blueLight:   '#F9E4E8',
+  green:       '#1E6B3A',
+  greenLight:  '#DDF0E3',
   purple:      '#7F77DD',
   purpleLight: '#EEECFB',
   orange:      '#D85A30',
@@ -17,18 +17,18 @@ export const Colors = {
   // Semantic
   danger:      '#E24B4A',
   dangerLight: '#FCEBEB',
-  warning:     '#BA7517',
-  warningLight:'#FAEEDA',
-  success:     '#1D9E75',
-  successLight:'#E1F5EE',
+  warning:     '#8A6700',
+  warningLight:'#FFF1BF',
+  success:     '#1E6B3A',
+  successLight:'#DDF0E3',
 
   // Neutrals
-  bg:          '#F4F6F9',
+  bg:          '#F7E9EC',
   card:        '#FFFFFF',
-  border:      '#EFEFEF',
-  text:        '#1A1A2E',
-  textSub:     '#6B7280',
-  textMuted:   '#B0B7C3',
+  border:      '#EBDDDF',
+  text:        '#2A1B1F',
+  textSub:     '#7A666B',
+  textMuted:   '#AD999E',
   navBg:       '#FFFFFF',
 };
 

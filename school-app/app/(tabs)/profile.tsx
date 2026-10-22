@@ -10,6 +10,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import api, { removeToken } from '../../src/api';
 import { Colors, Font, Radius, Shadow, HEADER_TOP } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
@@ -22,6 +23,8 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState([]);
+  const [notificationsExpanded, setNotificationsExpanded] = useState(true);
+  const [passwordExpanded, setPasswordExpanded] = useState(false);
 
   useEffect(() => {
     AsyncStorage.multiGet(['role', 'position']).then(pairs => {
@@ -177,6 +180,22 @@ export default function Profile() {
   ].filter(Boolean);
 
   return (
+    <ScrollView style={[styles.compactContainer, { backgroundColor: theme.bg }]} contentContainerStyle={styles.compactContent}>
+      <View style={styles.compactTop}><TouchableOpacity style={[styles.compactBack, { backgroundColor: theme.card }]} onPress={() => router.back()}><Ionicons name="chevron-back" size={16} color={theme.text} /></TouchableOpacity><Text style={[styles.compactTopLabel, { color: theme.textSub }]}>Profile</Text></View>
+      <TouchableOpacity style={styles.compactIdentity} onPress={handleChangePhoto} disabled={uploadingPhoto}><View style={[styles.compactAvatar, { backgroundColor: theme.primary }]}>{profilePhotoUrl ? <Image source={{ uri: profilePhotoUrl }} style={styles.compactAvatarImage} /> : <Text style={styles.compactInitials}>{initials[0]}</Text>}</View><Text style={[styles.compactName, { color: theme.text }]}>{s?.first_name} {s?.last_name}</Text><Text style={[styles.compactId, { color: theme.textSub }]}>{s?.student_id}</Text></TouchableOpacity>
+      <View style={[styles.compactStats, { backgroundColor: theme.card }]}><CompactStat value={gwa} label="GWA" theme={theme} /><CompactStat value={`${data?.attendance_pct ?? 0}%`} label="Attendance" theme={theme} /><CompactStat value={data?.pending_fees?.length ?? 0} label="Fees due" theme={theme} /></View>
+      <Text style={[styles.compactSection, { color: theme.textSub }]}>Color theme</Text><View style={[styles.compactThemeCard, { backgroundColor: theme.card }]}>{Object.values(themes).map(palette => <TouchableOpacity key={palette.name} style={[styles.compactThemeDot, { backgroundColor: palette.primary }, themeName === palette.name && styles.compactThemeSelected]} onPress={() => setThemeName(palette.name)} />)}</View>
+      <Text style={[styles.compactSection, { color: theme.textSub }]}>Student information</Text><View style={[styles.compactInfo, { backgroundColor: theme.card }]}><CompactInfo label="School year" value={s?.school_year} theme={theme} /><CompactInfo label="Year and section" value={gradeSection} theme={theme} /><CompactInfo label="Program" value={enrollment?.program_type === 'college' ? enrollment?.course : enrollment?.strand} theme={theme} /><CompactInfo label="Status" value={s?.status || 'Active'} theme={theme} last /></View>
+      <TouchableOpacity style={[styles.compactAction, { backgroundColor: theme.card }]} onPress={() => setNotificationsExpanded(value => !value)}><View style={styles.compactActionLabel}><Ionicons name="notifications-outline" size={17} color={theme.primary} /><Text style={[styles.compactPrefText, { color: theme.text }]}>Notifications</Text></View><Ionicons name={notificationsExpanded ? 'chevron-up' : 'chevron-forward'} size={17} color={theme.textSub} /></TouchableOpacity>
+      {notificationsExpanded && <View style={[styles.compactInfo, { backgroundColor: theme.card }]}>{notificationPrefs.map((pref, index) => <View key={pref.category} style={[styles.compactPref, index < notificationPrefs.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}><Text style={[styles.compactPrefText, { color: theme.text }]}>{pref.category.replace('_', ' ')}</Text><Switch value={!!pref.in_app} onValueChange={() => togglePreference(pref.category, 'in_app')} trackColor={{ false: theme.border, true: theme.primaryLight }} thumbColor={pref.in_app ? theme.primary : '#f4f3f4'} /></View>)}</View>}
+      <Text style={[styles.compactSection, { color: theme.textSub }]}>Achievements</Text><View style={[styles.compactInfo, { backgroundColor: theme.card }]}>{badges.map((badge, index) => <View key={`${badge.label}-${index}`} style={[styles.compactPref, index < badges.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}><Text style={[styles.compactPrefText, { color: theme.text }]}>{badge.label}</Text><Text style={{ fontSize: 18 }}>{badge.icon}</Text></View>)}</View>
+      <TouchableOpacity style={[styles.compactAction, { backgroundColor: theme.card }]} onPress={() => setPasswordExpanded(value => !value)}><View style={styles.compactActionLabel}><Ionicons name="lock-closed-outline" size={17} color={theme.primary} /><Text style={[styles.compactPrefText, { color: theme.text }]}>Change password</Text></View><Ionicons name={passwordExpanded ? 'chevron-up' : 'chevron-forward'} size={17} color={theme.textSub} /></TouchableOpacity>
+      {passwordExpanded && <ChangePasswordCard theme={theme} />}
+      <TouchableOpacity style={[styles.compactLogout, { borderColor: theme.danger, backgroundColor: theme.card }]} onPress={handleLogout}><Ionicons name="log-out-outline" size={16} color={theme.danger} /><Text style={[styles.compactLogoutText, { color: theme.danger }]}>Log out</Text></TouchableOpacity>
+    </ScrollView>
+  );
+
+  return (
     <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} contentContainerStyle={{ paddingBottom: 40 }}>
 
       {/* ── Hero ── */}
@@ -302,7 +321,16 @@ export default function Profile() {
   );
 }
 
+function CompactStat({ value, label, theme }) {
+  return <View style={styles.compactStat}><Text style={[styles.compactStatValue, { color: theme.text }]}>{value}</Text><Text style={[styles.compactStatLabel, { color: theme.textSub }]}>{label}</Text></View>;
+}
+
+function CompactInfo({ label, value, theme, last }) {
+  return <View style={[styles.compactInfoRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}><Text style={[styles.compactInfoLabel, { color: theme.textSub }]}>{label}</Text><Text style={[styles.compactInfoValue, { color: theme.text }]} numberOfLines={1}>{value || '—'}</Text></View>;
+}
+
 const styles = StyleSheet.create({
+  compactContainer: { flex: 1 }, compactContent: { width: '100%', maxWidth: 600, alignSelf: 'center', padding: 16, paddingTop: HEADER_TOP, paddingBottom: 28 }, compactTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 }, compactBack: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, compactTopLabel: { fontSize: 16, fontWeight: '800' }, compactIdentity: { alignItems: 'center', marginBottom: 14 }, compactAvatar: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }, compactAvatarImage: { width: '100%', height: '100%', borderRadius: 36 }, compactInitials: { color: '#fff', fontSize: 28, fontWeight: '900' }, compactName: { fontSize: 16, fontWeight: '900' }, compactId: { fontSize: 11, marginTop: 3 }, compactStats: { height: 68, borderRadius: 14, flexDirection: 'row', alignItems: 'center', marginBottom: 14 }, compactStat: { flex: 1, alignItems: 'center' }, compactStatValue: { fontSize: 17, fontWeight: '900' }, compactStatLabel: { fontSize: 10, marginTop: 3 }, compactSection: { fontSize: 13, fontWeight: '800', marginTop: 10, marginBottom: 5 }, compactDropdownHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 5 }, compactThemeCard: { height: 50, borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }, compactThemeDot: { width: 24, height: 24, borderRadius: 12 }, compactThemeSelected: { width: 29, height: 29, borderRadius: 15, borderWidth: 2, borderColor: '#fff' }, compactInfo: { borderRadius: 12, overflow: 'hidden', width: '100%' }, compactInfoRow: { minHeight: 44, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, compactInfoLabel: { fontSize: 11 }, compactInfoValue: { fontSize: 11, fontWeight: '700', maxWidth: '62%' }, compactPref: { minHeight: 48, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, compactPrefText: { fontSize: 13, fontWeight: '600', textTransform: 'capitalize' }, compactAction: { minHeight: 52, borderRadius: 12, marginTop: 10, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, compactActionLabel: { flexDirection: 'row', alignItems: 'center', gap: 10 }, compactLogout: { minHeight: 48, borderRadius: 12, borderWidth: 1, marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, compactLogoutText: { fontSize: 13, fontWeight: '800' }, 
   container:      { flex: 1, backgroundColor: Colors.bg },
   center:         { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.bg },
 

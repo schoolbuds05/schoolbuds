@@ -119,12 +119,12 @@ export default function TeacherLayout() {
         }}
       />
       <Tabs.Screen
-        name="grades"
+        name="chat"
         options={{
-          title: 'Grades',
-          tabBarLabel: ({ color }) => <TabLabel label="Grades" color={color} />,
+          title: 'Chat',
+          tabBarLabel: ({ color }) => <TabLabel label="Chat" color={color} />,
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name={focused ? 'book' : 'book-outline'} focused={focused} color={color} />
+            <TabIcon name={focused ? 'chatbubble' : 'chatbubble-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -140,7 +140,7 @@ export default function TeacherLayout() {
       />
       <Tabs.Screen name="attendance" options={{ href: null }} />
       <Tabs.Screen name="market" options={{ href: null }} />
-      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen name="grades" options={{ href: null }} />
       <Tabs.Screen
         name="profile"
         options={{ href: null }}

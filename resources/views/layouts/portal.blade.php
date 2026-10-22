@@ -8,6 +8,7 @@
             ['label' => 'Student', 'route' => 'admin.students.index', 'match' => 'admin/students*', 'roles' => ['admin']],
             ['label' => 'User', 'route' => 'admin.users.index', 'match' => 'admin/users*', 'roles' => ['admin']],
             ['label' => 'Department', 'route' => 'admin.departments.index', 'match' => 'admin/departments*', 'roles' => ['admin']],
+            ['label' => 'Course', 'route' => 'admin.courses.index', 'match' => 'admin/courses*', 'roles' => ['admin']],
             ['label' => 'Control', 'route' => 'admin.controls.index', 'match' => 'admin/controls*', 'roles' => ['admin']],
             ['label' => 'Activity Log', 'route' => 'admin.activity.index', 'match' => 'admin/activity*', 'roles' => ['admin']],
             ['label' => 'Report', 'route' => 'admin.reports.index', 'match' => 'admin/reports*', 'roles' => ['admin']],
@@ -18,7 +19,6 @@
             ['label' => 'Enrollment', 'route' => 'registrar.enrollments.index', 'match' => 'registrar/enrollments*', 'roles' => ['registrar']],
             ['label' => 'Post Tuition', 'route' => 'registrar.tuition.index', 'match' => 'registrar/tuition*', 'roles' => ['registrar']],
             ['label' => 'Student', 'route' => 'registrar.students.index', 'match' => 'registrar/students*', 'roles' => ['registrar']],
-            ['label' => 'Course', 'route' => 'registrar.courses.index', 'match' => 'registrar/courses*', 'roles' => ['registrar']],
             ['label' => 'Subject', 'route' => 'registrar.subjects.index', 'match' => 'registrar/subjects*', 'roles' => ['registrar']],
             ['label' => 'Request', 'route' => 'registrar.subject-requests.index', 'match' => 'registrar/subject-requests*', 'roles' => ['registrar']],
             ['label' => 'Course Shifts', 'route' => 'registrar.course-shift-requests.index', 'match' => 'registrar/course-shift-requests*', 'roles' => ['registrar']],
@@ -37,6 +37,7 @@
             ['label' => 'Profile', 'route' => 'teacher.profile', 'match' => 'teacher/profile', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
         ],
         'Department Chair' => [
+            ['label' => 'Section', 'route' => 'department-chair.sections.index', 'match' => 'department-chair/sections*', 'roles' => ['head_department']],
             ['label' => 'Teacher List', 'route' => 'department-chair.teachers', 'match' => 'department-chair/teachers', 'roles' => ['head_department']],
             ['label' => 'Grade', 'route' => 'department-chair.grades', 'match' => 'department-chair/grades', 'roles' => ['head_department']],
             ['label' => 'Student', 'route' => 'department-chair.students', 'match' => 'department-chair/students', 'roles' => ['head_department']],

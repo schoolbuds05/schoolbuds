@@ -354,6 +354,7 @@ class SubjectSectionController extends Controller
         $section = Section::with([
             'sectionSubjects.subject',
             'sectionSubjects.teacher',
+            'sectionSubjects.schedules',
             'students',
         ])->findOrFail($id);
 
@@ -385,6 +386,11 @@ class SubjectSectionController extends Controller
             'time_start' => 'nullable|string|max:10',
             'time_end'   => 'nullable|string|max:10',
             'room'       => 'nullable|string|max:50',
+            'schedules' => 'nullable|array',
+            'schedules.*.day' => 'required|string|max:30',
+            'schedules.*.time_start' => 'nullable|string|max:10',
+            'schedules.*.time_end' => 'nullable|string|max:10',
+            'schedules.*.room' => 'nullable|string|max:50',
         ]);
 
         $data = $request->only(['teacher_id', 'day', 'time_start', 'time_end', 'room']);
@@ -394,7 +400,8 @@ class SubjectSectionController extends Controller
 
         $subjectIds = $request->input('subject_ids', [$request->input('subject_id')]);
 
-        $sectionSubjects = DB::transaction(function () use ($id, $subjectIds, $data) {
+        $schedules = $request->input('schedules', []);
+        $sectionSubjects = DB::transaction(function () use ($id, $subjectIds, $data, $schedules) {
             return collect($subjectIds)->map(function ($subjectId) use ($id, $data) {
                 return SectionSubject::updateOrCreate(
                     ['section_id' => $id, 'subject_id' => $subjectId],
@@ -402,6 +409,31 @@ class SubjectSectionController extends Controller
                 )->load('subject', 'teacher');
             });
         });
+
+        if ($request->has('schedules')) {
+            $sectionSubjects->each(function (SectionSubject $sectionSubject) use ($schedules, $data) {
+                $hasStoredMeetings = $sectionSubject->schedules()->exists();
+                $sectionSubject->schedules()->delete();
+                $meetingSchedules = [];
+                if (!$hasStoredMeetings && !empty($data['day'])) {
+                    $meetingSchedules[] = [
+                        'day' => $data['day'],
+                        'time_start' => $data['time_start'] ?? null,
+                        'time_end' => $data['time_end'] ?? null,
+                        'room' => $data['room'] ?? null,
+                    ];
+                }
+                $meetingSchedules = array_merge($meetingSchedules, $schedules);
+                $meetingSchedules = collect($meetingSchedules)
+                    ->filter(fn ($meeting) => !empty($meeting['day']))
+                    ->unique(fn ($meeting) => implode('|', [$meeting['day'], $meeting['time_start'] ?? '', $meeting['time_end'] ?? '', $meeting['room'] ?? '']))
+                    ->values()
+                    ->all();
+                if ($meetingSchedules) {
+                    $sectionSubject->schedules()->createMany($meetingSchedules);
+                }
+            });
+        }
 
         return count($subjectIds) === 1
             ? response()->json($sectionSubjects->first(), 201)
@@ -540,7 +572,7 @@ class SubjectSectionController extends Controller
     public function mySubjects(Request $request)
     {
         $user = $request->user();
-        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        $activeTerm = AcademicTerm::query()->where('is_active', true)->latest('updated_at')->first();
         $view = $request->query('view') === 'past' ? 'past' : 'current';
         $overrides = StudentSubject::query()
             ->where('user_id', $user->id)
@@ -570,7 +602,7 @@ class SubjectSectionController extends Controller
                     }))
                     ->when(!$activeTerm && $view === 'current', fn ($query) => $query->whereRaw('1 = 0'))
                     ->with(['sectionSubjects' => fn($q) =>
-                        $q->with(['subject', 'teacher:id,name'])
+                        $q->with(['subject', 'teacher:id,name', 'schedules'])
                     ])
                     ->get();
 
@@ -578,7 +610,7 @@ class SubjectSectionController extends Controller
             $section->sectionSubjects
             ->filter(fn($ss) => ($overrides->get($this->subjectOverrideKey($section->id, $ss->subject->id))?->status ?? 'enrolled') !== 'dropped'
                 && ($overrides->get($this->subjectOverrideKey(null, $ss->subject->id))?->status ?? 'enrolled') !== 'dropped')
-            ->map(fn($ss) => [
+            ->flatMap(fn($ss) => ( ($meetings = $ss->schedules->reject(fn($schedule) => $schedule->day === $ss->day && $schedule->time_start === $ss->time_start && $schedule->time_end === $ss->time_end && $schedule->room === $ss->room))->isEmpty() ? collect([null]) : $meetings )->map(fn($schedule) => [
                 'section_id'   => $section->id,
                 'section_name' => $section->name,
                 'school_year'  => $section->school_year,
@@ -588,12 +620,12 @@ class SubjectSectionController extends Controller
                 'name'         => $ss->subject->name,
                 'units_lec'    => $ss->subject->units_lec,
                 'units_lab'    => $ss->subject->units_lab,
-                'day'          => $ss->day,
-                'time_start'   => $ss->time_start,
-                'time_end'     => $ss->time_end,
-                'room'         => $ss->room,
+                'day'          => $schedule?->day ?? $ss->day,
+                'time_start'   => $schedule?->time_start ?? $ss->time_start,
+                'time_end'     => $schedule?->time_end ?? $ss->time_end,
+                'room'         => $schedule?->room ?? $ss->room,
                 'teacher'      => $ss->teacher?->name,
-            ])
+            ]))
         );
 
         $sectionSubjectIds = $subjects->pluck('subject_id')->unique()->all();
@@ -612,7 +644,7 @@ class SubjectSectionController extends Controller
                     }
                 }))
                 ->when(!$activeTerm && $view === 'current', fn ($termQuery) => $termQuery->whereRaw('1 = 0')))
-            ->with(['subject', 'section.sectionSubjects.teacher:id,name'])
+            ->with(['subject', 'section.sectionSubjects.teacher:id,name', 'section.sectionSubjects.schedules'])
             ->get()
             ->reject(fn (StudentSubject $record) => in_array((int) $record->subject_id, $sectionSubjectIds, true))
             ->filter(fn (StudentSubject $record) => $record->status !== 'dropped')
@@ -801,7 +833,7 @@ class SubjectSectionController extends Controller
     private function authorizeRegistrar(Request $request)
     {
         $user = $request->user();
-        if (!$user || (!in_array($user->role, ['registrar', 'admin']) && !$user->hasAnyRole(['registrar', 'admin']))) {
+        if (!$user || (!in_array($user->role, ['registrar', 'admin', 'head_department']) && !$user->hasAnyRole(['registrar', 'admin', 'head_department']))) {
             abort(403, 'Unauthorized.');
         }
     }

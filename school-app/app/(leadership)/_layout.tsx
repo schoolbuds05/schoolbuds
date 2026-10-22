@@ -108,6 +108,16 @@ export default function LeadershipLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="sections"
+        options={{
+          title: 'Sections',
+          tabBarLabel: ({ color }) => <TabLabel label="Sections" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'layers' : 'layers-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

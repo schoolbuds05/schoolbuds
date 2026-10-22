@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import api, { removeToken } from '../../src/api';
@@ -46,7 +47,8 @@ export default function TeacherProfile() {
   const initials = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]}> 
+    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} contentContainerStyle={styles.content}>
+      <View style={styles.pageHeading}><TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Ionicons name="chevron-back" size={21} color="#745D63" /></TouchableOpacity><Text style={[styles.pageTitle, { color: theme.text }]}>Profile</Text></View>
       <View style={[styles.hero, { backgroundColor: theme.primary }]}> 
         <View style={styles.avatar}>
           <Text style={styles.initials}>{initials}</Text>
@@ -72,8 +74,8 @@ export default function TeacherProfile() {
         </View>
       </View>
 
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>Account information</Text>
       <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-        <Text style={[styles.cardTitle, { color: theme.text }]}>Account information</Text>
         {[
           ['Name',         name],
           ['Email',        user?.email ?? '—'],
@@ -87,10 +89,10 @@ export default function TeacherProfile() {
         ))}
       </View>
 
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-        <Text style={[styles.cardTitle, { color: theme.text }]}>My classes</Text>
+      <View style={styles.classHeading}><Text style={[styles.sectionTitle, { color: theme.text }]}>My classes</Text><Text style={[styles.classTotal, { color: theme.textSub }]}>{data?.total_classes ?? 0}</Text></View>
+      <View style={[styles.card, styles.classCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
         {data?.classes?.length > 0
-          ? data.classes.map((c, i) => (
+          ? data.classes.slice(0, 5).map((c, i) => (
             <View key={i} style={styles.classRow}>
               <View style={[styles.classColor,
                 { backgroundColor: ['#1D9E75','#378ADD','#D85A30','#7F77DD'][i%4] }]}/>
@@ -104,9 +106,10 @@ export default function TeacherProfile() {
           ))
           : <Text style={styles.empty}>No classes assigned yet.</Text>
         }
+        {data?.classes?.length > 5 ? <TouchableOpacity style={styles.viewClasses} onPress={() => router.push('/(teacher)/classes')}><Text style={[styles.viewClassesText, { color: theme.primary }]}>View all {data.total_classes} classes</Text></TouchableOpacity> : null}
       </View>
 
-      <ChangePasswordCard theme={theme} />
+      <ChangePasswordCard theme={theme} compact />
 
       <TouchableOpacity style={[styles.logoutBtn, { backgroundColor: theme.dangerLight }]} onPress={handleLogout}>
         <Text style={[styles.logoutText, { color: theme.danger }]}>Logout</Text>
@@ -117,36 +120,42 @@ export default function TeacherProfile() {
 }
 
 const styles = StyleSheet.create({
-  container:  { flex:1, backgroundColor:'#f5f5f5' },
+  container:  { flex:1, backgroundColor:'#F9E9EC' },
+  content:    { padding:14, paddingTop:32, paddingBottom:28 },
   center:     { flex:1, justifyContent:'center', alignItems:'center' },
-  hero:       { backgroundColor:'#1D9E75', padding:24, paddingTop:56, alignItems:'center' },
-  avatar:     { width:72, height:72, borderRadius:36, backgroundColor:'rgba(255,255,255,0.25)',
-                justifyContent:'center', alignItems:'center', marginBottom:12 },
-  initials:   { color:'#fff', fontSize:26, fontWeight:'600' },
-  name:       { color:'#fff', fontSize:20, fontWeight:'600' },
-  email:      { color:'rgba(255,255,255,0.75)', fontSize:12, marginTop:4 },
+  pageHeading:{ flexDirection:'row', alignItems:'center', gap:10, marginBottom:12 },
+  backButton: { width:32, height:32, borderRadius:16, backgroundColor:'#fff', alignItems:'center', justifyContent:'center' },
+  pageTitle:  { fontSize:18, fontWeight:'900' },
+  hero:       { backgroundColor:'#B5233D', padding:14, paddingTop:14, alignItems:'center', borderRadius:15 },
+  avatar:     { width:54, height:54, borderRadius:27, backgroundColor:'rgba(255,255,255,0.25)', justifyContent:'center', alignItems:'center', marginBottom:7 },
+  initials:   { color:'#fff', fontSize:21, fontWeight:'800' },
+  name:       { color:'#fff', fontSize:16, fontWeight:'900' },
+  email:      { color:'rgba(255,255,255,0.85)', fontSize:10, marginTop:3 },
   roleBadge:  { backgroundColor:'rgba(255,255,255,0.2)', borderRadius:20,
-                paddingHorizontal:14, paddingVertical:5, marginTop:10, marginBottom:16 },
-  roleText:   { color:'#fff', fontSize:13, fontWeight:'500' },
-  heroStats:  { flexDirection:'row', gap:12 },
+                paddingHorizontal:10, paddingVertical:4, marginTop:8, marginBottom:11 },
+  roleText:   { color:'#fff', fontSize:9, fontWeight:'800' },
+  heroStats:  { flexDirection:'row', gap:7, width:'100%' },
   heroStat:   { alignItems:'center', backgroundColor:'rgba(255,255,255,0.15)',
-                borderRadius:12, paddingHorizontal:18, paddingVertical:10 },
-  heroVal:    { color:'#fff', fontSize:20, fontWeight:'600' },
-  heroLabel:  { color:'rgba(255,255,255,0.75)', fontSize:10, marginTop:2 },
-  card:       { backgroundColor:'#fff', borderRadius:14, marginHorizontal:16,
-                marginTop:14, padding:16 },
-  cardTitle:  { fontSize:14, fontWeight:'600', color:'#333', marginBottom:12 },
+                borderRadius:9, paddingVertical:8, flex:1 },
+  heroVal:    { color:'#fff', fontSize:15, fontWeight:'900' },
+  heroLabel:  { color:'rgba(255,255,255,0.82)', fontSize:8, fontWeight:'700', marginTop:2 },
+  sectionTitle:{ fontSize:13, fontWeight:'900', marginTop:15, marginBottom:7 },
+  classHeading:{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' },
+  classTotal: { fontSize:10, fontWeight:'700', marginTop:15, marginBottom:7 },
+  card:       { backgroundColor:'#fff', borderRadius:12, borderWidth:1, overflow:'hidden' },
+  classCard:  { },
   infoRow:    { flexDirection:'row', justifyContent:'space-between',
-                paddingVertical:9, borderBottomWidth:0.5, borderColor:'#f0f0f0' },
-  infoLabel:  { fontSize:13, color:'#888' },
-  infoValue:  { fontSize:13, color:'#333', fontWeight:'500' },
+                paddingHorizontal:11, paddingVertical:10, borderBottomWidth:0.5, borderColor:'#E7DADD' },
+  infoLabel:  { fontSize:10, color:'#806E73' },
+  infoValue:  { fontSize:10, color:'#2A1B1F', fontWeight:'800' },
   classRow:   { flexDirection:'row', alignItems:'center', gap:10,
-                paddingVertical:9, borderBottomWidth:0.5, borderColor:'#f0f0f0' },
-  classColor: { width:4, height:36, borderRadius:2 },
-  className:  { fontSize:13, fontWeight:'500', color:'#333' },
-  classMeta:  { fontSize:11, color:'#999', marginTop:1 },
+                paddingHorizontal:11, paddingVertical:8, borderBottomWidth:0.5, borderColor:'#E7DADD' },
+  classColor: { width:3, height:24, borderRadius:2 },
+  className:  { fontSize:10, fontWeight:'800', color:'#2A1B1F' },
+  classMeta:  { fontSize:8, color:'#806E73', marginTop:2 },
+  viewClasses:{ alignItems:'center', paddingVertical:10 },
+  viewClassesText:{ fontSize:10, fontWeight:'900' },
   empty:      { fontSize:13, color:'#999', textAlign:'center', paddingVertical:12 },
-  logoutBtn:  { margin:16, marginTop:14, backgroundColor:'#FCEBEB',
-                borderRadius:12, padding:15, alignItems:'center' },
-  logoutText: { color:'#E24B4A', fontWeight:'600', fontSize:14 },
+  logoutBtn:  { marginTop:12, borderRadius:10, borderWidth:1, padding:10, alignItems:'center' },
+  logoutText: { color:'#E24B4A', fontWeight:'800', fontSize:11 },
 });

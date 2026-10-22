@@ -9,11 +9,14 @@ class Section extends Model
     protected $fillable = [
         'name', 'course', 'year_level', 'program_type',
         'strand', 'school_year', 'semester',
-        'max_students', 'is_active',
+        'max_students', 'is_active', 'workflow_status', 'workflow_remarks',
+        'department_id', 'created_by', 'reviewed_by', 'submitted_at', 'reviewed_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'submitted_at' => 'datetime',
+        'reviewed_at' => 'datetime',
     ];
 
     // Subjects assigned to this section (with schedule)

@@ -1,273 +1,41 @@
 // @ts-nocheck
-// app/(teacher)/dashboard.tsx - Teacher overview dashboard
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import HeaderGradient from '../components/ui/HeaderGradient';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 export default function TeacherDashboard() {
-  const router = useRouter();
-  const { theme } = useTheme();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const loadDashboard = useCallback(async () => {
-    try {
-      const res = await api.get('/teacher/dashboard');
-      setData(res.data);
-    } catch (error) {
-      console.log('Teacher dashboard error:', error.message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const router = useRouter(); const { theme } = useTheme(); const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'short' }); const [selectedDay, setSelectedDay] = useState(currentDay);
+  const load = useCallback(async () => { try { setData((await api.get('/teacher/dashboard')).data); } catch (e) { console.log(e.message); } finally { setLoading(false); setRefreshing(false); } }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, [load]);
+  const classes = useMemo(() => data?.classes ?? [], [data?.classes]); const grades = data?.recent_grades ?? [];
+  const selectedClasses = useMemo(() => classes.map(item => {
+    const meetings = Array.isArray(item.meetings) ? item.meetings : [];
+    if (!meetings.length) {
+      const day = String(item.day || item.weekday || item.day_of_week || item.schedule || '').toLowerCase();
+      return day.includes(selectedDay.toLowerCase()) || day.includes(selectedDay.slice(0, 2).toLowerCase()) ? item : null;
     }
-  }, []);
-
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
-
-  const classes = useMemo(() => data?.classes ?? [], [data?.classes]);
-  const recentGrades = data?.recent_grades ?? [];
-
-  const nextClass = useMemo(() => {
-    return classes.find(item => item.schedule && item.schedule !== 'No schedule') ?? classes[0];
-  }, [classes]);
-
-  if (loading) {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.bg }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <HeaderGradient
-        title="Dashboard"
-        subtitle={`Welcome back, ${data?.teacher ?? 'Teacher'}`}
-        initials="TD"
-        stats={[
-          { label: 'Classes', value: data?.total_classes ?? 0, accent: '#A7F3D0' },
-          { label: 'Students', value: data?.total_students ?? 0, accent: '#FDE68A' },
-          { label: 'Today', value: data?.today_attendance ?? 0, accent: '#C7D2FE' },
-        ]}
-      />
-
-      <ScrollView
-        contentContainerStyle={styles.body}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadDashboard();
-            }}
-          />
-        }
-      >
-        <View style={styles.quickGrid}>
-          <QuickAction
-            label="Classes"
-            value={`${classes.length} assigned`}
-            color={theme.primary}
-            bg={theme.primaryLight}
-            onPress={() => router.push('/(teacher)/classes')}
-          />
-          <QuickAction
-            label="Attendance"
-            value="Mark today"
-            color={theme.success}
-            bg={theme.successLight}
-            onPress={() => router.push('/(teacher)/attendance')}
-          />
-          <QuickAction
-            label="Grades"
-            value="Enter scores"
-            color={theme.orange}
-            bg={theme.orangeLight}
-            onPress={() => router.push('/(teacher)/grades')}
-          />
-          <QuickAction
-            label="Chat"
-            value="Student questions"
-            color={theme.purple}
-            bg={theme.purpleLight}
-            onPress={() => router.push('/(teacher)/chat')}
-          />
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Today At A Glance</Text>
-        </View>
-
-        <View style={[styles.panel, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          {nextClass ? (
-            <>
-              <Text style={[styles.panelEyebrow, { color: theme.textMuted }]}>Next class</Text>
-              <Text style={[styles.panelTitle, { color: theme.text }]}>{nextClass.subject}</Text>
-              <Text style={[styles.panelMeta, { color: theme.textSub }]}>
-                {formatClassMeta(nextClass)}
-              </Text>
-              <View style={styles.panelActions}>
-                <TouchableOpacity
-                  style={[styles.panelBtn, { backgroundColor: theme.primaryLight }]}
-                  onPress={() => router.push({
-                    pathname: '/(teacher)/attendance',
-                    params: { classId: String(nextClass.id), subject: nextClass.subject },
-                  })}
-                >
-                  <Text style={[styles.panelBtnText, { color: theme.primary }]}>Attendance</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.panelBtn, { backgroundColor: theme.primaryLight }]}
-                  onPress={() => router.push({
-                    pathname: '/(teacher)/grades',
-                    params: { classId: String(nextClass.id), subject: nextClass.subject },
-                  })}
-                >
-                  <Text style={[styles.panelBtnText, { color: theme.primary }]}>Grades</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <Text style={[styles.emptyText, { color: theme.textSub }]}>No classes assigned yet.</Text>
-          )}
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Grades</Text>
-          <TouchableOpacity onPress={() => router.push('/(teacher)/grades')}>
-            <Text style={[styles.sectionLink, { color: theme.primary }]}>View grades</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.panel, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          {recentGrades.length === 0 ? (
-            <Text style={[styles.emptyText, { color: theme.textSub }]}>No grades entered yet.</Text>
-          ) : (
-            recentGrades.map((grade, index) => (
-              <View key={grade.id ?? index} style={[styles.gradeRow, { borderColor: theme.border }]}>
-                <View style={[styles.avatar, { backgroundColor: theme.primaryLight }]}>
-                  <Text style={[styles.avatarText, { color: theme.primary }]}>
-                    {grade.student?.first_name?.[0]}{grade.student?.last_name?.[0]}
-                  </Text>
-                </View>
-                <View style={styles.gradeInfo}>
-                  <Text style={[styles.gradeName, { color: theme.text }]}>
-                    {grade.student?.first_name} {grade.student?.last_name}
-                  </Text>
-                  <Text style={[styles.gradeMeta, { color: theme.textMuted }]}>
-                    {grade.school_class?.subject ?? 'Subject'} • Q{grade.quarter}
-                  </Text>
-                </View>
-                <Text style={[styles.gradeScore, { color: gradeColor(grade.score, theme, grade.school_class?.is_college) }]}>
-                  {grade.score}
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
-    </View>
-  );
+    const matching = meetings.filter(meeting => dayMatches(meeting.day, selectedDay));
+    if (!matching.length) return null;
+    return { ...item, day: selectedDay, schedule: matching.map(meeting => `${meeting.time_start || 'Time TBA'}${meeting.time_end ? `-${meeting.time_end}` : ''}`).join(' · '), room: matching.map(meeting => meeting.room).filter(Boolean).join(', ') || item.room };
+  }).filter(Boolean), [classes, selectedDay]);
+  const next = selectedClasses.find(item => item.schedule && item.schedule !== 'No schedule') ?? selectedClasses[0] ?? (selectedDay === currentDay ? classes.find(item => item.schedule && item.schedule !== 'No schedule') ?? classes[0] : null);
+  if (loading) return <View style={[styles.center, { backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={theme.primary} /></View>;
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return <View style={[styles.container, { backgroundColor: theme.bg }]}><ScrollView contentContainerStyle={styles.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}><View style={{ flex: 1 }}><Text style={[styles.date, { color: theme.textSub }]}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</Text><Text style={[styles.greeting, { color: theme.text }]}>Good morning, Faculty</Text></View><View style={{ width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginLeft: 10, backgroundColor: theme.card }}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={{ width: 30, height: 30 }} resizeMode="contain" accessibilityLabel="SchoolBuds logo" /></View></View>
+    <View style={styles.days}>{days.map(day => <TouchableOpacity key={day} style={[styles.day, { backgroundColor: day === selectedDay ? theme.primary : theme.card }]} onPress={() => setSelectedDay(day)}><Text style={{ color: day === selectedDay ? '#fff' : theme.textSub, fontWeight: '800', fontSize: 11 }}>{day}</Text>{day === selectedDay && <View style={styles.dot} />}</TouchableOpacity>)}</View>
+    <View style={[styles.next, { backgroundColor: theme.primary }]}><View style={{ flex: 1 }}><Text style={styles.nextEyebrow}>Next class · {selectedDay}</Text><Text style={styles.nextTitle}>{next?.subject || 'No class scheduled'}</Text><Text style={styles.nextMeta}>{next ? `${next.schedule || 'No schedule'} · ${next.room || 'No room'}` : 'Check your classes'}</Text></View><TouchableOpacity style={styles.attendance} onPress={() => next && router.push({ pathname: '/(teacher)/attendance', params: { classId: String(next.id), subject: next.subject } })}><Text style={{ color: theme.primary, fontWeight: '900', fontSize: 12 }}>Attendance</Text></TouchableOpacity></View>
+    <View style={styles.stats}>{[['Classes', data?.total_classes ?? classes.length], ['Students', data?.total_students ?? 0], ['Today', data?.today_attendance ?? 0]].map(([label, value]) => <View key={label} style={[styles.stat, { backgroundColor: theme.card }]}><Text style={[styles.statValue, { color: theme.text }]}>{value}</Text><Text style={[styles.statLabel, { color: theme.textSub }]}>{label}</Text></View>)}</View>
+    <View style={styles.quick}>{<Quick icon="calendar-outline" label="Attendance" value="Mark today" color={theme.success} bg={theme.successLight} onPress={() => router.push('/(teacher)/attendance')} />}<Quick icon="briefcase-outline" label="Assignment" value="Make new" color={theme.danger} bg={theme.dangerLight} onPress={() => router.push('/(teacher)/assignments')} /><Quick icon="book-outline" label="Grades" value="Enter scores" color={theme.warning} bg={theme.warningLight} onPress={() => router.push('/(teacher)/grades')} /><Quick icon="chatbubble-outline" label="Chat" value="Questions" color={theme.purple} bg={theme.purpleLight} onPress={() => router.push('/(teacher)/chat')} /></View>
+    <View style={styles.section}><Text style={[styles.sectionTitle, { color: theme.text }]}>Recent grades</Text><TouchableOpacity onPress={() => router.push('/(teacher)/grades')}><Text style={[styles.link, { color: theme.primary }]}>View grades</Text></TouchableOpacity></View>
+    <View style={[styles.panel, { backgroundColor: theme.card, borderColor: theme.border }]}>{grades.length ? grades.slice(0, 3).map((grade, i) => <View key={grade.id ?? i} style={[styles.grade, { borderColor: theme.border }]}><View style={[styles.avatar, { backgroundColor: theme.primaryLight }]}><Text style={{ color: theme.primary, fontWeight: '900' }}>{grade.student?.first_name?.[0]}{grade.student?.last_name?.[0]}</Text></View><View style={{ flex: 1 }}><Text style={[styles.gradeName, { color: theme.text }]}>{grade.student?.first_name} {grade.student?.last_name}</Text><Text style={[styles.gradeMeta, { color: theme.textMuted }]}>{grade.school_class?.subject ?? 'Subject'} · Q{grade.quarter}</Text></View><Text style={[styles.score, { color: gradeColor(grade.score, theme, grade.school_class?.is_college) }]}>{grade.score}</Text></View>) : <Text style={[styles.empty, { color: theme.textSub }]}>No grades entered yet.</Text>}</View>
+  </ScrollView></View>;
 }
-
-function QuickAction({ label, value, color, bg, onPress }) {
-  return (
-    <TouchableOpacity style={[styles.quickCard, { backgroundColor: bg }]} onPress={onPress}>
-      <Text style={[styles.quickLabel, { color }]}>{label}</Text>
-      <Text style={[styles.quickValue, { color }]}>{value}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function formatClassMeta(item) {
-  const level = item.course ? `Year ${item.grade_level}` : `Grade ${item.grade_level}`;
-  return `${level} • ${item.section || 'No section'} • ${item.room || 'No room'} • ${item.schedule || 'No schedule'}`;
-}
-
-function gradeColor(score, theme, isCollege) {
-  const value = Number(score);
-  if (isCollege) {
-    if (value <= 2) return theme.success;
-    if (value <= 3) return theme.warning;
-    return theme.danger;
-  }
-  if (value >= 85) return theme.success;
-  if (value >= 75) return theme.warning;
-  return theme.danger;
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  body: { padding: 16, paddingBottom: 110, gap: 14 },
-  quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  quickCard: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    borderRadius: 14,
-    padding: 14,
-    minHeight: 78,
-    justifyContent: 'space-between',
-  },
-  quickLabel: { fontSize: 14, fontWeight: '900' },
-  quickValue: { fontSize: 12, fontWeight: '700', marginTop: 12 },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '900' },
-  sectionLink: { fontSize: 12, fontWeight: '800' },
-  panel: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-  },
-  panelEyebrow: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  panelTitle: { fontSize: 16, fontWeight: '900', marginTop: 6 },
-  panelMeta: { fontSize: 12, fontWeight: '600', marginTop: 4, lineHeight: 18 },
-  panelActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  panelBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
-  panelBtnText: { fontSize: 12, fontWeight: '900' },
-  gradeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontSize: 12, fontWeight: '900' },
-  gradeInfo: { flex: 1 },
-  gradeName: { fontSize: 13, fontWeight: '800' },
-  gradeMeta: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-  gradeScore: { fontSize: 18, fontWeight: '900' },
-  emptyText: { fontSize: 13, fontWeight: '600', textAlign: 'center', paddingVertical: 12 },
-});
+function dayMatches(value, selected) { const text = String(value || '').toLowerCase(); const key = selected.toLowerCase(); const full = { mon: 'monday', tue: 'tuesday', wed: 'wednesday', thu: 'thursday', fri: 'friday', sat: 'saturday', sun: 'sunday' }[key] || key; return text.split(/[\s,\/;&-]+/).some(token => token === full || token === key || (token.length <= 6 && full === 'tuesday' && token === 'tth') || (token.length <= 6 && full === 'thursday' && token === 'tth') || (token.length <= 6 && full === 'monday' && token.includes('m')) || (token.length <= 6 && full === 'wednesday' && token.includes('w')) || (token.length <= 6 && full === 'friday' && token.includes('f')) || (token.length <= 6 && full === 'saturday' && token.includes('s'))); }
+function Quick({ icon, label, value, color, bg, onPress }) { return <TouchableOpacity style={[styles.quickCard, { backgroundColor: bg }]} onPress={onPress}><Ionicons name={icon} size={18} color={color} /><Text style={[styles.quickLabel, { color }]}>{label}</Text><Text style={[styles.quickValue, { color }]}>{value}</Text></TouchableOpacity>; }
+function gradeColor(score, theme, college) { const value = Number(score); return college ? (value <= 2 ? theme.success : value <= 3 ? theme.warning : theme.danger) : (value >= 85 ? theme.success : value >= 75 ? theme.warning : theme.danger); }
+const styles = StyleSheet.create({ container: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, body: { padding: 20, paddingTop: 28, paddingBottom: 110, gap: 10 }, date: { fontSize: 12, fontWeight: '600' }, greeting: { fontSize: 22, fontWeight: '900', marginTop: -4 }, days: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 4 }, day: { width: 43, height: 37, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#FDE047', marginTop: 3 }, next: { borderRadius: 15, padding: 14, flexDirection: 'row', alignItems: 'center' }, nextEyebrow: { color: '#fff', fontSize: 11, fontWeight: '800' }, nextTitle: { color: '#fff', fontSize: 15, fontWeight: '900', marginTop: 4 }, nextMeta: { color: '#fff', fontSize: 11, fontWeight: '700', marginTop: 2 }, attendance: { backgroundColor: '#fff', borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10 }, stats: { flexDirection: 'row', gap: 10 }, stat: { flex: 1, borderRadius: 13, padding: 10 }, statValue: { fontSize: 20, fontWeight: '900' }, statLabel: { fontSize: 10, fontWeight: '700' }, quick: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, quickCard: { width: '48%', minHeight: 68, borderRadius: 14, padding: 12 }, quickLabel: { fontSize: 13, fontWeight: '900', marginTop: 3 }, quickValue: { fontSize: 10, fontWeight: '700' }, section: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, sectionTitle: { fontSize: 15, fontWeight: '900' }, link: { fontSize: 11, fontWeight: '900' }, panel: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 12 }, grade: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1 }, avatar: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, gradeName: { fontSize: 13, fontWeight: '800' }, gradeMeta: { fontSize: 10, marginTop: 2 }, score: { fontSize: 17, fontWeight: '900' }, empty: { fontSize: 13, textAlign: 'center', paddingVertical: 14 } });

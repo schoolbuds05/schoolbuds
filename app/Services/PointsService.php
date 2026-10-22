@@ -52,6 +52,7 @@ class PointsService
             'redemption_cap_remaining' => $redemptionCap,
             'rewards_count' => 0,
             'by_source' => [],
+            'badges' => $this->badgeDefinitions([]),
         ];
     }
 
@@ -186,6 +187,7 @@ class PointsService
         $semesterCap = (int) $this->configuration->get('semester_cap');
         $redemptionRate = (float) $this->configuration->get('redemption_rate');
         $level = intdiv($earnedPoints, $pointsPerLevel) + 1;
+        $rewardRows = (clone $query)->get(['category', 'source', 'source_key', 'points', 'meta']);
 
         return [
             'points' => $redemptionBalance,
@@ -203,6 +205,27 @@ class PointsService
             'redemption_cap_remaining' => max(0, $redemptionCap - min($redemptionCap, $earnedPoints)),
             'rewards_count' => (clone $query)->count(),
             'by_source' => $this->sourceTotals($student, $schoolYear, $semester),
+            'badges' => $this->badgeDefinitions($rewardRows),
+        ];
+    }
+
+    private function badgeDefinitions(iterable $rewards): array
+    {
+        $rows = collect($rewards)->filter(fn ($reward) => (int) data_get($reward, 'points', 0) > 0);
+        $attendance = $rows->filter(fn ($reward) => data_get($reward, 'category') === 'attendance');
+        $helper = $rows->contains(fn ($reward) => in_array(data_get($reward, 'category'), ['helpfulness', 'donations', 'events'], true));
+        $honorRoll = $rows->contains(function ($reward) {
+            if (data_get($reward, 'category') !== 'academic') return false;
+            $score = data_get($reward, 'meta.score');
+            if ($score === null) return false;
+            return (float) $score <= 1.5 || (float) $score >= 90;
+        });
+
+        return [
+            ['key' => 'on_time', 'label' => 'On time', 'icon' => 'time-outline', 'earned' => $attendance->isNotEmpty(), 'description' => 'Earned by recording present attendance.'],
+            ['key' => 'five_week_streak', 'label' => '5-week streak', 'icon' => 'calendar-outline', 'earned' => $attendance->count() >= 5, 'description' => 'Earned after five attendance rewards.'],
+            ['key' => 'helper', 'label' => 'Helper', 'icon' => 'person-outline', 'earned' => $helper, 'description' => 'Earned through helpfulness, donation, or school activity participation.'],
+            ['key' => 'honor_roll', 'label' => 'Honor roll', 'icon' => 'star-outline', 'earned' => $honorRoll, 'description' => 'Earned from an outstanding academic grade.'],
         ];
     }
 

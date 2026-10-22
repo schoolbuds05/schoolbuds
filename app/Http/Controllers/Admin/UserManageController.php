@@ -50,6 +50,8 @@ class UserManageController extends Controller
             'position' => ['nullable', 'string', Rule::in($this->allowedPositions())],
             'department_id' => ['nullable', 'exists:departments,id', 'required_if:position,head_department'],
             'password' => ['required', 'string', 'min:6'],
+        ], [
+            'department_id.required_if' => 'Choose a department before assigning the Department Chair position.',
         ]);
         $data['position'] = $this->positionForRole($data['role'], $data['position'] ?? null);
         $department = $this->departmentForPosition($data);
@@ -87,6 +89,8 @@ class UserManageController extends Controller
             'position' => ['nullable', 'string', Rule::in($this->allowedPositions())],
             'department_id' => ['nullable', 'exists:departments,id', 'required_if:position,head_department'],
             'password' => ['nullable', 'string', 'min:6'],
+        ], [
+            'department_id.required_if' => 'Choose a department before assigning the Department Chair position.',
         ]);
         $data['position'] = $this->positionForRole($data['role'], $data['position'] ?? null);
         $department = $this->departmentForPosition($data);

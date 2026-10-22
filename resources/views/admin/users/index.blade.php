@@ -58,6 +58,12 @@
                     <label data-department-field class="hidden block text-xs font-bold uppercase text-slate-500">
                         Assigned program / department
                         <select name="department_id" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900"><option value="">Choose department</option>@foreach($departments as $department)<option value="{{ $department->id }}" @selected(old('department_id') == $department->id)>{{ $department->code }} — {{ $department->name }}</option>@endforeach</select>
+                        @if($departments->isEmpty())
+                            <span class="mt-1 block normal-case text-amber-700">No departments exist yet. Create a department first, then assign this position.</span>
+                        @endif
+                        @if($errors->has('department_id'))
+                            <span class="mt-1 block normal-case text-red-600">{{ $errors->first('department_id') }}</span>
+                        @endif
                     </label>
                     <label class="block text-xs font-bold uppercase text-slate-500">
                         Temporary password
@@ -165,6 +171,12 @@
                             <label data-department-field class="hidden block text-xs font-bold uppercase text-slate-500">
                                 Assigned program / department
                                 <select name="department_id" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900"><option value="">Choose department</option>@foreach($departments as $department)<option value="{{ $department->id }}" @selected($user->department_id === $department->id)>{{ $department->code }} — {{ $department->name }}</option>@endforeach</select>
+                                @if($departments->isEmpty())
+                                    <span class="mt-1 block normal-case text-amber-700">No departments exist yet. Create a department first, then assign this position.</span>
+                                @endif
+                                @if($errors->has('department_id'))
+                                    <span class="mt-1 block normal-case text-red-600">{{ $errors->first('department_id') }}</span>
+                                @endif
                             </label>
                             <label class="block text-xs font-bold uppercase text-slate-500">
                                 New password

@@ -14,7 +14,7 @@ class CourseController extends Controller
 
     public function index(Request $request)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin']);
 
         $courses = Course::query()
             ->when($request->program_type, fn ($query) => $query->where('program_type', $request->program_type))
@@ -32,7 +32,7 @@ class CourseController extends Controller
 
     public function store(Request $request)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin']);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -51,7 +51,7 @@ class CourseController extends Controller
 
     public function update(Request $request, Course $course)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin']);
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -70,7 +70,7 @@ class CourseController extends Controller
 
     public function destroy(Request $request, Course $course)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin']);
 
         ArchiveService::record($course, $request->user()?->id, 'web.courses');
         $course->delete();

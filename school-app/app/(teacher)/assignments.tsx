@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import HeaderGradient from '../components/ui/HeaderGradient';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -358,42 +358,66 @@ export default function TeacherAssignments() {
 
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
-      <HeaderGradient
-        title="Assignments"
-        subtitle="Create, review, and grade class work."
-        initials="AS"
-        stats={[
-          { label: 'Posted', value: items.length, accent: '#C7D2FE' },
-          { label: 'Classes', value: classes.length, accent: '#A7F3D0' },
-        ]}
-      />
       <ScrollView
         contentContainerStyle={s.body}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
-        <TouchableOpacity style={[s.primaryBtn, { backgroundColor: theme.primary }]} onPress={openCreate}>
-          <Text style={s.primaryText}>New class work</Text>
+        <View style={s.workHero}>
+          <View style={s.heroTitleRow}>
+            <View style={s.heroCopy}>
+              <Text style={s.heroEyebrow}>Create, review, and grade class work</Text>
+              <Text style={s.heroTitle}>Assignments</Text>
+            </View>
+            <View style={s.heroIcon}>
+              <Ionicons name="leaf" size={25} color="#65BA35" />
+            </View>
+          </View>
+          <View style={s.heroStats}>
+            <View style={s.heroStat}>
+              <Text style={s.heroStatValue}>{items.length}</Text>
+              <Text style={s.heroStatLabel}>Posted</Text>
+            </View>
+            <View style={s.heroStatDivider} />
+            <View style={s.heroStat}>
+              <Text style={s.heroStatValue}>{classes.length}</Text>
+              <Text style={s.heroStatLabel}>Classes</Text>
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity style={[s.primaryBtn, s.workPrimary, { backgroundColor: theme.primary }]} onPress={openCreate} activeOpacity={0.85}>
+          <Text style={s.primaryText}>+ New class work</Text>
         </TouchableOpacity>
 
+        <View style={s.sectionHeading}>
+          <Text style={[s.sectionTitle, { color: theme.text }]}>Posted work</Text>
+          <Text style={[s.sectionCount, { color: theme.textSub }]}>{items.length} {items.length === 1 ? 'item' : 'items'}</Text>
+        </View>
+
         {items.length === 0 ? (
-          <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={[s.card, s.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[s.title, { color: theme.text }]}>No class work yet</Text>
             <Text style={[s.sub, { color: theme.textSub }]}>Post an assignment or quiz for one of your assigned classes.</Text>
           </View>
         ) : items.map(item => (
-          <TouchableOpacity key={item.id} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => openDetails(item)}>
+          <TouchableOpacity key={item.id} style={[s.card, s.workCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => openDetails(item)} activeOpacity={0.8}>
+            <View style={[s.workAccent, { backgroundColor: ['quiz', 'exam'].includes(item.type) ? '#8751BB' : theme.primary }]} />
+            <View style={s.workContent}>
             <View style={s.row}>
-              <View style={[s.badge, { backgroundColor: ['quiz', 'exam'].includes(item.type) ? '#F3E8FF' : '#E6F1FB' }]}>
-                <Text style={[s.badgeText, { color: ['quiz', 'exam'].includes(item.type) ? '#7C3AED' : theme.primary }]}>{item.type.toUpperCase()}</Text>
+              <View style={[s.badge, { backgroundColor: ['quiz', 'exam'].includes(item.type) ? '#EEE2F8' : '#F9E4E8' }]}>
+                <Text style={[s.badgeText, { color: ['quiz', 'exam'].includes(item.type) ? '#8051B0' : theme.primary }]}>{item.type}</Text>
               </View>
-              <Text style={[s.count, { color: theme.textSub }]}>{item.submissions_count ?? 0} submitted</Text>
+              <View style={s.submittedPill}>
+                <Text style={s.submittedText}>{item.submissions_count ?? 0} submitted</Text>
+              </View>
             </View>
-            <Text style={[s.title, { color: theme.text }]}>{item.title}</Text>
-            <Text style={[s.sub, { color: theme.textSub }]}>
+            <Text style={[s.workTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
+            <Text style={[s.workSub, { color: theme.textSub }]} numberOfLines={1}>
               {item.section_subject?.subject?.code || 'Subject'} · {item.section_subject?.section?.name || 'Section'}
               {item.type === 'exam' ? ` · ${item.duration_minutes} min` : ''}
               {' · '}{item.due_at ? new Date(item.due_at).toLocaleString() : 'No due date'}
             </Text>
+            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -884,16 +908,39 @@ function correctAnswerCount(questions, answers) {
 const s = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  body: { padding: 16, gap: 12, paddingBottom: 100 },
+  body: { paddingHorizontal: 8, paddingTop: 18, gap: 9, paddingBottom: 104 },
+  workHero: { backgroundColor: '#F2C8D0', borderRadius: 20, paddingHorizontal: 16, paddingTop: 39, paddingBottom: 13, shadowColor: '#7B3B4A', shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroCopy: { flex: 1 },
+  heroEyebrow: { color: '#765B61', fontSize: 11, fontWeight: '600' },
+  heroTitle: { color: '#2A1B1F', fontSize: 20, fontWeight: '900', lineHeight: 24 },
+  heroIcon: { width: 36, height: 36, backgroundColor: '#FFFFFF', borderRadius: 11, justifyContent: 'center', alignItems: 'center', shadowColor: '#8C6570', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  heroStats: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 13, marginTop: 12, minHeight: 56, alignItems: 'center' },
+  heroStat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  heroStatDivider: { width: 1, height: 36, backgroundColor: '#ECD6DA' },
+  heroStatValue: { color: '#2A1B1F', fontSize: 15, fontWeight: '900' },
+  heroStatLabel: { color: '#765B61', fontSize: 9, fontWeight: '600', marginTop: 2 },
+  sectionHeading: { marginTop: 11, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionTitle: { fontSize: 14, fontWeight: '900' },
+  sectionCount: { fontSize: 11, fontWeight: '600' },
   card: { borderWidth: 1, borderRadius: 14, padding: 15 },
+  workCard: { minHeight: 79, flexDirection: 'row', paddingHorizontal: 11, paddingVertical: 10, borderColor: '#E6D8DB' },
+  workAccent: { width: 4, borderRadius: 4, marginRight: 11 },
+  workContent: { flex: 1, minWidth: 0 },
+  emptyCard: { marginTop: 2 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  badgeText: { fontSize: 10, fontWeight: '900' },
+  badge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  badgeText: { fontSize: 9, fontWeight: '900', textTransform: 'capitalize' },
+  submittedPill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#DDF0E3' },
+  submittedText: { color: '#277846', fontSize: 9, fontWeight: '900' },
   count: { fontSize: 11, fontWeight: '800' },
   title: { fontSize: 16, fontWeight: '900' },
   sub: { fontSize: 12, fontWeight: '600', marginTop: 5, lineHeight: 18 },
+  workTitle: { fontSize: 13, fontWeight: '900' },
+  workSub: { fontSize: 10, fontWeight: '600', marginTop: 4, lineHeight: 15 },
   warning: { fontSize: 12, fontWeight: '800', marginTop: 10 },
   primaryBtn: { borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  workPrimary: { paddingVertical: 12, marginTop: 2 },
   primaryText: { color: '#fff', fontSize: 13, fontWeight: '900' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'flex-end' },
   modalCard: { maxHeight: '92%', borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingTop: 18 },

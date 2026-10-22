@@ -11,12 +11,12 @@ function TabIcon({ name, focused, color }) {
   return (
     <View
       style={{
-        width: 36,
-        height: 30,
-        borderRadius: 8,
+        width: 38,
+        height: 28,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: focused ? `${color}18` : 'transparent',
+        backgroundColor: focused ? `${color}16` : 'transparent',
       }}
     >
       <Ionicons name={name} size={21} color={color} />
@@ -24,14 +24,14 @@ function TabIcon({ name, focused, color }) {
   );
 }
 
-function TabLabel({ label, color }) {
+function TabLabel({ label, color, focused }) {
   return (
     <Text
       style={{
         width: 56,
         color,
         fontSize: 10,
-        fontWeight: '700',
+        fontWeight: focused ? '800' : '600',
         includeFontPadding: false,
         lineHeight: 13,
         textAlign: 'center',
@@ -65,9 +65,9 @@ export default function TabLayout() {
           backgroundColor: theme.navBg,
           borderTopWidth: 1,
           borderTopColor: theme.border,
-          elevation: 12,
+          elevation: 8,
           shadowColor: '#000',
-          shadowOpacity: 0.1,
+          shadowOpacity: 0.07,
           shadowOffset: { width: 0, height: -2 },
           shadowRadius: 8,
         },
@@ -83,7 +83,7 @@ export default function TabLayout() {
           height: 54,
           alignItems: 'center',
           justifyContent: 'center',
-          paddingVertical: 4,
+          paddingVertical: 3,
         },
         tabBarIconStyle: {
           width: 36,
@@ -96,7 +96,7 @@ export default function TabLayout() {
         name="today"
         options={{
           title: 'Home',
-          tabBarLabel: ({ color }) => <TabLabel label="Home" color={color} />,
+          tabBarLabel: ({ color, focused }) => <TabLabel label="Home" color={color} focused={focused} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} color={color} />
           ),
@@ -106,7 +106,7 @@ export default function TabLayout() {
         name="subjects"
         options={{
           title: 'Subjects',
-          tabBarLabel: ({ color }) => <TabLabel label="Subjects" color={color} />,
+          tabBarLabel: ({ color, focused }) => <TabLabel label="Subjects" color={color} focused={focused} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'book' : 'book-outline'} focused={focused} color={color} />
           ),
@@ -116,7 +116,7 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          tabBarLabel: ({ color }) => <TabLabel label="Chat" color={color} />,
+          tabBarLabel: ({ color, focused }) => <TabLabel label="Chat" color={color} focused={focused} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'chatbubble' : 'chatbubble-outline'} focused={focused} color={color} />
           ),
@@ -126,7 +126,7 @@ export default function TabLayout() {
         name="study"
         options={{
           title: 'Study AI',
-          tabBarLabel: ({ color }) => <TabLabel label="Study AI" color={color} />,
+          tabBarLabel: ({ color, focused }) => <TabLabel label="Study AI" color={color} focused={focused} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'sparkles' : 'sparkles-outline'} focused={focused} color={color} />
           ),
@@ -136,7 +136,7 @@ export default function TabLayout() {
         name="more"
         options={{
           title: 'More',
-          tabBarLabel: ({ color }) => <TabLabel label="More" color={color} />,
+          tabBarLabel: ({ color, focused }) => <TabLabel label="More" color={color} focused={focused} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} color={color} />
           ),

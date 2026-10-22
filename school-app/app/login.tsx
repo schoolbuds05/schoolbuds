@@ -46,7 +46,7 @@ export default function Login() {
       } else if (['head_department', 'dean'].includes(res.data.user?.position) || ['head_department', 'dean'].includes(role)) {
         router.replace('/(leadership)/dashboard');
       } else if (['faculty', 'teacher'].includes(role)) {
-        router.replace('/(teacher)/classes');
+        router.replace('/(teacher)/dashboard');
       } else if (role === 'registrar') {
         router.replace('/(registrar)/dashboard');
       } else if (role === 'parent') {

@@ -11,10 +11,10 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View, Image, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import HeaderGradient from '../components/ui/HeaderGradient';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
@@ -34,6 +34,8 @@ export default function StudentAssignments() {
   const [submitting, setSubmitting] = useState(false);
   const [violations, setViolations] = useState([]);
   const [remainingSeconds, setRemainingSeconds] = useState(null);
+  const [listFilter, setListFilter] = useState('open');
+  const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
   const timedOutSubmission = useRef(false);
   const submissionFinal = Boolean(selected?.submission?.submitted_at)
     || ['submitted', 'graded'].includes(selected?.submission?.status);
@@ -50,7 +52,7 @@ export default function StudentAssignments() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { Promise.resolve().then(load); }, [load]);
 
   const open = async (item) => {
     try {
@@ -244,31 +246,30 @@ export default function StudentAssignments() {
     );
   }
 
-  const submitted = items.filter(item => item.submission).length;
+  const submitted = items.filter(item => isSubmitted(item)).length;
+  const graded = items.filter(item => item.submission?.status === 'graded').length;
+  const openItems = items.filter(item => !isSubmitted(item));
+  const shownItems = listFilter === 'submitted' ? items.filter(item => isSubmitted(item)) : listFilter === 'graded' ? items.filter(item => item.submission?.status === 'graded') : openItems;
+  const dueThisWeek = shownItems.filter(item => !isSubmitted(item) && isDueThisWeek(item));
+  const later = shownItems.filter(item => !isSubmitted(item) && !isDueThisWeek(item));
+  const submittedItems = shownItems.filter(item => isSubmitted(item));
   const quizReviewReady = selected?.submission?.status === 'graded'
     && selected?.submission?.score !== null
     && selected?.submission?.score !== undefined;
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
-      <HeaderGradient
-        title="Assignments"
-        subtitle="Submit class work and view graded quizzes."
-        initials="AS"
-        stats={[
-          { label: 'Open', value: items.length - submitted, accent: '#FDE68A' },
-          { label: 'Done', value: submitted, accent: '#A7F3D0' },
-        ]}
-      />
+      <View style={[s.assignmentHeader, { paddingTop: topInset + 12 }]}><View style={s.assignmentHeaderCopy}><Text style={[s.assignmentTerm, { color: theme.textSub }]}>Class work and assessments</Text><Text style={[s.assignmentTitle, { color: theme.text }]}>Assignments</Text></View><View style={[s.assignmentLogoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.assignmentLogo} resizeMode="contain" /></View></View>
+      <View style={[s.assignmentTabs, { backgroundColor: theme.primaryLight }]}>{[['open', `Open ${openItems.length}`], ['submitted', `Submitted ${submitted}`], ['graded', `Graded ${graded}`]].map(([value, label]) => <TouchableOpacity key={value} style={[s.assignmentTab, listFilter === value && { backgroundColor: theme.card }]} onPress={() => setListFilter(value)}><Text style={[s.assignmentTabText, { color: listFilter === value ? theme.text : theme.textSub }]}>{label}</Text></TouchableOpacity>)}</View>
       <ScrollView
-        contentContainerStyle={s.body}
+        contentContainerStyle={s.assignmentBody}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
       >
-        {items.length === 0 ? (
+        {/*
           <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[s.title, { color: theme.text }]}>No assignments yet</Text>
             <Text style={[s.sub, { color: theme.textSub }]}>Class work from your teachers will appear here.</Text>
           </View>
-        ) : items.map(item => (
+        ) : [].map(item => (
           <TouchableOpacity key={item.id} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => open(item)}>
             <View style={s.row}>
               <View style={[s.badge, { backgroundColor: item.submission ? theme.successLight : theme.warningLight }]}>
@@ -286,7 +287,8 @@ export default function StudentAssignments() {
               <Text style={[s.score, { color: theme.success }]}>Score: {item.submission.score}/{item.points_possible}</Text>
             ) : null}
           </TouchableOpacity>
-        ))}
+        */}
+        {items.length === 0 ? <EmptyAssignments theme={theme} /> : listFilter === 'open' ? <><AssignmentSection title="Due this week" items={dueThisWeek} theme={theme} onOpen={open} empty="No assignments due this week." /><AssignmentSection title="Later" items={later} theme={theme} onOpen={open} empty="No later assignments." /><AssignmentSection title="Submitted" items={items.filter(item => isSubmitted(item))} theme={theme} onOpen={open} empty="No submitted assignments." /></> : <AssignmentSection title={listFilter === 'graded' ? 'Graded' : 'Submitted'} items={submittedItems} theme={theme} onOpen={open} empty={`No ${listFilter} assignments.`} />}
       </ScrollView>
 
       <Modal visible={!!selected} animationType="slide">
@@ -419,10 +421,50 @@ export default function StudentAssignments() {
   );
 }
 
+const isSubmitted = (item) => Boolean(item.submission?.submitted_at) || ['submitted', 'graded'].includes(item.submission?.status);
+const isDueThisWeek = (item) => {
+  if (!item.due_at) return false;
+  const days = (new Date(item.due_at).getTime() - Date.now()) / 86400000;
+  return days <= 7;
+};
+const dateText = (value, submitted) => {
+  if (!value) return submitted ? 'Submitted' : 'No due date';
+  const date = new Date(value);
+  return `${submitted ? 'Turned in' : 'Due'} ${date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} · ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+};
+const dueLabel = (item) => {
+  if (isSubmitted(item)) return item.submission?.status === 'graded' ? 'Graded' : 'Submitted';
+  if (!item.due_at) return 'No due date';
+  const days = Math.ceil((new Date(item.due_at).getTime() - Date.now()) / 86400000);
+  return days <= 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days} days`;
+};
+
+function AssignmentSection({ title, items, theme, onOpen, empty }) {
+  return <View style={s.assignmentSection}><View style={s.assignmentSectionHead}><Text style={[s.assignmentSectionTitle, { color: theme.text }]}>{title}</Text><Text style={[s.assignmentSectionCount, { color: theme.textSub }]}>{items.length} {items.length === 1 ? 'task' : 'tasks'}</Text></View>{items.length ? <View style={[s.assignmentGroup, { backgroundColor: theme.card }]}>{items.map((item, index) => <AssignmentRow key={item.id} item={item} isLast={index === items.length - 1} theme={theme} onPress={() => onOpen(item)} />)}</View> : <Text style={[s.assignmentEmpty, { color: theme.textSub }]}>{empty}</Text>}</View>;
+}
+function AssignmentRow({ item, isLast, theme, onPress }) {
+  const done = isSubmitted(item);
+  const urgent = !done && item.due_at && isDueThisWeek(item);
+  const accent = done ? theme.success : urgent ? theme.primary : theme.warning;
+  const subject = item.section_subject?.subject?.code || 'SUBJ';
+  return <TouchableOpacity style={[s.assignmentRow, !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }, { borderLeftColor: accent }]} onPress={onPress} activeOpacity={0.75}><View style={s.assignmentRowCopy}><View style={s.assignmentRowTop}><Text style={[s.subjectPill, { backgroundColor: theme.primaryLight, color: theme.primary }]}>{subject}</Text><Text style={[s.duePill, { backgroundColor: done ? theme.successLight : urgent ? theme.dangerLight : theme.warningLight, color: done ? theme.success : urgent ? theme.danger : theme.warning }]}>{dueLabel(item)}</Text></View><Text style={[s.assignmentRowTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text><View style={s.assignmentMeta}><Ionicons name="time-outline" size={12} color={theme.textSub} /><Text style={[s.assignmentMetaText, { color: theme.textSub }]} numberOfLines={1}>{dateText(done ? item.submission?.submitted_at || item.due_at : item.due_at, done)}</Text></View></View></TouchableOpacity>;
+}
+function EmptyAssignments({ theme }) { return <View style={[s.assignmentEmptyCard, { backgroundColor: theme.card }]}><Text style={[s.assignmentEmptyTitle, { color: theme.text }]}>No assignments yet</Text><Text style={[s.assignmentEmpty, { color: theme.textSub }]}>Class work from your teachers will appear here.</Text></View>; }
+
 const s = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   body: { padding: 16, gap: 12, paddingBottom: 100 },
+  assignmentBody: { padding: 16, paddingTop: 16, paddingBottom: 100 },
+  assignmentHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 13 },
+  assignmentHeaderCopy: { flex: 1 }, assignmentTerm: { fontSize: 10, fontWeight: '600', marginBottom: 1 }, assignmentTitle: { fontSize: 22, fontWeight: '800' },
+  assignmentLogoWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }, assignmentLogo: { width: 31, height: 31, borderRadius: 8 },
+  assignmentTabs: { height: 36, borderRadius: 11, padding: 3, flexDirection: 'row', marginBottom: 16 }, assignmentTab: { flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 8 }, assignmentTabText: { fontSize: 10, fontWeight: '800' },
+  assignmentSection: { marginBottom: 17 }, assignmentSectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }, assignmentSectionTitle: { fontSize: 14, fontWeight: '800' }, assignmentSectionCount: { fontSize: 10, fontWeight: '700' },
+  assignmentGroup: { borderRadius: 14, overflow: 'hidden' }, assignmentRow: { minHeight: 78, borderLeftWidth: 4, paddingVertical: 10, paddingHorizontal: 10 }, assignmentRowCopy: { flex: 1 },
+  assignmentRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, subjectPill: { borderRadius: 11, paddingHorizontal: 9, paddingVertical: 4, fontSize: 9, fontWeight: '900', overflow: 'hidden' }, duePill: { borderRadius: 11, paddingHorizontal: 9, paddingVertical: 4, fontSize: 9, fontWeight: '900', overflow: 'hidden' },
+  assignmentRowTitle: { fontSize: 12, fontWeight: '800', marginTop: 6 }, assignmentMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 }, assignmentMetaText: { fontSize: 10, fontWeight: '600' },
+  assignmentEmpty: { fontSize: 11, textAlign: 'center', paddingVertical: 6 }, assignmentEmptyCard: { borderRadius: 14, padding: 22, alignItems: 'center' }, assignmentEmptyTitle: { fontSize: 14, fontWeight: '800' },
   card: { borderWidth: 1, borderRadius: 14, padding: 15 },
   warningCard: { borderWidth: 1, borderRadius: 12, padding: 12 },
   warningText: { fontSize: 12, fontWeight: '900' },

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../src/api';
 
@@ -20,17 +21,15 @@ export default function TeacherGrades() {
   const [saving, setSaving]   = useState(false);
   const [quarter, setQuarter] = useState('1');
   const [scores, setScores]   = useState({});
-  const activeClassId = classId || selectedClass?.id;
-  const activeSubject = subject || selectedClass?.subject;
+  const activeClassId = selectedClass?.id || classId;
+  const activeSubject = selectedClass?.subject || subject;
 
   useEffect(() => {
-    if (classId) return;
-
     api.get('/teacher/classes').then(res => {
       const list = res.data ?? [];
       setClasses(list);
       if (list.length > 0) {
-        setSelectedClass(list[0]);
+        setSelectedClass(list.find(item => String(item.id) === String(classId)) ?? list[0]);
       } else {
         setLoading(false);
       }
@@ -116,16 +115,16 @@ export default function TeacherGrades() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← Classes</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Enter grades {data?.class?.is_college ? '(1-5, 1 highest)' : '(1-100)'}</Text>
-        <Text style={styles.sub}>{activeSubject}</Text>
+        <View style={styles.headerCopy}>
+          <Text style={styles.sub}>{activeSubject}</Text>
+          <Text style={styles.title}>Enter grades</Text>
+        </View>
+        <View style={styles.headerIcon}><Ionicons name="leaf" size={24} color="#65BA35" /></View>
       </View>
 
-      {classes.length > 1 && (
+      {classes.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={styles.classRow} contentContainerStyle={{ paddingHorizontal:12, gap:8 }}>
+          style={styles.classRow} contentContainerStyle={styles.classRowContent}>
           {classes.map(cls => (
             <TouchableOpacity
               key={String(cls.id)}
@@ -150,7 +149,8 @@ export default function TeacherGrades() {
         ))}
       </View>
 
-      <ScrollView style={{ flex:1 }} contentContainerStyle={{ padding:16 }}>
+      <Text style={styles.gradeHint}>{data?.class?.is_college ? 'Grades run from 1 to 5, where 1 is the highest.' : 'Enter a score from 1 to 100 for each student.'}</Text>
+      <ScrollView style={{ flex:1 }} contentContainerStyle={styles.studentList}>
         {data?.students?.length === 0 && (
           <Text style={styles.empty}>No students found for this class.</Text>
         )}
@@ -179,9 +179,6 @@ export default function TeacherGrades() {
       </ScrollView>
 
       <View style={styles.footer}>
-        {data?.grade_submissions?.[quarter] && !['draft', 'teacher_revision'].includes(data.grade_submissions[quarter].status) && (
-          <Text style={styles.lockedNotice}>Submitted for approval. Grade entry is locked while it is under review.</Text>
-        )}
         <TouchableOpacity
           style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
           onPress={save}
@@ -197,34 +194,39 @@ export default function TeacherGrades() {
 }
 
 const styles = StyleSheet.create({
-  container:       { flex:1, backgroundColor:'#f5f5f5' },
+  container:       { flex:1, backgroundColor:'#F9E9EC' },
   center:          { flex:1, justifyContent:'center', alignItems:'center', gap:12 },
   noClass:         { fontSize:15, color:'#888' },
   backLink:        { fontSize:14, color:'#378ADD' },
-  header:          { backgroundColor:'#378ADD', padding:20, paddingTop:52 },
-  backBtn:         { marginBottom:8 },
-  backBtnText:     { color:'rgba(255,255,255,0.8)', fontSize:13 },
-  title:           { color:'#fff', fontSize:20, fontWeight:'600' },
-  sub:             { color:'rgba(255,255,255,0.8)', fontSize:13, marginTop:3 },
-  classRow:        { maxHeight:52, backgroundColor:'#fff', borderBottomWidth:0.5, borderColor:'#eee' },
-  classTab:        { paddingHorizontal:16, paddingVertical:12, borderBottomWidth:2, borderBottomColor:'transparent' },
-  classTabActive:  { borderBottomColor:'#378ADD' },
-  classTabText:    { fontSize:13, color:'#888' },
-  classTabTextActive:{ color:'#378ADD', fontWeight:'600' },
-  quarterRow:      { flexDirection:'row', padding:12, gap:8, backgroundColor:'#fff', borderBottomWidth:0.5, borderColor:'#eee' },
-  qBtn:            { flex:1, paddingVertical:8, borderRadius:10, alignItems:'center', backgroundColor:'#f5f5f5' },
-  qBtnActive:      { backgroundColor:'#378ADD' },
-  qText:           { fontSize:13, color:'#888', fontWeight:'500' },
-  qTextActive:     { color:'#fff' },
-  studentRow:      { flexDirection:'row', alignItems:'center', gap:12, backgroundColor:'#fff', borderRadius:12, padding:12, marginBottom:8 },
-  avatar:          { width:40, height:40, borderRadius:20, backgroundColor:'#E6F1FB', justifyContent:'center', alignItems:'center' },
-  avatarText:      { fontSize:14, fontWeight:'600', color:'#378ADD' },
-  studentName:     { fontSize:14, fontWeight:'500', color:'#333' },
-  studentId:       { fontSize:11, color:'#999', marginTop:1 },
-  scoreInput:      { width:64, borderWidth:0.5, borderColor:'#ddd', borderRadius:10, padding:10, fontSize:16, textAlign:'center', color:'#333', backgroundColor:'#fafafa' },
-  footer:          { padding:16, backgroundColor:'#fff', borderTopWidth:0.5, borderColor:'#eee' },
+  header:          { minHeight:82, backgroundColor:'#F2C8D0', paddingHorizontal:16, paddingTop:39, paddingBottom:9, flexDirection:'row', alignItems:'center', gap:10 },
+  backBtn:         { width:32, height:32, borderRadius:16, backgroundColor:'#FFF', alignItems:'center', justifyContent:'center' },
+  backBtnText:     { color:'#745D63', fontSize:11 },
+  headerCopy:      { flex:1 },
+  title:           { color:'#2A1B1F', fontSize:20, fontWeight:'900', lineHeight:23 },
+  sub:             { color:'#765B61', fontSize:10, marginBottom:1 },
+  headerIcon:      { width:36, height:36, borderRadius:11, backgroundColor:'#FFF', alignItems:'center', justifyContent:'center', elevation:2 },
+  classRow:        { maxHeight:43, marginTop:4 },
+  classRowContent: { paddingHorizontal:16, gap:8, alignItems:'center' },
+  classTab:        { minWidth:55, paddingHorizontal:12, paddingVertical:8, borderRadius:999, alignItems:'center', backgroundColor:'#FFF' },
+  classTabActive:  { backgroundColor:'#B5233D' },
+  classTabText:    { fontSize:10, color:'#806E73', fontWeight:'900' },
+  classTabTextActive:{ color:'#FFF', fontWeight:'900' },
+  quarterRow:      { flexDirection:'row', marginHorizontal:16, marginTop:7, padding:4, gap:0, backgroundColor:'#F0E5E7', borderRadius:12 },
+  qBtn:            { flex:1, paddingVertical:9, borderRadius:9, alignItems:'center' },
+  qBtnActive:      { backgroundColor:'#FFF' },
+  qText:           { fontSize:10, color:'#806E73', fontWeight:'700' },
+  qTextActive:     { color:'#B5233D', fontWeight:'900' },
+  gradeHint:       { color:'#806E73', fontSize:10, marginHorizontal:16, marginTop:12, marginBottom:6 },
+  studentList:     { paddingHorizontal:16, paddingTop:5, paddingBottom:16 },
+  studentRow:      { flexDirection:'row', alignItems:'center', gap:12, backgroundColor:'#FFF', borderRadius:12, padding:12, marginBottom:8 },
+  avatar:          { width:36, height:36, borderRadius:18, backgroundColor:'#E3EFFD', justifyContent:'center', alignItems:'center' },
+  avatarText:      { fontSize:11, fontWeight:'900', color:'#3180DC' },
+  studentName:     { fontSize:12, fontWeight:'900', color:'#2A1B1F' },
+  studentId:       { fontSize:9, color:'#806E73', marginTop:2 },
+  scoreInput:      { width:48, borderWidth:1, borderColor:'#E7DADD', borderRadius:10, padding:9, fontSize:15, fontWeight:'900', textAlign:'center', color:'#2A1B1F', backgroundColor:'#F9F0F2' },
+  footer:          { padding:16, backgroundColor:'#FFF', borderTopWidth:1, borderColor:'#F0DFE2' },
   lockedNotice:    { color:'#8a5a00', fontSize:12, fontWeight:'600', marginBottom:10, textAlign:'center' },
-  saveBtn:         { backgroundColor:'#378ADD', borderRadius:12, padding:15, alignItems:'center' },
+  saveBtn:         { backgroundColor:'#B5233D', borderRadius:12, padding:13, alignItems:'center' },
   saveBtnDisabled: { opacity:0.6 },
   saveBtnText:     { color:'#fff', fontWeight:'600', fontSize:15 },
   empty:           { textAlign:'center', color:'#999', fontSize:13, paddingVertical:20 },

@@ -1,7 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter, useSegments } from 'expo-router';
 import { Image, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../../src/theme-context';
@@ -64,7 +63,7 @@ export default function HeaderGradient({ title, subtitle, stats, children, compa
   );
 
   return (
-    <LinearGradient colors={[theme.primary, theme.primary]} style={[styles.container, compact && styles.containerCompact]}>
+    <View style={[styles.container, { backgroundColor: theme.primary }, compact && styles.containerCompact]}>
       <View style={styles.topRow}>
         <View style={styles.textGroup}>
           <Text style={[styles.greeting, compact && styles.greetingCompact]}>Welcome back</Text>
@@ -96,7 +95,7 @@ export default function HeaderGradient({ title, subtitle, stats, children, compa
       </View>
 
       {children ? <View style={[styles.children, compact && styles.childrenCompact]}>{children}</View> : null}
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -134,17 +133,19 @@ function routeForSegments(segments = []) {
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 18,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     padding: 16,
     paddingTop: HEADER_TOP,
-    marginBottom: 10,
+    marginBottom: 12,
     overflow: 'hidden',
   },
   containerCompact: {
-    borderRadius: 12,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
     padding: 14,
     paddingTop: Platform.OS === 'web' ? 14 : HEADER_TOP,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   topRow: {
     flexDirection: 'row',
@@ -166,9 +167,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '900',
-    marginBottom: 4,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 3,
   },
   titleCompact: {
     fontSize: 18,
@@ -203,10 +204,10 @@ const styles = StyleSheet.create({
     borderRadius: 30,
   },
   statsRow: {
-    marginTop: 12,
+    marginTop: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
   },
   statsRowCompact: {
     marginTop: 8,
@@ -214,9 +215,9 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10,
-    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 9,
+    paddingVertical: 6,
     paddingHorizontal: 9,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',

@@ -88,7 +88,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/assignments/{assignment}/submit', [AssignmentController::class, 'submit']);
 
     // Registrar & Admin
-    Route::middleware('role:admin,registrar')->group(function () {
+    Route::middleware('role:admin')->group(function () {
         Route::post('/courses',        [CourseController::class, 'store']);
         Route::put('/courses/{id}',    [CourseController::class, 'update']);
         Route::delete('/courses/{id}', [CourseController::class, 'destroy']);
@@ -100,7 +100,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/subjects/{id}/prerequisites',                         [SubjectSectionController::class, 'addSubjectPrerequisite']);
         Route::delete('/subjects/{id}/prerequisites/{prerequisiteId}',      [SubjectSectionController::class, 'removeSubjectPrerequisite']);
 
-        // Sections (registrar)
+        // Sections (registrar and department chair)
         Route::post('/sections',                             [SubjectSectionController::class, 'sectionStore']);
         Route::put('/sections/{id}',                         [SubjectSectionController::class, 'sectionUpdate']);
         Route::delete('/sections/{id}',                      [SubjectSectionController::class, 'sectionDestroy']);
@@ -109,7 +109,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/sections/{id}/students',               [SubjectSectionController::class, 'enrollStudent']);
         Route::delete('/sections/{id}/students/{userId}',    [SubjectSectionController::class, 'removeStudent']);
 
-        Route::middleware('role:registrar')->group(function () {
+        Route::middleware('role:registrar,head_department')->group(function () {
             // Registrar
             Route::get('/registrar/teachers',                   [SubjectSectionController::class, 'teacherIndex']);
             Route::get('/registrar/section-students',           [SubjectSectionController::class, 'studentIndex']);
@@ -135,6 +135,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/registrar/event-participations/{participation}/approve', [RewardController::class, 'approveEvent']);
             Route::post('/registrar/event-participations/{participation}/reject', [RewardController::class, 'rejectEvent']);
         });
+    });
+
+    // Department chairs can create and manage sections for their department.
+    Route::middleware('role:head_department')->group(function () {
+        Route::post('/sections',                             [SubjectSectionController::class, 'sectionStore']);
+        Route::put('/sections/{id}',                         [SubjectSectionController::class, 'sectionUpdate']);
+        Route::delete('/sections/{id}',                      [SubjectSectionController::class, 'sectionDestroy']);
+        Route::post('/sections/{id}/subjects',               [SubjectSectionController::class, 'assignSubject']);
+        Route::delete('/sections/{id}/subjects/{subjectId}', [SubjectSectionController::class, 'removeSubject']);
+        Route::post('/sections/{id}/students',               [SubjectSectionController::class, 'enrollStudent']);
+        Route::delete('/sections/{id}/students/{userId}',    [SubjectSectionController::class, 'removeStudent']);
     });
 
     // AI

@@ -98,7 +98,7 @@ class DepartmentController extends Controller
             'code' => ['required', 'string', 'max:20', Rule::unique('departments', 'code')->ignore($department?->id)],
             'chair_user_id' => ['nullable', 'exists:users,id'],
             'teacher_ids' => ['nullable', 'array'],
-            'teacher_ids.*' => ['integer', 'exists:users,id'],
+            'teacher_ids.*' => ['nullable', 'integer', 'exists:users,id'],
             'course_ids' => ['nullable', 'array'],
             'course_ids.*' => ['integer', Rule::exists('courses', 'id')->where('program_type', 'college')],
             'is_active' => ['nullable', 'boolean'],

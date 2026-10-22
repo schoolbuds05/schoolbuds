@@ -41,6 +41,7 @@ const EMPTY_ASSIGNMENT = {
   time_start: '',
   time_end: '',
   room: '',
+  schedules: [],
 };
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -179,6 +180,9 @@ export default function Sections() {
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
   const setSchedule = (key, value) => setAssignment(prev => ({ ...prev, [key]: value }));
+  const addMeeting = () => setAssignment(prev => ({ ...prev, schedules: [...(prev.schedules || []), { day: '', time_start: '', time_end: '', room: '' }] }));
+  const updateMeeting = (index, key, value) => setAssignment(prev => ({ ...prev, schedules: (prev.schedules || []).map((item, i) => i === index ? { ...item, [key]: value } : item) }));
+  const removeMeeting = index => setAssignment(prev => ({ ...prev, schedules: (prev.schedules || []).filter((_, i) => i !== index) }));
 
   const fetchSections = useCallback(async () => {
     try {
@@ -388,6 +392,7 @@ export default function Sections() {
       time_start: item.time_start ?? '',
       time_end: item.time_end ?? '',
       room: item.room ?? '',
+      schedules: item.schedules ?? [],
     });
     setTeacherSearch('');
     setTeacherDropdownOpen(false);
@@ -424,6 +429,12 @@ export default function Sections() {
         time_start: assignment.time_start.trim() || null,
         time_end: assignment.time_end.trim() || null,
         room: assignment.room.trim() || null,
+        schedules: (assignment.schedules || []).filter(item => item.day).map(item => ({
+          day: item.day,
+          time_start: item.time_start || null,
+          time_end: item.time_end || null,
+          room: item.room || null,
+        })),
       });
       setAssignment(EMPTY_ASSIGNMENT);
       setTeacherSearch('');
@@ -896,6 +907,21 @@ export default function Sections() {
                       />
                     </View>
                   </View>
+                  {(assignment.schedules || []).map((meeting, index) => (
+                    <View key={`meeting-${index}`} style={s.extraMeeting}>
+                      <View style={s.extraMeetingHeader}>
+                        <Text style={s.fieldLabel}>Additional meeting {index + 1}</Text>
+                        <TouchableOpacity onPress={() => removeMeeting(index)}><Text style={s.removeText}>Remove</Text></TouchableOpacity>
+                      </View>
+                      <ChipGroup value={meeting.day} onSelect={value => updateMeeting(index, 'day', value)} options={DAYS.map(day => ({ key: day, label: meeting.day === day ? `[x] ${day}` : day }))} />
+                      <View style={s.twoCol}>
+                        <TimePicker label="Start" value={meeting.time_start} onChange={value => updateMeeting(index, 'time_start', value)} />
+                        <TimePicker label="End" value={meeting.time_end} onChange={value => updateMeeting(index, 'time_end', value)} />
+                      </View>
+                      <TextInput style={s.input} value={meeting.room} onChangeText={value => updateMeeting(index, 'room', value)} placeholder="Room" placeholderTextColor={C.muted} />
+                    </View>
+                  ))}
+                  <TouchableOpacity style={s.addMeetingBtn} onPress={addMeeting}><Text style={s.addMeetingText}>+ Add another meeting time</Text></TouchableOpacity>
                   <Field label="Teacher">
                     <TouchableOpacity
                       style={[s.dropdown, assignment.teacher_id && s.dropdownActive]}
@@ -1103,6 +1129,11 @@ const s = StyleSheet.create({
   statusBadgeActive: { backgroundColor: '#E1F5EE', color: C.green },
   smallBtn: { backgroundColor: C.blueLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   smallBtnText: { color: C.blue, fontSize: 11, fontWeight: '800' },
+  extraMeeting: { marginTop: 10, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: '#FAFBFC' },
+  extraMeetingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  removeText: { color: '#C0394D', fontSize: 11, fontWeight: '800' },
+  addMeetingBtn: { marginTop: 10, paddingVertical: 10, alignItems: 'center', borderRadius: 9, borderWidth: 1, borderColor: C.blue, borderStyle: 'dashed' },
+  addMeetingText: { color: C.blue, fontSize: 12, fontWeight: '800' },
   removeBtn: { backgroundColor: '#FCEBEB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   removeBtnText: { color: '#E24B4A', fontSize: 13, fontWeight: '800' },
   assignBox: { backgroundColor: '#F0F4FA', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E0E7F0', marginTop: 12 },

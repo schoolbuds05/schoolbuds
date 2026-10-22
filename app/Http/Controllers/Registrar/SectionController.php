@@ -21,12 +21,14 @@ class SectionController extends Controller
 
     public function index(Request $request)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
 
+        $user = $request->user();
         $sections = Section::query()
             ->with([
                 'sectionSubjects.subject',
                 'sectionSubjects.teacher',
+                'sectionSubjects.schedules',
                 'students' => fn ($query) => $query
                     ->wherePivot('status', 'enrolled')
                     ->orderBy('name')
@@ -37,6 +39,7 @@ class SectionController extends Controller
             ->when($request->filled('semester'), fn ($query) => $query->where('semester', $request->semester))
             ->when($request->filled('school_year'), fn ($query) => $query->where('school_year', $request->school_year))
             ->when($request->has('is_active'), fn ($query) => $query->where('is_active', (bool) $request->boolean('is_active')))
+            ->when($user?->position === 'head_department', fn ($query) => $query->where('department_id', $user->department_id))
             ->when($request->search, function ($query) use ($request) {
                 $term = "%{$request->search}%";
                 $query->where(function ($innerQuery) use ($term, $request) {
@@ -53,8 +56,10 @@ class SectionController extends Controller
         $courses = Course::query()
             ->where('is_active', true)
             ->where('program_type', 'college')
+            ->when($user?->position === 'head_department', fn ($query) => $query->where('department_id', $user->department_id))
             ->orderBy('name')
             ->get();
+        $defaultCourse = $user?->position === 'head_department' ? $courses->first()?->name : null;
         $subjects = Subject::query()
             ->where('is_active', true)
             ->orderBy('code')
@@ -78,28 +83,85 @@ class SectionController extends Controller
             ->orderByDesc('school_year')
             ->pluck('school_year');
 
-        return view('registrar.sections.index', compact('sections', 'courses', 'subjects', 'teachers', 'students', 'schoolYears'));
+        return view('registrar.sections.index', compact('sections', 'courses', 'subjects', 'teachers', 'students', 'schoolYears', 'defaultCourse'));
     }
 
     public function store(Request $request)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
-        Section::create($this->validated($request));
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        $data = $this->validated($request);
+        if ($this->isChair($request)) {
+            $data['department_id'] = $request->user()->department_id;
+            $data['created_by'] = $request->user()->id;
+            $data['workflow_status'] = 'draft';
+            $data['is_active'] = false;
+        } else {
+            $data['workflow_status'] = $data['is_active'] ? 'approved' : 'draft';
+            $data['created_by'] = $request->user()->id;
+        }
+        $section = Section::create($data);
+        ActivityLog::record($request, 'section_created', 'Created section '.$section->name.'.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
 
         return back()->with('status', 'Section created.');
     }
 
     public function update(Request $request, Section $section)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
-        $section->update($this->validated($request));
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        abort_if($this->isChair($request) && !$this->ownsSection($request, $section), 403);
+        if ($this->isChair($request)) {
+            abort_unless(in_array($section->workflow_status, ['draft', 'rejected']), 403, 'Only draft or rejected sections can be edited.');
+        }
+        $data = $this->validated($request);
+        if ($this->isChair($request)) { $data['workflow_status'] = 'draft'; $data['is_active'] = false; }
+        $section->update($data);
+        ActivityLog::record($request, 'section_updated', 'Updated section '.$section->name.'.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
 
-        return back()->with('status', 'Section updated.');
+        return back()->with(['status' => 'Section updated.', 'open_section' => $section->id]);
+    }
+
+    public function submit(Request $request, Section $section)
+    {
+        $this->requireAnyRole($request, ['head_department']);
+        abort_unless($this->ownsSection($request, $section), 403);
+        abort_unless(in_array($section->workflow_status, ['draft', 'rejected']), 422, 'Only draft or rejected sections can be submitted.');
+        $section->update(['workflow_status' => 'pending', 'workflow_remarks' => null, 'submitted_at' => now(), 'is_active' => false]);
+        ActivityLog::record($request, 'section_submitted', 'Submitted section '.$section->name.' for Registrar review.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
+        return back()->with('status', 'Section submitted for Registrar review.');
+    }
+
+    public function review(Request $request, Section $section)
+    {
+        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $data = $request->validate(['decision' => ['required', 'in:approve,reject'], 'remarks' => ['nullable', 'string', 'max:2000']]);
+        if ($data['decision'] === 'reject' && blank($data['remarks'] ?? null)) return back()->withErrors(['remarks' => 'Remarks are required when rejecting a section.']);
+        if ($data['decision'] === 'approve' && ($conflict = $this->scheduleConflict($section))) {
+            return back()->withErrors(['section' => $conflict]);
+        }
+        $section->update(['workflow_status' => $data['decision'] === 'approve' ? 'approved' : 'rejected', 'workflow_remarks' => $data['remarks'] ?? null, 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'is_active' => $data['decision'] === 'approve']);
+        ActivityLog::record($request, 'section_reviewed', ucfirst($data['decision']).' section '.$section->name.'.', ['subject_type' => Section::class, 'subject_id' => $section->id, 'meta' => ['remarks' => $data['remarks'] ?? null]]);
+        return back()->with('status', $data['decision'] === 'approve' ? 'Section approved and opened for enrollment.' : 'Section returned to the Chair.');
+    }
+
+    public function close(Request $request, Section $section)
+    {
+        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $section->update(['workflow_status' => 'closed', 'is_active' => false]);
+        return back()->with('status', 'Section closed.');
+    }
+
+    public function reopen(Request $request, Section $section)
+    {
+        $this->requireAnyRole($request, ['admin', 'registrar']);
+        abort_unless(in_array($section->workflow_status, ['closed', 'approved']), 422, 'Only approved or closed sections can be reopened.');
+        $section->update(['workflow_status' => 'approved', 'is_active' => true, 'workflow_remarks' => null]);
+        ActivityLog::record($request, 'section_reopened', 'Reopened section '.$section->name.'.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
+        return back()->with('status', 'Section reopened for enrollment.');
     }
 
     public function assignSubject(Request $request, Section $section)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
 
         $data = $request->validate([
             'subject_id' => ['required_without:subject_ids', 'nullable', 'integer', 'exists:subjects,id'],
@@ -112,13 +174,26 @@ class SectionController extends Controller
             'time_start' => ['nullable', 'string', 'max:10'],
             'time_end' => ['nullable', 'string', 'max:10'],
             'room' => ['nullable', 'string', 'max:50'],
+            'schedules' => ['nullable', 'array'],
+            'schedules.*.day' => ['required', 'string', 'max:30'],
+            'schedules.*.time_start' => ['nullable', 'string', 'max:10'],
+            'schedules.*.time_end' => ['nullable', 'string', 'max:10'],
+            'schedules.*.room' => ['nullable', 'string', 'max:50'],
         ]);
 
         $subjectIds = $data['subject_ids'] ?? [$data['subject_id']];
+        $section->loadMissing('sectionSubjects');
+        $invalid = Subject::whereIn('id', $subjectIds)->get()->first(function ($subject) use ($section) {
+            if ($section->program_type === 'college') {
+                return $subject->course && $section->course && trim($subject->course) !== trim($section->course);
+            }
+            return $subject->strand && $section->strand && trim($subject->strand) !== trim($section->strand);
+        });
+        if ($invalid) return back()->withErrors(['subject_ids' => 'Only subjects connected to this course/strand or general subjects may be assigned.']);
 
         DB::transaction(function () use ($section, $subjectIds, $data) {
             foreach ($subjectIds as $subjectId) {
-                SectionSubject::updateOrCreate(
+                $assignment = SectionSubject::updateOrCreate(
                     [
                         'section_id' => $section->id,
                         'subject_id' => $subjectId,
@@ -131,28 +206,51 @@ class SectionController extends Controller
                         'room' => $data['room'] ?? null,
                     ]
                 );
+                if (array_key_exists('schedules', $data)) {
+                    $hasStoredMeetings = $assignment->schedules()->exists();
+                    $assignment->schedules()->delete();
+                    $meetingSchedules = [];
+                    $primaryDay = !empty($data['days']) ? implode(', ', $data['days']) : ($data['day'] ?? null);
+                    if (!$hasStoredMeetings && $primaryDay) {
+                        $meetingSchedules[] = [
+                            'day' => $primaryDay,
+                            'time_start' => $data['time_start'] ?? null,
+                            'time_end' => $data['time_end'] ?? null,
+                            'room' => $data['room'] ?? null,
+                        ];
+                    }
+                    $meetingSchedules = array_merge($meetingSchedules, $data['schedules'] ?? []);
+                    $meetingSchedules = collect($meetingSchedules)
+                        ->filter(fn ($meeting) => !empty($meeting['day']))
+                        ->unique(fn ($meeting) => implode('|', [$meeting['day'], $meeting['time_start'] ?? '', $meeting['time_end'] ?? '', $meeting['room'] ?? '']))
+                        ->values()
+                        ->all();
+                    $assignment->schedules()->createMany($meetingSchedules);
+                }
             }
         });
 
-        return back()->with('status', count($subjectIds) === 1
-            ? 'Subject assigned to section.'
-            : count($subjectIds).' subjects assigned to section.');
+        return back()->with([
+            'status' => count($subjectIds) === 1 ? 'Subject assigned to section.' : count($subjectIds).' subjects assigned to section.',
+            'open_section' => $section->id,
+            'open_subjects_modal' => $section->id,
+        ]);
     }
 
     public function removeSubject(Request $request, Section $section, SectionSubject $sectionSubject)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
         abort_unless((int) $sectionSubject->section_id === (int) $section->id, 404);
 
         ArchiveService::record($sectionSubject, $request->user()?->id, 'web.sections.subjects');
         $sectionSubject->delete();
 
-        return back()->with('status', 'Subject removed from section.');
+        return back()->with(['status' => 'Subject removed from section.', 'open_section' => $section->id, 'open_subjects_modal' => $section->id]);
     }
 
     public function destroy(Request $request, Section $section)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
 
         ArchiveService::record($section, $request->user()?->id, 'web.sections');
         $section->delete();
@@ -162,7 +260,7 @@ class SectionController extends Controller
 
     public function enrollStudent(Request $request, Section $section)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
 
         $data = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
@@ -196,12 +294,12 @@ class SectionController extends Controller
         Student::where('user_id', $studentUser->id)->get()
             ->each(fn (Student $student) => $student->update(['section' => $section->name]));
 
-        return back()->with('status', 'Student added to section.');
+        return back()->with(['status' => 'Student added to section.', 'open_section' => $section->id, 'open_students_modal' => $section->id]);
     }
 
     public function removeStudent(Request $request, Section $section, User $student)
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
 
         $studentsBefore = $section->students()->get()
             ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
@@ -219,7 +317,7 @@ class SectionController extends Controller
         Student::where('user_id', $student->id)->get()
             ->each(fn (Student $record) => $record->update(['section' => 'TBA']));
 
-        return back()->with('status', 'Student removed from section.');
+        return back()->with(['status' => 'Student removed from section.', 'open_section' => $section->id, 'open_students_modal' => $section->id]);
     }
 
     private function validated(Request $request): array
@@ -242,5 +340,18 @@ class SectionController extends Controller
             'strand' => $data['program_type'] === 'shs' ? ($data['strand'] ?: null) : null,
             'is_active' => (bool) ($data['is_active'] ?? false),
         ];
+    }
+
+    private function isChair(Request $request): bool { return $request->user()?->position === 'head_department'; }
+    private function ownsSection(Request $request, Section $section): bool { return $this->isChair($request) && (int) $section->department_id === (int) $request->user()->department_id; }
+
+    private function scheduleConflict(Section $section): ?string
+    {
+        $assignments = $section->sectionSubjects()->whereNotNull('room')->whereNotNull('day')->whereNotNull('time_start')->whereNotNull('time_end')->get();
+        foreach ($assignments as $assignment) {
+            $conflict = SectionSubject::query()->where('id', '!=', $assignment->id)->where('room', $assignment->room)->where('day', $assignment->day)->where('time_start', '<', $assignment->time_end)->where('time_end', '>', $assignment->time_start)->with('section')->first();
+            if ($conflict) return "Schedule conflict: {$assignment->room} on {$assignment->day} ({$assignment->time_start}-{$assignment->time_end}) is already assigned to another section.";
+        }
+        return null;
     }
 }

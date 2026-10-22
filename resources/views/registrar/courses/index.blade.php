@@ -1,4 +1,5 @@
 @extends('layouts.portal', ['title' => 'Courses'])
+@php($courseRoutePrefix = request()->routeIs('admin.*') ? 'admin.courses' : 'registrar.courses')
 
 @section('content')
 <div class="mb-6">
@@ -37,7 +38,7 @@
                             </select>
                         </label>
                         <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
-                            <a href="{{ route('registrar.courses.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
+                            <a href="{{ route($courseRoutePrefix . '.index') }}" class="rounded-lg border border-red-700 bg-white px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-50">Reset</a>
                             <button type="submit" class="rounded-lg bg-portal-accent px-3 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Apply</button>
                         </div>
                     </form>
@@ -62,7 +63,7 @@
                 </div>
                 <button type="button" data-modal-close="course-create-modal" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Close</button>
             </header>
-            <form method="POST" action="{{ route('registrar.courses.store') }}" class="max-h-[calc(90vh-5rem)] space-y-3 overflow-y-auto p-5">
+            <form method="POST" action="{{ route($courseRoutePrefix . '.store') }}" class="max-h-[calc(90vh-5rem)] space-y-3 overflow-y-auto p-5">
                 @csrf
                 <input data-modal-autofocus name="name" value="{{ old('name') }}" placeholder="Course or strand name" class="w-full rounded-lg border-slate-300 text-sm">
                 <input name="acronym" value="{{ old('acronym') }}" placeholder="Acronym, e.g. BSIT" class="w-full rounded-lg border-slate-300 text-sm uppercase">
@@ -79,11 +80,11 @@
 
     <section>
         <div class="space-y-3">
-            @foreach($courses as $course)
-                @php
+            <?php foreach ($courses as $course): ?>
+                <?php
                     $programLabel = $course->program_type === 'shs' ? 'SHS' : 'College';
                     $statusClass = $course->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500';
-                @endphp
+                ?>
                 <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" data-course-card>
                     <button
                         type="button"
@@ -127,7 +128,7 @@
                             </div>
                         </div>
 
-                        <form method="POST" action="{{ route('registrar.courses.update', $course) }}" class="grid grid-cols-1 gap-4 p-4 md:grid-cols-4 md:items-end">
+                        <form method="POST" action="{{ route($courseRoutePrefix . '.update', $course) }}" class="grid grid-cols-1 gap-4 p-4 md:grid-cols-4 md:items-end">
                             @csrf
                             @method('PUT')
                             <label class="text-xs font-bold uppercase text-slate-500 md:col-span-2">
@@ -156,11 +157,11 @@
                         </form>
                     </div>
                 </div>
-                <form id="delete-course-{{ $course->id }}" method="POST" action="{{ route('registrar.courses.destroy', $course) }}" class="hidden">
+                <form id="delete-course-{{ $course->id }}" method="POST" action="{{ route($courseRoutePrefix . '.destroy', $course) }}" class="hidden">
                     @csrf
                     @method('DELETE')
                 </form>
-            @endforeach
+            <?php endforeach; ?>
             <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">{{ $courses->links() }}</div>
         </div>
     </section>

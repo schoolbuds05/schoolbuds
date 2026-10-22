@@ -21,7 +21,7 @@ export default function Index() {
         } else if (['head_department', 'dean'].includes(position) || ['head_department', 'dean'].includes(role)) {
           setRoute('/(leadership)/dashboard');
         } else if (['faculty', 'teacher'].includes(role)) {
-          setRoute('/(teacher)/classes');
+          setRoute('/(teacher)/dashboard');
         } else if (role === 'registrar') {
           setRoute('/(registrar)/dashboard');
         } else if (role === 'parent') {

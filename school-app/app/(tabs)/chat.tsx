@@ -1,12 +1,13 @@
 // @ts-nocheck
 // app/(tabs)/chat.tsx — Student chat with assigned teachers
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
   Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../src/api';
 import HeaderGradient from '../components/ui/HeaderGradient';
@@ -23,6 +24,30 @@ const C = {
   muted: '#B0B7C3',
 };
 
+const AVATAR_PALETTES = [
+  { bg: '#FBE5EB', text: '#B5233D' },
+  { bg: '#DDF0E3', text: '#1E6B3A' },
+  { bg: '#FFF1BF', text: '#8A6700' },
+  { bg: '#E6EDF9', text: '#3F6FB7' },
+];
+
+const paletteFor = (id) => AVATAR_PALETTES[Number(id || 0) % AVATAR_PALETTES.length];
+const avatarBackground = (id) => paletteFor(id).bg;
+const avatarColor = (id) => paletteFor(id).text;
+const initialsFor = (name) => String(name || 'Teacher').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+
+function relativeMessageTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const diffDays = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000);
+  if (diffDays === 0) return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 export default function Chat() {
   const router = useRouter();
   const { theme } = useTheme();
@@ -33,9 +58,13 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [search, setSearch] = useState('');
   const listRef = useRef(null);
 
   const isThread = !!contactId;
+  const filteredContacts = useMemo(() => contacts.filter(contact =>
+    String(contact.name || '').toLowerCase().includes(search.trim().toLowerCase())
+  ), [contacts, search]);
 
   const loadCurrentUser = useCallback(async () => {
     try {
@@ -113,16 +142,28 @@ export default function Chat() {
   if (!isThread) {
     return (
       <View style={[s.container, { backgroundColor: theme.bg }]}> 
-        <HeaderGradient
-          title="Chat"
-          subtitle="Ask questions to your assigned teachers"
-          initials="CT"
-          stats={[
-            { label: 'Contacts', value: contacts.length, accent: '#A5F3FC' },
-            { label: 'Messages', value: messages.length, accent: '#FDE68A' },
-            { label: 'Status', value: loading ? 'Loading' : 'Ready', accent: '#FBCFE8' },
-          ]}
-        />
+        <View style={s.listHeader}>
+          <View style={s.headerRow}>
+            <View>
+              <Text style={[s.headerEyebrow, { color: theme.textSub }]}>One-on-one with teachers</Text>
+              <Text style={[s.listTitle, { color: theme.text }]}>Chat</Text>
+            </View>
+            <View style={[s.headerBadge, { backgroundColor: theme.card }]}>
+              <Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.brandLogo} resizeMode="contain" />
+            </View>
+          </View>
+          <View style={[s.searchBox, { backgroundColor: theme.card }]}>
+            <Ionicons name="search-outline" size={17} color={theme.textSub} />
+            <TextInput
+              style={[s.searchInput, { color: theme.text }]}
+              placeholder="Search teachers"
+              placeholderTextColor={theme.textSub}
+              value={search}
+              onChangeText={setSearch}
+              returnKeyType="search"
+            />
+          </View>
+        </View>
 
         {loading ? (
           <View style={s.center}><ActivityIndicator color={C.blue} /></View>
@@ -134,36 +175,37 @@ export default function Chat() {
           </View>
         ) : (
           <FlatList
-            data={contacts}
+            data={filteredContacts}
             keyExtractor={item => String(item.id)}
-            contentContainerStyle={{ padding: 16 }}
+            contentContainerStyle={s.contactList}
+            ListEmptyComponent={<View style={s.noResults}><Text style={[s.noResultsText, { color: theme.textSub }]}>No teachers found.</Text></View>}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={[s.contactCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                style={[s.contactCard, { backgroundColor: theme.card, borderBottomColor: theme.border }]}
                 onPress={() => router.push({
                   pathname: '/(tabs)/chat',
                   params: { contactId: String(item.id), contactName: item.name },
                 })}
               >
-                <View style={[s.avatar, { backgroundColor: theme.primaryLight }]}> 
+                <View style={[s.avatar, { backgroundColor: avatarBackground(item.id) }]}>
                   {item.profile_photo_url ? (
                     <Image source={{ uri: item.profile_photo_url }} style={s.avatarImage} />
                   ) : (
-                    <Text style={[s.avatarText, { color: theme.primary }]}>{(item.name ?? 'T')[0].toUpperCase()}</Text>
+                    <Text style={[s.avatarText, { color: avatarColor(item.id) }]}>{initialsFor(item.name)}</Text>
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.contactName, { color: theme.text }]}>{item.name}</Text>
-                  <Text style={[s.contactRole, { color: theme.textSub }]}>Teacher</Text>
-                  {item.last_message ? (
-                    <Text style={[s.lastMessage, { color: theme.textSub }]} numberOfLines={1}>{item.last_message}</Text>
-                  ) : null}
+                  <Text style={[s.contactName, { color: theme.text }]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[s.lastMessage, { color: theme.textSub }]} numberOfLines={1}>{item.last_message || 'Start a conversation with your teacher.'}</Text>
                 </View>
+                <View style={s.contactEnd}>
+                  <Text style={[s.messageTime, { color: theme.textSub }]}>{relativeMessageTime(item.last_message_at)}</Text>
                 {item.unread > 0 && (
                   <View style={[s.unreadBadge, { backgroundColor: theme.primary }]}> 
                     <Text style={[s.unreadText, { color: theme.card }]}>{item.unread}</Text>
                   </View>
                 )}
+                </View>
               </TouchableOpacity>
             )}
           />
@@ -250,32 +292,42 @@ export default function Chat() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { backgroundColor: C.blue, padding: 16, paddingTop: 52 },
+  listHeader: { paddingTop: 42, paddingHorizontal: 16, paddingBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
+  headerEyebrow: { fontSize: 11, fontWeight: '600', marginBottom: 1 },
+  listTitle: { fontSize: 22, fontWeight: '800' },
+  headerBadge: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  brandLogo: { width: 31, height: 31, borderRadius: 8 },
+  searchBox: { height: 38, borderRadius: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center' },
+  searchInput: { flex: 1, fontSize: 12, marginLeft: 8, paddingVertical: 0 },
+  contactList: { marginHorizontal: 16, borderRadius: 14, overflow: 'hidden' },
   title: { color: '#fff', fontSize: 20, fontWeight: '700' },
   sub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
   backBtn: { marginBottom: 6 },
   backText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
   contactCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: C.card, borderRadius: 14, padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: C.border,
+    height: 63, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   avatar: {
-    width: 46, height: 46, borderRadius: 23,
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: C.blue, fontSize: 18, fontWeight: '800' },
-  contactName: { color: C.text, fontSize: 15, fontWeight: '700' },
-  contactRole: { color: C.sub, fontSize: 12, marginTop: 2 },
-  lastMessage: { color: C.muted, fontSize: 12, marginTop: 4 },
+  avatarText: { color: C.blue, fontSize: 12, fontWeight: '800' },
+  contactName: { color: C.text, fontSize: 13, fontWeight: '800', marginLeft: 11 },
+  lastMessage: { color: C.muted, fontSize: 11, marginTop: 3, marginLeft: 11 },
+  contactEnd: { alignItems: 'flex-end', justifyContent: 'center', minWidth: 42, alignSelf: 'stretch', paddingVertical: 10 },
+  messageTime: { fontSize: 9, fontWeight: '700', minHeight: 14 },
   unreadBadge: {
     minWidth: 22, height: 22, borderRadius: 11,
     backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 6,
   },
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  noResults: { height: 80, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card },
+  noResultsText: { fontSize: 12, fontWeight: '600' },
   bubble: { maxWidth: '80%', borderRadius: 16, padding: 10 },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: C.blue, borderBottomRightRadius: 4 },
   bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: C.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: C.border },

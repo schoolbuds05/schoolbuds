@@ -10,6 +10,8 @@ use App\Models\SectionSubject;
 use App\Models\Subject;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class SubjectController extends Controller
 {
@@ -83,9 +85,24 @@ class SubjectController extends Controller
             ->distinct()
             ->orderByRaw('CAST(year_level AS UNSIGNED) ASC')
             ->pluck('year_level');
+        $collegeCourseOptions = $courses->pluck('name')
+            ->merge($collegeScopes)
+            ->unique()
+            ->sort()
+            ->values();
+        $shsStrands = collect(['STEM', 'ABM', 'HUMSS', 'TVL', 'GAS'])
+            ->merge($shsStrands)
+            ->unique()
+            ->sort()
+            ->values();
+        $yearLevels = collect(['1', '2', '3', '4', '11', '12'])
+            ->merge($yearLevels)
+            ->unique()
+            ->sortBy(fn ($yearLevel) => (int) $yearLevel)
+            ->values();
         $allSubjects = Subject::orderBy('code')->get(['id', 'code', 'name', 'program_type']);
 
-        return view('registrar.subjects.index', compact('subjects', 'courses', 'collegeScopes', 'shsStrands', 'yearLevels', 'allSubjects'));
+        return view('registrar.subjects.index', compact('subjects', 'courses', 'collegeScopes', 'collegeCourseOptions', 'shsStrands', 'yearLevels', 'allSubjects'));
     }
 
     public function store(Request $request)
@@ -129,6 +146,93 @@ class SubjectController extends Controller
         );
 
         return back()->with('status', 'Subject updated.');
+    }
+
+    public function bulkUpdate(Request $request)
+    {
+        $this->requireAnyRole($request, ['admin', 'registrar']);
+
+        $collegeCourseOptions = Course::query()
+            ->where('is_active', true)
+            ->where('program_type', 'college')
+            ->pluck('name')
+            ->merge(Subject::query()->where('program_type', 'college')->whereNotNull('course')->where('course', '!=', '')->pluck('course'))
+            ->unique()
+            ->values();
+        $shsStrands = Subject::query()
+            ->where('program_type', 'shs')
+            ->whereNotNull('strand')
+            ->where('strand', '!=', '')
+            ->pluck('strand')
+            ->merge(['STEM', 'ABM', 'HUMSS', 'TVL', 'GAS'])
+            ->unique()
+            ->values();
+        $yearLevels = Subject::query()
+            ->whereNotNull('year_level')
+            ->where('year_level', '!=', '')
+            ->pluck('year_level')
+            ->merge(['1', '2', '3', '4', '11', '12'])
+            ->unique()
+            ->values();
+
+        $data = $request->validate([
+            'form_context' => ['required', Rule::in(['bulk_subject_edit'])],
+            'subject_ids' => ['required', 'array', 'min:1'],
+            'subject_ids.*' => ['required', 'distinct', 'integer', 'exists:subjects,id'],
+            'bulk_course' => ['required', 'string', Rule::in(['__unchanged__', '__general__', ...$collegeCourseOptions->all()])],
+            'bulk_strand' => ['required', 'string', Rule::in(['__unchanged__', '__general__', ...$shsStrands->all()])],
+            'bulk_year_level' => ['required', 'string', Rule::in(['__unchanged__', '__clear__', ...$yearLevels->all()])],
+            'bulk_semester' => ['required', 'string', Rule::in(['__unchanged__', '__clear__', '1st', '2nd', 'summer'])],
+            'prerequisite_mode' => ['required', Rule::in(['unchanged', 'replace', 'clear'])],
+            'prerequisite_ids' => ['nullable', 'array'],
+            'prerequisite_ids.*' => ['distinct', 'integer', 'exists:subjects,id'],
+        ]);
+
+        $updatedCount = DB::transaction(function () use ($data, $request): int {
+            $subjects = Subject::query()->whereIn('id', $data['subject_ids'])->get();
+            $prerequisiteIds = array_map('intval', $data['prerequisite_ids'] ?? []);
+
+            foreach ($subjects as $subject) {
+                $updates = [];
+                if ($subject->program_type === 'college' && $data['bulk_course'] !== '__unchanged__') {
+                    $updates['course'] = $data['bulk_course'] === '__general__' ? null : $data['bulk_course'];
+                }
+                if ($subject->program_type === 'shs' && $data['bulk_strand'] !== '__unchanged__') {
+                    $updates['strand'] = $data['bulk_strand'] === '__general__' ? null : $data['bulk_strand'];
+                }
+                if ($data['bulk_year_level'] !== '__unchanged__') {
+                    $updates['year_level'] = $data['bulk_year_level'] === '__clear__' ? null : $data['bulk_year_level'];
+                }
+                if ($data['bulk_semester'] !== '__unchanged__') {
+                    $updates['semester'] = $data['bulk_semester'] === '__clear__' ? null : $data['bulk_semester'];
+                }
+
+                if ($updates) {
+                    $subject->update($updates);
+                }
+
+                if ($data['prerequisite_mode'] === 'unchanged') {
+                    continue;
+                }
+
+                $prerequisitesBefore = $subject->prerequisites()->allRelatedIds()->all();
+                $nextPrerequisiteIds = $data['prerequisite_mode'] === 'replace'
+                    ? array_values(array_diff($prerequisiteIds, [$subject->id]))
+                    : [];
+                $subject->prerequisites()->sync($nextPrerequisiteIds);
+                ActivityLog::recordRelationChange(
+                    $request,
+                    $subject,
+                    'prerequisites',
+                    $prerequisitesBefore,
+                    $subject->prerequisites()->allRelatedIds()->all()
+                );
+            }
+
+            return $subjects->count();
+        });
+
+        return back()->with('status', "Updated {$updatedCount} subjects.");
     }
 
     public function destroy(Request $request, Subject $subject)

@@ -24,7 +24,7 @@ class TeacherController extends Controller
     {
         $teacher = $request->user();
         $sectionSubjects = SectionSubject::where('teacher_id', $teacher->id)
-            ->with(['section.students', 'subject'])
+            ->with(['section.students', 'subject', 'schedules'])
             ->get();
         $sectionSchoolClassIds = $sectionSubjects
             ->map(fn($sectionSubject) => $this->schoolClassForSectionSubject($sectionSubject)->id)
@@ -66,7 +66,7 @@ class TeacherController extends Controller
     public function classes(Request $request)
     {
         $classes = SectionSubject::where('teacher_id', $request->user()->id)
-            ->with(['section.students', 'subject'])
+            ->with(['section.students', 'subject', 'schedules'])
             ->get();
         $sectionSchoolClassIds = $classes
             ->map(fn($sectionSubject) => $this->schoolClassForSectionSubject($sectionSubject)->id)
@@ -275,7 +275,7 @@ class TeacherController extends Controller
     private function teacherSectionSubject(Request $request, $id): SectionSubject
     {
         return SectionSubject::where('teacher_id', $request->user()->id)
-            ->with(['section.students', 'subject'])
+            ->with(['section.students', 'subject', 'schedules'])
             ->findOrFail($id);
     }
 
@@ -283,6 +283,14 @@ class TeacherController extends Controller
     {
         $section = $sectionSubject->section;
         $subject = $sectionSubject->subject;
+        $meetings = $sectionSubject->schedules->isNotEmpty()
+            ? $sectionSubject->schedules
+            : collect([(object) ['day' => $sectionSubject->day, 'time_start' => $sectionSubject->time_start, 'time_end' => $sectionSubject->time_end, 'room' => $sectionSubject->room]]);
+        $meetingLabels = $meetings->map(fn ($meeting) => trim(implode(' ', array_filter([
+            $meeting->day,
+            ($meeting->time_start && $meeting->time_end) ? "{$meeting->time_start}-{$meeting->time_end}" : null,
+            $meeting->room,
+        ]))))->filter()->values();
 
         return [
             'id' => $sectionSubject->id,
@@ -295,13 +303,10 @@ class TeacherController extends Controller
             'strand' => $section?->strand,
             'school_year' => $section?->school_year,
             'semester' => $section?->semester,
-            'room' => $sectionSubject->room,
-            'schedule' => trim(implode(' ', array_filter([
-                $sectionSubject->day,
-                ($sectionSubject->time_start && $sectionSubject->time_end)
-                    ? "{$sectionSubject->time_start}-{$sectionSubject->time_end}"
-                    : null,
-            ]))) ?: 'No schedule',
+            'room' => $meetings->pluck('room')->filter()->unique()->implode(', ') ?: $sectionSubject->room,
+            'day' => $meetings->pluck('day')->filter()->unique()->implode(', '),
+            'meetings' => $meetings->map(fn ($meeting) => ['day' => $meeting->day, 'time_start' => $meeting->time_start, 'time_end' => $meeting->time_end, 'room' => $meeting->room])->values(),
+            'schedule' => $meetingLabels->implode(' · ') ?: 'No schedule',
             'students_count' => $this->enrolledUserIdsForSectionSubject($sectionSubject)->count(),
         ];
     }

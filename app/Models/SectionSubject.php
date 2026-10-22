@@ -25,4 +25,9 @@ class SectionSubject extends Model
     {
         return $this->belongsTo(User::class, 'teacher_id');
     }
+
+    public function schedules()
+    {
+        return $this->hasMany(SectionSubjectSchedule::class);
+    }
 }

@@ -8,14 +8,15 @@ import {
 } from 'react-native';
 import api from '../../src/api';
 import HeaderGradient from '../components/ui/HeaderGradient';
+import StudentSubjectsReference from '../components/ui/StudentSubjectsReference';
 import { useTheme } from '../../src/theme-context';
 
 const C = {
-  blue: '#378ADD', blueLight: '#E6F1FB',
-  green: '#1D9E75', greenLight: '#E1F5EE',
-  warning: '#BA7517', warningLight: '#FFF3CD',
-  bg: '#F4F6F9', card: '#FFFFFF', border: '#EFEFEF',
-  text: '#1A1A2E', sub: '#6B7280', muted: '#B0B7C3',
+  blue: '#B5233D', blueLight: '#F9E4E8',
+  green: '#1E6B3A', greenLight: '#DDF0E3',
+  warning: '#8A6700', warningLight: '#FFF1BF',
+  bg: '#F7E9EC', card: '#FFFFFF', border: '#EBDDDF',
+  text: '#2A1B1F', sub: '#7A666B', muted: '#AD999E',
 };
 const HEADER_TOP = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 10 : 52;
 
@@ -35,6 +36,7 @@ export default function MySubjects() {
   const [requestModal, setRequestModal] = useState(null);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [subjectFilter, setSubjectFilter] = useState('all');
 
   const fetchSubjects = useCallback(async () => {
     try {
@@ -50,8 +52,13 @@ export default function MySubjects() {
           } : undefined,
         }),
       ]);
-      setData(subjectsRes.data);
-      setRequests(requestsRes.data || []);
+      const payload = subjectsRes.data || {};
+      // Laravel collections normally serialize as arrays, but normalize keyed
+      // collections as well so the rest of this screen can safely use array
+      // helpers and the reference component can render with `.map`.
+      const asArray = value => Array.isArray(value) ? value : (value && typeof value === 'object' ? Object.values(value) : []);
+      setData({ ...payload, subjects: asArray(payload.subjects), sections: asArray(payload.sections) });
+      setRequests(asArray(requestsRes.data));
       setOfferings((sectionsRes.data || []).flatMap(section =>
         (section.section_subjects || []).map(offering => ({
           ...offering.subject,
@@ -113,6 +120,27 @@ export default function MySubjects() {
     }
   };
 
+  if (data !== undefined) return (
+    <>
+      <StudentSubjectsReference
+        data={data}
+        theme={theme}
+        filter={subjectFilter}
+        setFilter={setSubjectFilter}
+        onDrop={(subject) => openRequest('drop', subject)}
+        isDropPending={(subject) => pendingKey('drop', subject.subject_id, subject.section_id)}
+      />
+      <Modal visible={!!requestModal} animationType="fade" transparent>
+        <View style={s.overlay}><View style={[s.modalCard, { backgroundColor: theme.card }]}>
+          <Text style={[s.modalTitle, { color: theme.text }]}>Request {requestModal?.action} subject</Text>
+          <Text style={[s.modalSub, { color: theme.textSub }]}>{requestModal?.subject?.code} - {requestModal?.subject?.name}</Text>
+          <TextInput style={[s.reasonInput, { borderColor: theme.border, color: theme.text }]} value={reason} onChangeText={setReason} placeholder="Explain your reason..." placeholderTextColor={theme.textMuted} multiline />
+          <View style={s.modalActions}><TouchableOpacity style={[s.cancelBtn, { borderColor: theme.border }]} onPress={() => setRequestModal(null)} disabled={submitting}><Text style={[s.cancelText, { color: theme.textSub }]}>Cancel</Text></TouchableOpacity><TouchableOpacity style={[s.submitRequestBtn, { backgroundColor: theme.primary }]} onPress={submitRequest} disabled={submitting}>{submitting ? <ActivityIndicator color="#fff" /> : <Text style={s.submitRequestText}>Send request</Text>}</TouchableOpacity></View>
+        </View></View>
+      </Modal>
+    </>
+  );
+
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}> 
       <HeaderGradient
@@ -166,8 +194,8 @@ export default function MySubjects() {
               return (
                 <View key={i} style={[s.subjectCard, { backgroundColor: theme.card, borderColor: theme.border }]}> 
                   <View style={s.subjectTop}>
-                    <View style={[s.codeTag, { backgroundColor: theme.primaryLight }]}> 
-                      <Text style={[s.codeText, { color: theme.primary }]}>{sub.code}</Text>
+                    <View style={[s.codeTag, { backgroundColor: theme.successLight }]}>
+                      <Text style={[s.codeText, { color: theme.success }]}>{sub.code}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.subjectName, { color: theme.text }]}>{sub.name}</Text>
@@ -218,8 +246,8 @@ export default function MySubjects() {
           )}
 
           <Text style={[s.blockTitle, { color: theme.text }]}>Add Subject Request</Text>
-          {addableOfferings.length ? addableOfferings.slice(0, 20).map(subject => (
-            <View key={subject.offering_id} style={[s.subjectCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {addableOfferings.length ? addableOfferings.slice(0, 20).map((subject, index) => (
+            <View key={`offering-${subject.offering_id ?? subject.id ?? 'unknown'}-${index}`} style={[s.subjectCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <View style={s.subjectTop}>
                 <View style={[s.codeTag, { backgroundColor: theme.primaryLight }]}>
                   <Text style={[s.codeText, { color: theme.primary }]}>{subject.code}</Text>
@@ -247,8 +275,8 @@ export default function MySubjects() {
           )}
 
           <Text style={[s.blockTitle, { color: theme.text }]}>Request History</Text>
-          {requests.length ? requests.map(req => (
-            <View key={req.id} style={[s.historyRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {requests.length ? requests.map((req, index) => (
+            <View key={`request-${req.id ?? 'unknown'}-${index}`} style={[s.historyRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={[s.subjectName, { color: theme.text }]}>{req.action?.toUpperCase()} {req.subject?.code}</Text>
               <Text style={[s.sectionName, { color: theme.textSub }]}>{req.subject?.name} | {req.section?.name || 'Direct enrollment'}</Text>
               <Text style={[s.unitDetailText, { color: theme.textMuted }]}>Status: {req.status}</Text>
