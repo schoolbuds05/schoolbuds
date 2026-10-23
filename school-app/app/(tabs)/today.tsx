@@ -9,7 +9,7 @@ import {
   Image, Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../src/api';
+import api, { resolveApiAssetUrl } from '../../src/api';
 import { Colors, Font, Radius, Shadow, HEADER_TOP } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 import StudentHomeReference from '../components/ui/StudentHomeReference';
@@ -128,6 +128,7 @@ export default function Today() {
   );
 
   const student   = data?.student;
+  const profilePhotoUrl = resolveApiAssetUrl(user?.profile_photo_url);
   const allGrades = data?.grades ? Object.values(data.grades).flat() : [];
   const gwa = allGrades.length > 0
     ? (allGrades.reduce((s, g) => s + parseFloat(g.score), 0) / allGrades.length).toFixed(1)
@@ -221,8 +222,8 @@ export default function Today() {
               onPress={() => router.push('/(tabs)/profile')}
               accessibilityLabel="Open profile"
             >
-              {user?.profile_photo_url ? (
-                <Image source={{ uri: user.profile_photo_url }} style={styles.profileImage} />
+              {profilePhotoUrl ? (
+                <Image source={{ uri: profilePhotoUrl }} style={styles.profileImage} />
               ) : (
                 <Text style={styles.profileInitials}>
                   {displayName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'ME'}
@@ -342,8 +343,8 @@ export default function Today() {
             onPress={() => router.push('/(tabs)/profile')}
             accessibilityLabel="Open profile"
           >
-            {user?.profile_photo_url ? (
-              <Image source={{ uri: user.profile_photo_url }} style={styles.profileImage} />
+            {profilePhotoUrl ? (
+              <Image source={{ uri: profilePhotoUrl }} style={styles.profileImage} />
             ) : (
               <Text style={styles.profileInitials}>
                 {`${student?.first_name?.[0] || ''}${student?.last_name?.[0] || ''}` || 'ME'}

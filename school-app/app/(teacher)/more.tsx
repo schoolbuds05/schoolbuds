@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import api, { removeToken } from '../../src/api';
+import { formatRoleAndPosition } from '../../src/user-labels';
 import { useTheme } from '../../src/theme-context';
 
 const TEACHING_ITEMS = [
@@ -50,6 +51,8 @@ export default function TeacherMore() {
     ]);
   };
 
+  const accountLabel = formatRoleAndPosition(user, 'Teacher');
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.bg }]}
@@ -59,7 +62,7 @@ export default function TeacherMore() {
       <Text style={[styles.title, { color: theme.text }]}>More</Text>
       <TouchableOpacity style={[styles.profileCard, { backgroundColor: theme.card }]} onPress={() => router.navigate('/(teacher)/profile')} activeOpacity={0.75}>
         <View style={[styles.avatar, { backgroundColor: theme.primary }]}><Text style={styles.avatarText}>{`${user?.first_name?.[0] || user?.name?.[0] || 'T'}`.toUpperCase()}</Text></View>
-        <View style={styles.profileCopy}><Text style={[styles.profileName, { color: theme.text }]}>{user?.name || 'Teacher'}</Text><Text style={[styles.profileMeta, { color: theme.textSub }]}>Teacher account</Text></View>
+        <View style={styles.profileCopy}><Text style={[styles.profileName, { color: theme.text }]}>{user?.name || 'Teacher'}</Text><Text style={[styles.profileMeta, { color: theme.textSub }]}>{accountLabel}</Text></View>
         <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
       </TouchableOpacity>
 

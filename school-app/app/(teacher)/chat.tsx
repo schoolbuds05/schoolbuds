@@ -1,15 +1,17 @@
 // @ts-nocheck
 // app/(teacher)/chat.tsx — Teacher chat with assigned students
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView,
   Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../src/api';
+import api, { resolveApiAssetUrl } from '../../src/api';
 import HeaderGradient from '../components/ui/HeaderGradient';
+import { useTheme } from '../../src/theme-context';
 
 const C = {
   green: '#1D9E75',
@@ -22,18 +24,45 @@ const C = {
   muted: '#B0B7C3',
 };
 
+const AVATAR_PALETTES = [
+  { bg: '#FBE5EB', text: '#B5233D' },
+  { bg: '#DDF0E3', text: '#1E6B3A' },
+  { bg: '#FFF1BF', text: '#8A6700' },
+  { bg: '#E6EDF9', text: '#3F6FB7' },
+];
+
+const paletteFor = id => AVATAR_PALETTES[Number(id || 0) % AVATAR_PALETTES.length];
+const initialsFor = name => String(name || 'Student').split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+
+function relativeMessageTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const diffDays = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(date.getFullYear(), date.getMonth(), date.getDate())) / 86400000);
+  if (diffDays === 0) return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 export default function TeacherChat() {
   const router = useRouter();
+  const { theme } = useTheme();
   const { contactId, contactName } = useLocalSearchParams();
   const [myId, setMyId] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const listRef = useRef(null);
 
   const isThread = !!contactId;
+  const filteredContacts = useMemo(() => contacts.filter(contact =>
+    String(contact.name || '').toLowerCase().includes(search.trim().toLowerCase())
+  ), [contacts, search]);
 
   useEffect(() => {
     AsyncStorage.getItem('user').then(raw => {
@@ -97,65 +126,70 @@ export default function TeacherChat() {
 
   if (!isThread) {
     return (
-      <View style={s.container}>
+      <View style={[s.container, { backgroundColor: theme.bg }]}>
         {loading ? (
-          <View style={s.center}><ActivityIndicator color={C.green} /></View>
+          <View style={s.center}><ActivityIndicator color={theme.primary} /></View>
         ) : contacts.length === 0 ? (
           <View style={s.empty}>
             <Text style={s.emptyIcon}>💬</Text>
-            <Text style={s.emptyTitle}>No students available</Text>
-            <Text style={s.emptySub}>Students appear here when they are enrolled in your sections.</Text>
+            <Text style={[s.emptyTitle, { color: theme.text }]}>No students available</Text>
+            <Text style={[s.emptySub, { color: theme.textSub }]}>Students appear here when they are enrolled in your sections.</Text>
           </View>
         ) : (
           <FlatList
-            data={contacts}
+            data={filteredContacts}
             keyExtractor={item => String(item.id)}
-            contentContainerStyle={s.contactsContent}
-            ListHeaderComponent={
-              <>
-                <View style={s.contactsHero}>
-                  <View style={s.contactsTitleRow}>
-                    <View><Text style={s.contactsEyebrow}>Answer questions from your students</Text><Text style={s.contactsTitle}>Chat</Text></View>
-                    <View style={s.heroIcon}><Text style={s.heroLeaf}>🍃</Text></View>
-                  </View>
-                  <View style={s.contactsStats}>
-                    <View style={s.contactsStat}><Text style={s.contactsStatValue}>{contacts.length}</Text><Text style={s.contactsStatLabel}>Contacts</Text></View>
-                    <View style={s.contactsDivider} />
-                    <View style={s.contactsStat}><Text style={s.contactsStatValue}>{messages.length}</Text><Text style={s.contactsStatLabel}>Messages</Text></View>
-                    <View style={s.contactsDivider} />
-                    <View style={s.contactsStat}><Text style={s.contactsStatValue}>Ready</Text><Text style={s.contactsStatLabel}>Status</Text></View>
-                  </View>
+            contentContainerStyle={s.contactList}
+            ListHeaderComponent={<View style={s.listHeader}>
+              <View style={s.headerRow}>
+                <View>
+                  <Text style={[s.headerEyebrow, { color: theme.textSub }]}>One-on-one with your students</Text>
+                  <Text style={[s.listTitle, { color: theme.text }]}>Chat</Text>
                 </View>
-                <View style={s.studentsHeading}><Text style={s.studentsTitle}>Your students</Text><Text style={s.studentsCount}>{contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'}</Text></View>
-              </>
-            }
+                <View style={[s.headerBadge, { backgroundColor: theme.card }]}>
+                  <Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.brandLogo} resizeMode="contain" />
+                </View>
+              </View>
+              <View style={[s.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Ionicons name="search-outline" size={17} color={theme.textSub} />
+                <TextInput
+                  style={[s.searchInput, { color: theme.text }]}
+                  placeholder="Search students"
+                  placeholderTextColor={theme.textSub}
+                  value={search}
+                  onChangeText={setSearch}
+                  returnKeyType="search"
+                />
+              </View>
+            </View>}
+            ListEmptyComponent={<View style={[s.noResults, { backgroundColor: theme.card }]}><Text style={[s.noResultsText, { color: theme.textSub }]}>No students found.</Text></View>}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={s.contactCard}
+                style={[s.contactCard, { backgroundColor: theme.card, borderBottomColor: theme.border }]}
                 onPress={() => router.push({
                   pathname: '/(teacher)/chat',
                   params: { contactId: String(item.id), contactName: item.name },
                 })}
               >
-                <View style={s.avatar}>
-                  {item.profile_photo_url ? (
-                    <Image source={{ uri: item.profile_photo_url }} style={s.avatarImage} />
+                <View style={[s.avatar, { backgroundColor: paletteFor(item.id).bg }]}>
+                  {resolveApiAssetUrl(item.profile_photo_url) ? (
+                    <Image source={{ uri: resolveApiAssetUrl(item.profile_photo_url) }} style={s.avatarImage} />
                   ) : (
-                    <Text style={s.avatarText}>{(item.name ?? 'S')[0].toUpperCase()}</Text>
+                    <Text style={[s.avatarText, { color: paletteFor(item.id).text }]}>{initialsFor(item.name)}</Text>
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.contactName}>{item.name}</Text>
-                  <Text style={s.contactRole} numberOfLines={2}>{studentMeta(item)}</Text>
-                  {item.last_message ? (
-                    <Text style={s.lastMessage} numberOfLines={1}>{item.last_message}</Text>
+                  <Text style={[s.contactName, { color: theme.text }]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[s.lastMessage, { color: theme.textSub }]} numberOfLines={1}>{item.last_message || studentMeta(item)}</Text>
+                </View>
+                <View style={s.contactEnd}>
+                  <Text style={[s.messageTime, { color: theme.textSub }]}>{relativeMessageTime(item.last_message_at)}</Text>
+                  {item.unread > 0 ? (
+                    <View style={[s.unreadBadge, { backgroundColor: theme.primary }]}>
+                      <Text style={[s.unreadText, { color: theme.card }]}>{item.unread}</Text>
+                    </View>
                   ) : null}
                 </View>
-                {item.unread > 0 ? (
-                  <View style={s.unreadBadge}>
-                    <Text style={s.unreadText}>{item.unread}</Text>
-                  </View>
-                ) : <Text style={s.contactChevron}>›</Text>}
               </TouchableOpacity>
             )}
           />
@@ -166,7 +200,7 @@ export default function TeacherChat() {
 
   return (
     <KeyboardAvoidingView
-      style={s.container}
+      style={[s.container, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <HeaderGradient
@@ -185,30 +219,34 @@ export default function TeacherChat() {
       </HeaderGradient>
 
       {loading ? (
-        <View style={s.center}><ActivityIndicator color={C.green} /></View>
+        <View style={[s.center, { backgroundColor: theme.bg }]}><ActivityIndicator color={theme.primary} /></View>
       ) : (
         <FlatList
           ref={listRef}
           data={messages}
           keyExtractor={(item, i) => String(item.id ?? i)}
-          contentContainerStyle={{ padding: 16, gap: 8 }}
+          contentContainerStyle={[s.messageList, { backgroundColor: theme.bg }]}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={s.empty}>
               <Text style={s.emptyIcon}>💬</Text>
-              <Text style={s.emptyTitle}>No messages yet</Text>
-              <Text style={s.emptySub}>Send a message to this student.</Text>
+              <Text style={[s.emptyTitle, { color: theme.text }]}>No messages yet</Text>
+              <Text style={[s.emptySub, { color: theme.textSub }]}>Send a message to this student.</Text>
             </View>
           }
           renderItem={({ item }) => {
             const mine = item.sender_id === myId;
             return (
-              <View style={[s.bubble, mine ? s.bubbleMine : s.bubbleTheirs]}>
-                {!mine && <Text style={s.sender}>{item.sender?.name?.split(' ')[0]}</Text>}
-                <Text style={[s.bubbleText, mine ? s.bubbleTextMine : s.bubbleTextTheirs]}>
+              <View style={[
+                s.bubble,
+                mine ? s.bubbleMine : s.bubbleTheirs,
+                { backgroundColor: mine ? theme.primaryLight : theme.card, borderColor: theme.border },
+              ]}>
+                {!mine && <Text style={[s.sender, { color: theme.textSub }]}>{item.sender?.name?.split(' ')[0]}</Text>}
+                <Text style={[s.bubbleText, { color: theme.text }]}>
                   {item.message}
                 </Text>
-                <Text style={[s.time, mine ? s.timeMine : s.timeTheirs]}>
+                <Text style={[s.time, { color: theme.textMuted }]}>
                   {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
@@ -217,22 +255,22 @@ export default function TeacherChat() {
         />
       )}
 
-      <View style={s.inputRow}>
+      <View style={[s.inputRow, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
         <TextInput
-          style={s.input}
+          style={[s.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
           placeholder="Type a message..."
-          placeholderTextColor={C.muted}
+          placeholderTextColor={theme.textMuted}
           value={input}
           onChangeText={setInput}
           multiline
           maxLength={1000}
         />
         <TouchableOpacity
-          style={[s.sendBtn, (!input.trim() || sending) && s.sendBtnDisabled]}
+          style={[s.sendBtn, { backgroundColor: theme.primary }, (!input.trim() || sending) && s.sendBtnDisabled]}
           onPress={send}
           disabled={!input.trim() || sending}
         >
-          {sending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.sendText}>Send</Text>}
+          {sending ? <ActivityIndicator size="small" color={theme.card} /> : <Text style={[s.sendText, { color: theme.card }]}>Send</Text>}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -256,65 +294,54 @@ function studentMeta(item) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { backgroundColor: C.green, padding: 16, paddingTop: 52 },
-  title: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  sub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4 },
   backBtn: { marginBottom: 6 },
   backText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' },
-  contactsContent: { paddingHorizontal: 15, paddingTop: 34, paddingBottom: 20 },
-  contactsHero: { backgroundColor: '#F2C8D0', borderRadius: 18, paddingHorizontal: 13, paddingTop: 2, paddingBottom: 11, marginHorizontal: -7 },
-  contactsTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  contactsEyebrow: { color: '#765B61', fontSize: 10, fontWeight: '600' },
-  contactsTitle: { color: '#2A1B1F', fontSize: 20, fontWeight: '900', lineHeight: 24 },
-  heroIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 2 },
-  heroLeaf: { fontSize: 21 },
-  contactsStats: { flexDirection: 'row', minHeight: 51, alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, marginTop: 10 },
-  contactsStat: { flex: 1, alignItems: 'center' },
-  contactsStatValue: { color: '#2A1B1F', fontSize: 14, fontWeight: '900' },
-  contactsStatLabel: { color: '#806E73', fontSize: 8, marginTop: 2 },
-  contactsDivider: { width: 1, height: 34, backgroundColor: '#ECD6DA' },
-  studentsHeading: { marginTop: 16, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  studentsTitle: { color: '#2A1B1F', fontSize: 13, fontWeight: '900' },
-  studentsCount: { color: '#806E73', fontSize: 10, fontWeight: '700' },
+  listHeader: { paddingTop: 42, paddingHorizontal: 16, paddingBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
+  headerEyebrow: { fontSize: 11, fontWeight: '600', marginBottom: 1 },
+  listTitle: { fontSize: 22, fontWeight: '800' },
+  headerBadge: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  brandLogo: { width: 31, height: 31, borderRadius: 8 },
+  searchBox: { height: 38, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center' },
+  searchInput: { flex: 1, fontSize: 12, marginLeft: 8, paddingVertical: 0 },
+  contactList: { paddingBottom: 20 },
+  noResults: { height: 80, alignItems: 'center', justifyContent: 'center' },
+  noResultsText: { fontSize: 12, fontWeight: '600' },
   contactCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: C.card, borderRadius: 11, padding: 11, marginBottom: 6,
-    borderWidth: 1, borderColor: '#E7DADD',
+    height: 63, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   avatar: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: C.greenLight, alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   avatarImage: { width: '100%', height: '100%' },
-  avatarText: { color: C.green, fontSize: 10, fontWeight: '900' },
-  contactName: { color: C.text, fontSize: 11, fontWeight: '900' },
-  contactRole: { color: C.sub, fontSize: 9, marginTop: 2 },
-  lastMessage: { color: C.muted, fontSize: 9, marginTop: 3 },
-  contactChevron: { color: '#B09299', fontSize: 21, fontWeight: '300' },
+  avatarText: { fontSize: 12, fontWeight: '800' },
+  contactName: { fontSize: 13, fontWeight: '800' },
+  lastMessage: { fontSize: 11, marginTop: 3 },
+  contactEnd: { alignItems: 'flex-end', justifyContent: 'center', minWidth: 42, alignSelf: 'stretch', paddingVertical: 10 },
+  messageTime: { fontSize: 9, fontWeight: '700', minHeight: 14 },
   unreadBadge: {
     minWidth: 22, height: 22, borderRadius: 11,
-    backgroundColor: C.green, alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  unreadText: { fontSize: 11, fontWeight: '800' },
   bubble: { maxWidth: '80%', borderRadius: 16, padding: 10 },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: C.green, borderBottomRightRadius: 4 },
   bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: C.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: C.border },
   sender: { color: C.green, fontSize: 11, fontWeight: '700', marginBottom: 3 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
-  bubbleTextMine: { color: '#fff' },
-  bubbleTextTheirs: { color: C.text },
   time: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
-  timeMine: { color: 'rgba(255,255,255,0.65)' },
-  timeTheirs: { color: C.muted },
+  messageList: { flexGrow: 1, padding: 16, gap: 8 },
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 8,
     backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border,
     padding: 12,
   },
   input: {
-    flex: 1, backgroundColor: C.bg, borderRadius: 20,
+    flex: 1, backgroundColor: C.bg, borderRadius: 20, borderWidth: 1,
     paddingHorizontal: 16, paddingVertical: 10,
     color: C.text, fontSize: 14, maxHeight: 100,
   },

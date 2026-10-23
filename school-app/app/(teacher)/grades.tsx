@@ -88,6 +88,17 @@ export default function TeacherGrades() {
       }
 
       await api.post(`/teacher/class/${activeClassId}/grades`, { grades });
+      setData(current => current ? {
+        ...current,
+        grade_submissions: {
+          ...current.grade_submissions,
+          [quarter]: {
+            ...current.grade_submissions?.[quarter],
+            status: 'chair_review',
+            grades,
+          },
+        },
+      } : current);
       Alert.alert('Submitted', `Grades for ${getQuarterLabel(quarter, data?.class?.is_college)} were submitted to the Department Chair.`);
     } catch (e) {
       Alert.alert('Error', 'Could not save grades. Please try again.');

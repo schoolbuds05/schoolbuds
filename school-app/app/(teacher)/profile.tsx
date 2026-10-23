@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import api, { removeToken } from '../../src/api';
+import { formatRoleAndPosition, formatRoleLabel, formatPositionLabel } from '../../src/user-labels';
 import { useTheme } from '../../src/theme-context';
 import ChangePasswordCard from '../components/ChangePasswordCard';
 
@@ -45,6 +46,7 @@ export default function TeacherProfile() {
 
   const name     = user?.name ?? 'Teacher';
   const initials = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  const accountLabel = formatRoleAndPosition(user, 'Teacher');
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} contentContainerStyle={styles.content}>
@@ -56,7 +58,7 @@ export default function TeacherProfile() {
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         <View style={styles.roleBadge}>
-          <Text style={styles.roleText}>👩‍🏫 Teacher</Text>
+          <Text style={styles.roleText}>👩‍🏫 {accountLabel}</Text>
         </View>
         <View style={styles.heroStats}>
           <View style={styles.heroStat}>
@@ -79,7 +81,8 @@ export default function TeacherProfile() {
         {[
           ['Name',         name],
           ['Email',        user?.email ?? '—'],
-          ['Role',         'Teacher'],
+          ['Role',         formatRoleLabel(user?.role) || 'Teacher'],
+          ['Position',     formatPositionLabel(user?.position) || '—'],
           ['School year',  '2025–2026'],
         ].map(([label, value]) => (
           <View key={label} style={styles.infoRow}>

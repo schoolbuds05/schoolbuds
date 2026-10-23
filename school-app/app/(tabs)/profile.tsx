@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api, { removeToken } from '../../src/api';
+import api, { removeToken, resolveApiAssetUrl } from '../../src/api';
 import { Colors, Font, Radius, Shadow, HEADER_TOP } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 import ChangePasswordCard from '../components/ChangePasswordCard';
@@ -151,7 +151,7 @@ export default function Profile() {
   );
 
   const s        = data?.student;
-  const profilePhotoUrl = s?.profile_photo_url || data?.user?.profile_photo_url;
+  const profilePhotoUrl = resolveApiAssetUrl(s?.profile_photo_url || data?.user?.profile_photo_url);
   const initials = s ? `${s.first_name[0]}${s.last_name[0]}`.toUpperCase() : '??';
   const enrollment = s?.enrollment;
   const yearLevelLabel = (value) => {

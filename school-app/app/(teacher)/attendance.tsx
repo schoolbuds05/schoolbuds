@@ -1,7 +1,8 @@
 // @ts-nocheck
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import api from '../../src/api';
 
 const STATUS_OPTIONS = [
@@ -12,22 +13,22 @@ const STATUS_OPTIONS = [
 ];
 
 export default function TeacherAttendance() {
+  const { classId } = useLocalSearchParams();
   const [classes, setClasses]       = useState([]);
   const [selected, setSelected]     = useState(null);
   const [students, setStudents]     = useState([]);
   const [attendance, setAttendance] = useState({});
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
-  const today = new Date().toISOString().split('T')[0];
+  const todayParts = new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const today = `${todayParts.find(part => part.type === 'year')?.value}-${todayParts.find(part => part.type === 'month')?.value}-${todayParts.find(part => part.type === 'day')?.value}`;
 
-  useEffect(() => {
-    api.get('/teacher/classes').then(res => {
-      setClasses(res.data);
-      if (res.data.length > 0) loadClass(res.data[0]);
-    }).finally(() => setLoading(false));
-  }, []);
-
-  const loadClass = async (cls) => {
+  const loadClass = useCallback(async (cls) => {
     setSelected(cls);
     setLoading(true);
     try {
@@ -42,7 +43,27 @@ export default function TeacherAttendance() {
       setAttendance(attMap);
     } catch (e) { console.log(e); }
     finally { setLoading(false); }
-  };
+  }, [today]);
+
+  useEffect(() => {
+    api.get('/teacher/classes').then(async res => {
+      const classList = res.data ?? [];
+      setClasses(classList);
+      if (classList.length > 0) {
+        const requestedClassId = Array.isArray(classId) ? classId[0] : classId;
+        const initialClass = requestedClassId
+          ? classList.find(item => String(item.id) === String(requestedClassId))
+          : classList[0];
+        if (initialClass) await loadClass(initialClass);
+        else setLoading(false);
+      } else {
+        setLoading(false);
+      }
+    }).catch(e => {
+      console.log(e);
+      setLoading(false);
+    });
+  }, [classId, loadClass]);
 
   const setStatus = (studentId, status) => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -55,6 +76,10 @@ export default function TeacherAttendance() {
   };
 
   const save = async () => {
+    if (selected?.is_current === false) {
+      Alert.alert('Past class', 'Attendance cannot be edited for a past class.');
+      return;
+    }
     setSaving(true);
     try {
       await api.post(`/teacher/class/${selected.id}/attendance`, {
@@ -65,7 +90,7 @@ export default function TeacherAttendance() {
         })),
       });
       Alert.alert('Saved!', `Attendance saved for ${today}`);
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Could not save attendance.');
     } finally { setSaving(false); }
   };
@@ -79,6 +104,7 @@ export default function TeacherAttendance() {
   });
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1D9E75"/></View>;
+  if (!selected) return <View style={styles.center}><Text style={styles.title}>No class selected</Text></View>;
 
   return (
     <View style={styles.container}>
@@ -106,9 +132,10 @@ export default function TeacherAttendance() {
           ))}
         </View>
         <View style={styles.markAllRow}>
-          <TouchableOpacity style={styles.markPresentBtn} onPress={() => markAll('present')}><Text style={styles.markPresentText}>Mark all present</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.markAbsentBtn} onPress={() => markAll('absent')}><Text style={styles.markAbsentText}>Mark all absent</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.markPresentBtn} onPress={() => markAll('present')} disabled={selected?.is_current === false}><Text style={styles.markPresentText}>Mark all present</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.markAbsentBtn} onPress={() => markAll('absent')} disabled={selected?.is_current === false}><Text style={styles.markAbsentText}>Mark all absent</Text></TouchableOpacity>
         </View>
+        {selected?.is_current === false && <Text style={styles.pastClassNote}>Attendance is read-only for past classes.</Text>}
         <View style={styles.studentsHeading}><Text style={styles.studentsTitle}>Students</Text><Text style={styles.studentsCount}>{students.length} {students.length === 1 ? 'student' : 'students'}</Text></View>
         {students.map((s, i) => (
           <View key={i} style={styles.studentRow}>
@@ -126,6 +153,7 @@ export default function TeacherAttendance() {
                 <TouchableOpacity key={opt.key}
                   style={[styles.statusBtn,
                     { backgroundColor: attendance[s.id] === opt.key ? '#207A43' : '#F1E6E8' }]}
+                  disabled={selected?.is_current === false}
                   onPress={() => setStatus(s.id, opt.key)}>
                   <Text style={[styles.statusText,
                     { color: attendance[s.id] === opt.key ? '#fff' : '#806E73' }]}>
@@ -140,7 +168,7 @@ export default function TeacherAttendance() {
 
       <View style={styles.footer}>
         <TouchableOpacity style={[styles.saveBtn, saving && { opacity:0.6 }]}
-          onPress={save} disabled={saving}>
+          onPress={save} disabled={saving || selected?.is_current === false}>
           {saving
             ? <ActivityIndicator color="#fff"/>
             : <Text style={styles.saveBtnText}>Save attendance</Text>
@@ -180,6 +208,7 @@ const styles = StyleSheet.create({
   markPresentText:   { fontSize:10, color:'#207A43', fontWeight:'900' },
   markAbsentBtn:     { flex:1, backgroundColor:'#fff', paddingVertical:10, borderRadius:11, alignItems:'center' },
   markAbsentText:    { fontSize:10, color:'#6B5157', fontWeight:'900' },
+  pastClassNote:     { color:'#765B61', fontSize:12, marginTop:9, textAlign:'center' },
   studentsHeading:   { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginTop:18, marginBottom:7 },
   studentsTitle:     { color:'#2A1B1F', fontSize:14, fontWeight:'900' },
   studentsCount:     { color:'#806E73', fontSize:10, fontWeight:'700' },

@@ -6,7 +6,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <title>SchoolBuds | St. Cecilia College Cebu</title>
-        <link rel="icon" type="image/png" href="{{ asset('images/schoolbuds-login-logo.png') }}?v=1">
+        <link rel="icon" type="image/png" href="{{ asset('images/schoolbuds-login-logo.png') }}?v=4">
 
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=dm-sans:400,500,600,700|manrope:600,700,800&display=swap" rel="stylesheet" />

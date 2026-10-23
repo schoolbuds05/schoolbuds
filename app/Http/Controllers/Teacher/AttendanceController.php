@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Teacher;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicTerm;
 use App\Models\Attendance;
-use App\Models\SectionSubject;
 use App\Models\SchoolClass;
+use App\Models\SectionSubject;
+use App\Models\Student;
 use App\Services\GradeWorkflowService;
+use App\Services\PointsService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
@@ -62,8 +65,12 @@ class AttendanceController extends Controller
         ));
     }
 
-    public function store(Request $request, SchoolClass $class)
-    {
+    public function store(
+        Request $request,
+        SchoolClass $class,
+        GradeWorkflowService $workflow,
+        PointsService $points
+    ) {
         abort_unless((int) $class->teacher_id === (int) $request->user()->id, 403);
         abort_if($request->query('view') === 'past', 403);
         abort_unless($this->isCurrentClass($class), 403);
@@ -75,14 +82,51 @@ class AttendanceController extends Controller
             'attendance.*.status'     => 'required|in:present,absent,late,excused',
         ]);
 
+        $roster = $workflow->classStudents($class)->keyBy('id');
+        $submittedStudentIds = collect($request->input('attendance'))
+            ->pluck('student_id')
+            ->map(fn ($id) => (int) $id);
+        if ($submittedStudentIds->diff($roster->keys())->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'attendance' => 'Attendance can only be recorded for students enrolled in this class.',
+            ]);
+        }
+
+        $sectionSubject = SectionSubject::query()
+            ->where('teacher_id', $class->teacher_id)
+            ->whereHas('section', fn ($query) => $query
+                ->where('name', $class->section)
+                ->where('year_level', $class->grade_level)
+                ->where('school_year', $class->school_year))
+            ->whereHas('subject', fn ($query) => $query->where('name', $class->subject))
+            ->first();
+
         foreach ($request->attendance as $record) {
-            Attendance::updateOrCreate(
+            $attendance = Attendance::updateOrCreate(
                 [
                     'student_id'      => $record['student_id'],
                     'school_class_id' => $class->id,
                     'date'            => $request->date,
                 ],
                 ['status' => $record['status']]
+            );
+
+            $student = Student::findOrFail($record['student_id']);
+            $points->awardDailyAttendancePoints(
+                $student,
+                $record['status'],
+                "attendance-daily:{$student->id}:{$class->id}:{$request->date}",
+                $request->user(),
+                $class->school_year,
+                $sectionSubject?->section?->semester,
+                ['attendance_id' => $attendance->id, 'school_class_id' => $class->id, 'date' => $request->date]
+            );
+            $points->syncMonthlyPerfectAttendance(
+                $student,
+                $request->date,
+                $request->user(),
+                $class->school_year,
+                $sectionSubject?->section?->semester
             );
         }
 

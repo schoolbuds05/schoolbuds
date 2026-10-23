@@ -2,9 +2,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, { removeToken } from '../../src/api';
+import api, { removeToken, resolveApiAssetUrl } from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 const ACADEMIC_ITEMS = [
@@ -75,6 +75,7 @@ export default function More() {
   };
   const initials = `${details.student?.first_name?.[0] || ''}${details.student?.last_name?.[0] || ''}`.toUpperCase() || 'S';
   const studentName = [details.student?.first_name, details.student?.last_name].filter(Boolean).join(' ') || 'Student';
+  const profilePhotoUrl = resolveApiAssetUrl(details.student?.profile_photo_url || dashboard?.user?.profile_photo_url);
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
@@ -102,7 +103,11 @@ export default function More() {
     <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={theme.primary} />}>
       <Text style={[styles.title, { color: theme.text }]}>More</Text>
       <TouchableOpacity style={[styles.profileCard, { backgroundColor: theme.card }]} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.75}>
-        <View style={[styles.avatar, { backgroundColor: theme.primary, borderColor: '#FFF1BF' }]}><Text style={styles.avatarText}>{initials}</Text></View>
+        <View style={[styles.avatar, { backgroundColor: theme.primary, borderColor: '#FFF1BF' }]}>
+          {profilePhotoUrl
+            ? <Image source={{ uri: profilePhotoUrl }} style={styles.avatarImage} />
+            : <Text style={styles.avatarText}>{initials}</Text>}
+        </View>
         <View style={styles.profileCopy}><Text style={[styles.studentName, { color: theme.text }]} numberOfLines={1}>{studentName}</Text><Text style={[styles.studentId, { color: theme.textSub }]} numberOfLines={1}>{details.student?.student_id || 'Student account'}</Text></View>
         <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
       </TouchableOpacity>
@@ -119,7 +124,7 @@ export default function More() {
 const styles = StyleSheet.create({
   container: { flex: 1 }, content: { padding: 16, paddingTop: 42, paddingBottom: 28 }, title: { fontSize: 22, fontWeight: '800', marginBottom: 12 },
   profileCard: { height: 72, borderRadius: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, justifyContent: 'center', alignItems: 'center' }, avatarText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }, avatarImage: { width: '100%', height: '100%' }, avatarText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
   profileCopy: { flex: 1, marginLeft: 10 }, studentName: { fontSize: 14, fontWeight: '800' }, studentId: { fontSize: 11, fontWeight: '600', marginTop: 2 }, loader: { marginBottom: 4 },
   sectionLabel: { fontSize: 11, fontWeight: '700', marginBottom: 6 }, group: { borderRadius: 14, overflow: 'hidden', marginBottom: 15 },
   menuItem: { minHeight: 52, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center' }, iconWrap: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },

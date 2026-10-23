@@ -1,6 +1,12 @@
 @php
     $user = auth()->user();
     $role = $user?->role;
+    $roleLabel = $role ? ucwords(str_replace('_', ' ', $role)) : null;
+    $positionLabel = match ($user?->position) {
+        'head_department' => 'Department Chair',
+        default => $user?->position ? ucwords(str_replace('_', ' ', $user->position)) : null,
+    };
+    $accountLabel = collect([$roleLabel, $positionLabel])->filter()->unique()->implode(' · ');
 
     $navGroups = [
         'Admin' => [
@@ -101,7 +107,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'SchoolBuds Portal' }}</title>
-    <link rel="icon" type="image/png" href="{{ asset('images/schoolbuds-login-logo.png') }}?v=1">
+    <link rel="icon" type="image/png" href="{{ asset('images/schoolbuds-login-logo.png') }}?v=4">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="portal-shell min-h-screen bg-portal-page text-portal-text antialiased lg:h-screen lg:overflow-hidden">
@@ -180,7 +186,7 @@
                         </span>
                         <div class="hidden text-right sm:block">
                             <p class="text-sm font-bold text-slate-900">{{ $user?->name }}</p>
-                            <p class="text-xs text-slate-500">{{ ucfirst((string) $role) }}</p>
+                            <p class="text-xs text-slate-500">{{ $accountLabel }}</p>
                         </div>
                         <form method="POST" action="{{ route('logout') }}" class="lg:hidden">
                             @csrf

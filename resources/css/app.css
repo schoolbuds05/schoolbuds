@@ -305,20 +305,23 @@
 
     .guest-brand-main .guest-logo-mark {
         display: grid;
-        width: 11.5rem;
-        height: 11.5rem;
+        width: 200px;
+        height: 200px;
+        max-width: 100%;
         place-items: center;
         margin-bottom: 1rem;
         overflow: hidden;
-        border-radius: 50%;
+        border-radius: 5rem;
         background: #fff;
         box-shadow: 0 8px 24px rgb(80 24 24 / 0.08);
     }
 
     .guest-brand-main .guest-logo-mark img {
-        width: 6.7rem;
-        height: 8.25rem;
+        width: auto;
+        height: 100%;
+        max-width: 100%;
         object-fit: contain;
+        border-radius: 2rem;
     }
 
     .guest-brand-main h1 {
@@ -550,11 +553,11 @@
             text-align: center;
         }
         .guest-brand-main .guest-logo-mark {
-            width: 6rem;
-            height: 6rem;
+            width: min(100%, 300px);
+            height: 300px;
             margin-bottom: 0.35rem;
         }
-        .guest-brand-main .guest-logo-mark img { width: 3.45rem; height: 4.25rem; }
+        .guest-brand-main .guest-logo-mark img { width: 100%; height: 100%; }
         .guest-brand-main h1 { font-size: 1.45rem; }
         .guest-brand-tagline { margin-top: 0.1rem; font-size: 0.72rem; }
         .guest-brand-description { display: none; }
@@ -612,8 +615,8 @@
     @media (max-width: 900px) and (max-height: 600px) {
         .guest-brand-panel { --guest-brand-height: 16rem; padding-top: 1rem; }
         .guest-brand-main { margin-top: 0.5rem; }
-        .guest-brand-main .guest-logo-mark { width: 4.5rem; height: 4.5rem; }
-        .guest-brand-main .guest-logo-mark img { width: 2.6rem; height: 3.25rem; }
+        .guest-brand-main .guest-logo-mark { width: min(100%, 240px); height: 240px; }
+        .guest-brand-main .guest-logo-mark img { width: 100%; height: 100%; }
         .guest-brand-chart { height: 2rem; gap: 0.4rem; }
         .guest-brand-chart span:nth-child(1) { height: 0.4rem; }
         .guest-brand-chart span:nth-child(2) { height: 0.65rem; }
@@ -627,8 +630,8 @@
 
     @media (min-width: 901px) and (max-height: 680px) {
         .guest-brand-main { margin-top: clamp(1.5rem, 5vh, 3rem); }
-        .guest-brand-main .guest-logo-mark { width: 9rem; height: 9rem; margin-bottom: 0.75rem; }
-        .guest-brand-main .guest-logo-mark img { width: 5.2rem; height: 6.4rem; }
+        .guest-brand-main .guest-logo-mark { width: min(100%, 200px); height: 200px; margin-bottom: 0.75rem; }
+        .guest-brand-main .guest-logo-mark img { width: 100%; height: 100%; }
         .guest-brand-chart { height: 4.5rem; }
         .guest-form-panel { align-items: flex-start; padding-block: 1.25rem; }
     }

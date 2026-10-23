@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
 import { Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { resolveApiAssetUrl } from '../../../src/api';
 
 const logo = require('../../../assets/images/schoolbuds-favicon.png');
 
@@ -11,17 +12,19 @@ export default function StudentHomeReference({
 }) {
   const localCurrentClass = findCurrentClass(data?.today_classes);
   const isClassNow = Boolean(localCurrentClass || data?.current_class);
-  const nextClass = localCurrentClass || data?.current_class || data?.next_class || data?.today_classes?.[0] || data?.schedule?.[0];
+  const nextClass = localCurrentClass || data?.current_class || data?.next_class;
   const upcomingClass = isClassNow
     ? findUpcomingClass(data?.today_classes, localCurrentClass || data?.current_class)
     : null;
   const grades = data?.grades?.['4'] || data?.grades?.['1'] || [];
   const unread = notifications?.unread_count || 0;
   const name = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || user?.name || 'Student';
+  const profilePhotoUrl = resolveApiAssetUrl(user?.profile_photo_url);
   const course = sectionLabel || 'Student account';
-  const time = formatTime12(nextClass?.time_start || nextClass?.start_time) || 'No class';
+  const time = nextClass ? formatTime12(nextClass.time_start || nextClass.start_time) : '';
   const endTime = formatTime12(nextClass?.time_end || nextClass?.end_time);
   const subject = nextClass?.subject?.name || nextClass?.subject_name || nextClass?.name || 'No class scheduled today';
+  const classLabel = isClassNow ? 'Class now' : nextClass ? 'Next class is' : 'No classes today';
   const teacher = nextClass?.teacher?.name || nextClass?.teacher_name;
   const room = nextClass?.room;
 
@@ -41,7 +44,7 @@ export default function StudentHomeReference({
             <Text style={[s.name, { color: theme.text }]} numberOfLines={1}>{name}</Text>
           </View>
           <TouchableOpacity style={s.profileButton} onPress={onProfile} accessibilityLabel="Open profile">
-            {user?.profile_photo_url ? <Image source={{ uri: user.profile_photo_url }} style={s.profileImage} /> : <Ionicons name="person-outline" size={20} color={theme.text} />}
+            {profilePhotoUrl ? <Image source={{ uri: profilePhotoUrl }} style={s.profileImage} /> : <Ionicons name="person-outline" size={20} color={theme.text} />}
           </TouchableOpacity>
         </View>
         <View style={s.chips}>
@@ -49,8 +52,8 @@ export default function StudentHomeReference({
           {points > 0 ? <View style={[s.chip, s.pointsChip]}><Ionicons name="star-outline" size={13} color="#6B5200" /><Text style={s.pointsText}>{points.toLocaleString()} points</Text></View> : null}
         </View>
         <View style={s.nextClass}>
-          <View style={s.nextTag}><Text style={s.nextTagText}>{isClassNow ? 'Class now' : 'Next class is'}{nextClass?.day ? ` · ${nextClass.day}` : ''}</Text></View>
-          <Text style={s.time}>{time}{endTime ? <Text style={s.endTime}> · {endTime}</Text> : null}</Text>
+          <View style={s.nextTag}><Text style={s.nextTagText}>{classLabel}{nextClass?.day ? ` · ${nextClass.day}` : ''}</Text></View>
+          {time ? <Text style={s.time}>{time}{endTime ? <Text style={s.endTime}> · {endTime}</Text> : null}</Text> : null}
           <Text style={s.subject} numberOfLines={2}>{subject}</Text>
           {(room || teacher) ? <View style={s.meta}>{room ? <Text style={s.metaText}>{room}</Text> : null}{teacher ? <Text style={s.metaText}>{teacher}</Text> : null}</View> : null}
           {upcomingClass ? <Text style={s.upcoming}>Next class is {formatTime12(upcomingClass.time_start)} · {upcomingClass.subject_name || upcomingClass.name || 'Scheduled class'}</Text> : null}

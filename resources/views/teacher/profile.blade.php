@@ -15,7 +15,7 @@
             <div>
                 <p class="text-xl font-black text-slate-900">{{ $teacher->name }}</p>
                 <p class="text-sm text-slate-500">{{ $teacher->email }}</p>
-                <p class="mt-1 text-xs font-black uppercase text-violet-500">{{ ucwords(str_replace('_', ' ', $teacher->position ?: $teacher->role)) }}</p>
+                <p class="mt-1 text-xs font-black uppercase text-violet-500">{{ $teacher->position === \App\Models\User::POSITION_HEAD_DEPARTMENT ? 'Department Chair' : ucwords(str_replace('_', ' ', $teacher->position ?: $teacher->role)) }}</p>
             </div>
         </div>
     </section>

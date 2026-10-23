@@ -19,6 +19,28 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const apiUrl = new URL(configuredApiUrl);
+
+export const resolveApiAssetUrl = (url) => {
+  if (!url) return null;
+
+  const assetUrl = new URL(url, apiUrl);
+  const isLoopbackHost = assetUrl.hostname === 'localhost'
+    || assetUrl.hostname.endsWith('.localhost')
+    || assetUrl.hostname === '127.0.0.1'
+    || assetUrl.hostname.startsWith('127.')
+    || assetUrl.hostname === '0.0.0.0'
+    || assetUrl.hostname === '::1'
+    || assetUrl.hostname === '[::1]';
+
+  if (isLoopbackHost) {
+    assetUrl.protocol = apiUrl.protocol;
+    assetUrl.host = apiUrl.host;
+  }
+
+  return assetUrl.toString();
+};
+
 export const setToken = (token) => {
   api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 };

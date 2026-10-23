@@ -17,6 +17,7 @@ use App\Services\GradeWorkflowService;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TeacherController extends Controller
 {
@@ -155,9 +156,14 @@ class TeacherController extends Controller
         return response()->json(['message' => 'Grade sheet submitted to the Department Chair for review.']);
     }
 
-    public function saveAttendance(Request $request, $class, PointsService $points)
-    {
+    public function saveAttendance(
+        Request $request,
+        $class,
+        PointsService $points,
+        GradeWorkflowService $workflow
+    ) {
         [$sectionSubject, $schoolClass] = $this->resolveTeacherClass($request, $class);
+        abort_unless($this->isCurrentTeacherClass($schoolClass), 403);
 
         $request->validate([
             'date'                       => 'required|date',
@@ -165,6 +171,16 @@ class TeacherController extends Controller
             'attendance.*.student_id'    => 'required|exists:students,id',
             'attendance.*.status'        => 'required|in:present,absent,late,excused',
         ]);
+
+        $roster = $workflow->classStudents($schoolClass)->keyBy('id');
+        $submittedStudentIds = collect($request->input('attendance'))
+            ->pluck('student_id')
+            ->map(fn ($id) => (int) $id);
+        if ($submittedStudentIds->diff($roster->keys())->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'attendance' => 'Attendance can only be recorded for students enrolled in this class.',
+            ]);
+        }
 
         foreach ($request->attendance as $a) {
             $attendance = Attendance::updateOrCreate(
@@ -215,6 +231,35 @@ class TeacherController extends Controller
             'date'       => $date,
             'attendance' => $attendance,
         ]);
+    }
+
+    private function isCurrentTeacherClass(SchoolClass $class): bool
+    {
+        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        if (!$activeTerm) {
+            return false;
+        }
+
+        return SectionSubject::query()
+            ->where('teacher_id', $class->teacher_id)
+            ->whereHas('section', fn ($query) => $query
+                ->where('name', $class->section)
+                ->where('year_level', $class->grade_level)
+                ->where('school_year', $class->school_year)
+                ->where('school_year', $activeTerm->school_year)
+                ->where('semester', $activeTerm->semester))
+            ->whereHas('subject', fn ($query) => $query->where('name', $class->subject))
+            ->exists();
+    }
+
+    private function isCurrentSectionSubject(SectionSubject $sectionSubject): bool
+    {
+        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        $section = $sectionSubject->section;
+
+        return $activeTerm !== null
+            && $section?->school_year === $activeTerm->school_year
+            && $section?->semester === $activeTerm->semester;
     }
 
     public function classPerformance(Request $request, $class)
@@ -303,6 +348,7 @@ class TeacherController extends Controller
             'strand' => $section?->strand,
             'school_year' => $section?->school_year,
             'semester' => $section?->semester,
+            'is_current' => $this->isCurrentSectionSubject($sectionSubject),
             'room' => $meetings->pluck('room')->filter()->unique()->implode(', ') ?: $sectionSubject->room,
             'day' => $meetings->pluck('day')->filter()->unique()->implode(', '),
             'meetings' => $meetings->map(fn ($meeting) => ['day' => $meeting->day, 'time_start' => $meeting->time_start, 'time_end' => $meeting->time_end, 'room' => $meeting->room])->values(),
@@ -335,6 +381,7 @@ class TeacherController extends Controller
             'strand' => null,
             'school_year' => $schoolClass->school_year,
             'semester' => null,
+            'is_current' => $this->isCurrentTeacherClass($schoolClass),
             'room' => $schoolClass->room,
             'schedule' => $schoolClass->schedule ?: 'No schedule',
             'students_count' => $this->enrolledUserIdsForSchoolClass($schoolClass)->count(),

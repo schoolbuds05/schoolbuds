@@ -3,9 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\AcademicTerm;
+use App\Models\SchoolClass;
 use App\Models\Section;
 use App\Models\SectionSubject;
-use App\Models\SchoolClass;
+use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -202,7 +203,125 @@ class TeacherCurrentClassesTest extends TestCase
             ->assertDontSee('Past Work Mathematics');
     }
 
-    private function createOffering(User $teacher, string $subjectName, string $schoolYear, string $semester): void
+    public function test_api_attendance_rejects_students_outside_the_teacher_class_roster(): void
+    {
+        $teacher = User::factory()->create([
+            'role' => User::ROLE_FACULTY,
+            'position' => User::POSITION_TEACHER,
+        ]);
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st']);
+        $offering = $this->createOffering($teacher, 'Attendance Mathematics', '2026-2027', '1st');
+        $outsideStudent = $this->createStudent('Outside Student', '2026-2027', $offering->section);
+
+        $this->actingAs($teacher)
+            ->postJson("/api/teacher/class/{$offering->id}/attendance", [
+                'date' => today()->toDateString(),
+                'attendance' => [
+                    ['student_id' => $outsideStudent->id, 'status' => 'present'],
+                ],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('attendance');
+
+        $this->assertDatabaseMissing('attendances', [
+            'student_id' => $outsideStudent->id,
+        ]);
+    }
+
+    public function test_api_attendance_rejects_past_class_edits(): void
+    {
+        $teacher = User::factory()->create([
+            'role' => User::ROLE_FACULTY,
+            'position' => User::POSITION_TEACHER,
+        ]);
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st']);
+        $offering = $this->createOffering($teacher, 'Past Attendance Mathematics', '2025-2026', '1st');
+        $student = $this->createStudent('Past Attendance Student', '2025-2026', $offering->section);
+        $offering->section->students()->attach($student->user_id, ['status' => 'enrolled']);
+
+        $this->actingAs($teacher)
+            ->postJson("/api/teacher/class/{$offering->id}/attendance", [
+                'date' => today()->toDateString(),
+                'attendance' => [
+                    ['student_id' => $student->id, 'status' => 'present'],
+                ],
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('attendances', [
+            'student_id' => $student->id,
+        ]);
+    }
+
+    public function test_web_attendance_rejects_out_of_roster_students_and_syncs_reward_points_on_correction(): void
+    {
+        $teacher = User::factory()->create([
+            'role' => User::ROLE_FACULTY,
+            'position' => User::POSITION_TEACHER,
+        ]);
+        AcademicTerm::create(['school_year' => '2026-2027', 'semester' => '1st']);
+        $offering = $this->createOffering($teacher, 'Web Attendance Mathematics', '2026-2027', '1st');
+        $enrolledStudent = $this->createStudent('Enrolled Student', '2026-2027', $offering->section);
+        $outsideStudent = $this->createStudent('Outside Student', '2026-2027', $offering->section);
+        $offering->section->students()->attach($enrolledStudent->user_id, ['status' => 'enrolled']);
+
+        $this->actingAs($teacher)->getJson('/api/teacher/classes')->assertOk();
+        $class = SchoolClass::query()
+            ->where('teacher_id', $teacher->id)
+            ->where('subject', 'Web Attendance Mathematics')
+            ->firstOrFail();
+        $date = today()->toDateString();
+        $route = route('teacher.attendance.store', $class);
+
+        $this->post($route, [
+            'date' => $date,
+            'attendance' => [
+                ['student_id' => $outsideStudent->id, 'status' => 'present'],
+            ],
+        ])->assertSessionHasErrors('attendance');
+        $this->assertDatabaseMissing('attendances', ['student_id' => $outsideStudent->id]);
+
+        $this->post($route, [
+            'date' => $date,
+            'attendance' => [
+                ['student_id' => $enrolledStudent->id, 'status' => 'present'],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $dailyRewardKey = "attendance-daily:{$enrolledStudent->id}:{$class->id}:{$date}";
+        $monthlyRewardKey = 'attendance-monthly:' . $enrolledStudent->id . ':' . substr($date, 0, 7);
+        $this->assertDatabaseHas('student_rewards', ['source_key' => $dailyRewardKey]);
+
+        $this->post($route, [
+            'date' => $date,
+            'attendance' => [
+                ['student_id' => $enrolledStudent->id, 'status' => 'absent'],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('student_rewards', ['source_key' => $dailyRewardKey]);
+        $this->assertDatabaseMissing('student_rewards', ['source_key' => $monthlyRewardKey]);
+    }
+
+    private function createStudent(string $name, string $schoolYear, Section $section): Student
+    {
+        $user = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        [$firstName, $lastName] = array_pad(explode(' ', $name, 2), 2, 'Student');
+
+        return Student::create([
+            'student_id' => 'STU-' . $user->id,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'email' => "student-{$user->id}@example.com",
+            'gender' => 'female',
+            'grade_level' => $section->year_level,
+            'section' => $section->name,
+            'school_year' => $schoolYear,
+            'user_id' => $user->id,
+        ]);
+    }
+
+    private function createOffering(User $teacher, string $subjectName, string $schoolYear, string $semester): SectionSubject
     {
         $section = Section::create([
             'name' => "{$schoolYear} {$semester}",
@@ -217,7 +336,7 @@ class TeacherCurrentClassesTest extends TestCase
             'program_type' => 'college',
         ]);
 
-        SectionSubject::create([
+        return SectionSubject::create([
             'section_id' => $section->id,
             'subject_id' => $subject->id,
             'teacher_id' => $teacher->id,
