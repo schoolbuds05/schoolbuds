@@ -39,6 +39,7 @@ class GradeApprovalController extends Controller
 
     public function export(Request $request)
     {
+        abort_unless($request->user()?->hasAnyRole(['admin', 'registrar']), 403);
         $request->validate(['program_type' => ['nullable', 'in:college,shs']]);
         $exportProgramType = $request->query('program_type');
         $periods = match ($exportProgramType) {

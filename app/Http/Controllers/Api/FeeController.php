@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 
 class FeeController extends Controller
 {
@@ -47,7 +48,14 @@ class FeeController extends Controller
 
         $fee->update($request->all());
         if ($request->status === 'paid') {
-            $fee->update(['paid_date' => now(), 'paid_amount' => $fee->amount]);
+            $fee->update([
+                'paid_date' => now(),
+                'paid_amount' => $fee->amount,
+                'pending_payment_amount' => null,
+                'payment_verification_status' => 'verified',
+                'verified_by' => $request->user()->id,
+                'payment_verified_at' => now(),
+            ]);
             $this->awardEarlyPaymentIfEligible($fee->fresh(), $points, $request->user());
         }
         return response()->json($fee);
@@ -74,18 +82,49 @@ class FeeController extends Controller
         }
 
         $paidAmount = min((float) $data['amount'], $remaining);
+        if (!$isManager) {
+            if ($fee->payment_verification_status === 'pending') {
+                return response()->json(['message' => 'A payment is already awaiting school verification.'], 409);
+            }
+
+            $fee->update([
+                'pending_payment_amount' => $paidAmount,
+                'payment_verification_status' => 'pending',
+                'payment_method' => $data['payment_method'],
+                'payment_reference' => $data['payment_reference'] ?? null,
+                'paid_by' => $request->user()->id,
+                'verified_by' => null,
+                'payment_verified_at' => null,
+            ]);
+
+            SchoolNotification::create([
+                'user_id' => $fee->student?->user_id,
+                'type' => 'tuition_payment_pending',
+                'title' => 'Payment submitted for verification',
+                'body' => "Your payment of PHP " . number_format($paidAmount, 2) . " for {$fee->type} is awaiting school verification.",
+                'channels' => ['in_app'],
+                'data' => ['fee_id' => $fee->id, 'status' => 'pending_verification'],
+            ]);
+
+            return response()->json([
+                'message' => 'Payment submitted and is awaiting school verification.',
+                'fee' => $fee->fresh()->load('student'),
+            ], 202);
+        }
+
         $newPaidAmount = (float) $fee->paid_amount + $paidAmount;
         $status = $newPaidAmount >= (float) $fee->amount ? 'paid' : 'partial';
-
         $fee->update([
             'paid_amount' => $newPaidAmount,
+            'pending_payment_amount' => null,
+            'payment_verification_status' => 'verified',
             'status' => $status,
             'paid_date' => $status === 'paid' ? now() : $fee->paid_date,
             'payment_method' => $data['payment_method'],
-            'payment_reference' => $data['payment_reference'] ?? $fee->payment_reference,
+            'payment_reference' => $data['payment_reference'] ?? null,
             'paid_by' => $request->user()->id,
-            'verified_by' => $isManager ? $request->user()->id : null,
-            'payment_verified_at' => $isManager ? now() : null,
+            'verified_by' => $request->user()->id,
+            'payment_verified_at' => now(),
         ]);
 
         if ($status === 'paid') {
@@ -102,6 +141,64 @@ class FeeController extends Controller
         ]);
 
         return response()->json($fee->fresh()->load('student'));
+    }
+
+    public function verifyPayment(Request $request, Fee $fee, PointsService $points)
+    {
+        $this->authorizeFeeManager($request);
+        $data = $request->validate(['approved' => ['required', 'boolean']]);
+
+        $fee = DB::transaction(function () use ($fee, $data, $request) {
+            $lockedFee = Fee::query()->lockForUpdate()->findOrFail($fee->id);
+            if ($lockedFee->payment_verification_status !== 'pending' || (float) $lockedFee->pending_payment_amount <= 0) {
+                abort(422, 'There is no pending payment to review.');
+            }
+
+            $changes = [
+                'pending_payment_amount' => null,
+                'payment_verification_status' => $data['approved'] ? 'verified' : 'rejected',
+                'verified_by' => $request->user()->id,
+                'payment_verified_at' => now(),
+            ];
+
+            if ($data['approved']) {
+                $newPaidAmount = min(
+                    (float) $lockedFee->amount,
+                    (float) $lockedFee->paid_amount + (float) $lockedFee->pending_payment_amount
+                );
+                $changes['paid_amount'] = $newPaidAmount;
+                $changes['status'] = $newPaidAmount >= (float) $lockedFee->amount ? 'paid' : 'partial';
+                if ($changes['status'] === 'paid') {
+                    $changes['paid_date'] = now();
+                }
+            }
+
+            $lockedFee->update($changes);
+            return $lockedFee->fresh()->load('student');
+        });
+
+        if ($data['approved'] && $fee->status === 'paid') {
+            $this->awardEarlyPaymentIfEligible($fee, $points, $request->user());
+        }
+
+        SchoolNotification::create([
+            'user_id' => $fee->student?->user_id,
+            'type' => $data['approved'] ? 'tuition_paid' : 'tuition_payment_rejected',
+            'title' => $data['approved'] ? 'Payment verified' : 'Payment not verified',
+            'body' => $data['approved']
+                ? "Your payment for {$fee->type} was verified by the school."
+                : "Your payment for {$fee->type} could not be verified. Please contact the school office.",
+            'channels' => ['in_app'],
+            'data' => ['fee_id' => $fee->id, 'status' => $fee->status],
+        ]);
+
+        if (!$request->expectsJson()) {
+            return redirect()
+                ->route('admin.fees.index', ['type' => 'pending'])
+                ->with('status', $data['approved'] ? 'Payment verified and applied to the student balance.' : 'Payment marked as not verified.');
+        }
+
+        return response()->json(['message' => 'Payment review saved.', 'fee' => $fee]);
     }
 
     public function destroy(Fee $fee)
@@ -123,7 +220,7 @@ class FeeController extends Controller
         return response()->json([
             'fees'          => $fees,
             'total_due'     => $fees->where('status', '!=', 'paid')->sum(fn ($fee) => max(0, (float) $fee->amount - (float) $fee->paid_amount)),
-            'total_paid'    => $fees->where('status', 'paid')->sum('paid_amount'),
+            'total_paid'    => $fees->sum('paid_amount'),
         ]);
     }
 

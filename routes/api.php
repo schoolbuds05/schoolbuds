@@ -25,6 +25,9 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AcademicTermController;
 use App\Http\Controllers\Api\AcademicLeadershipController;
 use App\Http\Controllers\Api\CourseShiftRequestController;
+use App\Http\Controllers\Registrar\TuitionFeeController;
+use App\Http\Controllers\Api\RegistrarGradeController;
+use App\Http\Controllers\Registrar\GradeApprovalController;
 
 // ── Public routes (no login required) ────────────────────────────
 Route::post('/login',            [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -32,10 +35,8 @@ Route::post('/register',         [AuthController::class, 'register'])->middlewar
 Route::post('/forgot-password',  [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/reset-password',   [AuthController::class, 'resetPassword']);
 Route::get('/enrollment/status', [EnrollmentController::class, 'status']);
-Route::get('/enrollment/lookup', [EnrollmentController::class, 'lookup']);
 Route::get('/enrollment/settings', [AcademicTermController::class, 'current']);
 Route::get('/sections',          [SubjectSectionController::class, 'sectionIndex']);
-Route::get('/sections/{id}',     [SubjectSectionController::class, 'sectionShow']);
 Route::get('/subjects',          [SubjectSectionController::class, 'subjectIndex']);
 Route::get('/courses',           [CourseController::class, 'index']);
 
@@ -44,6 +45,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);
+    Route::get('/enrollment/lookup', [EnrollmentController::class, 'lookup']);
+    Route::get('/sections/{id}', [SubjectSectionController::class, 'sectionShow']);
     Route::get('/enrollment/eligibility', [EnrollmentController::class, 'eligibility']);
     Route::post('/enrollment', [EnrollmentController::class, 'store']);
     Route::post('/enrollment/prerequisites', [EnrollmentController::class, 'prerequisiteStatus']);
@@ -63,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Shared/Student
     Route::post('/fees/{fee}/pay', [FeeController::class, 'pay']);
+    Route::post('/fees/{fee}/verify-payment', [FeeController::class, 'verifyPayment']);
     Route::get('/my-fees', [FeeController::class, 'mine']);
     Route::get('/students/{student}/grades',     [GradeController::class, 'byStudent']);
     Route::get('/students/{student}/attendance', [AttendanceController::class, 'byStudent']);
@@ -87,7 +91,38 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/assignments/{assignment}/violation', [AssignmentController::class, 'recordViolation']);
     Route::post('/assignments/{assignment}/submit', [AssignmentController::class, 'submit']);
 
-    // Registrar & Admin
+    // Registrar mobile portal and registrar workflows.
+    // Keep these outside the admin-only group so registrar accounts can use them.
+    Route::middleware('role:admin,registrar,head_department')->group(function () {
+        Route::get('/registrar/grades', [RegistrarGradeController::class, 'index']);
+        Route::get('/registrar/student-grades', [RegistrarGradeController::class, 'studentGrades']);
+        Route::post('/registrar/grades/import', [RegistrarGradeController::class, 'import']);
+        Route::get('/registrar/grades/export', [GradeApprovalController::class, 'export']);
+        Route::post('/registrar/grades/{submission}/review', [RegistrarGradeController::class, 'reviewSubmission']);
+        Route::post('/registrar/grade-change-requests/{changeRequest}/review', [RegistrarGradeController::class, 'reviewChangeRequest']);
+        Route::get('/registrar/tuition/sections', [TuitionFeeController::class, 'mobileSections']);
+        Route::post('/registrar/tuition', [TuitionFeeController::class, 'storeMobile']);
+        Route::get('/registrar/teachers',                   [SubjectSectionController::class, 'teacherIndex']);
+        Route::get('/registrar/section-students',           [SubjectSectionController::class, 'studentIndex']);
+        Route::get('/registrar/enrollments',                [EnrollmentController::class, 'index']);
+        Route::get('/registrar/course-shift-requests',     [CourseShiftRequestController::class, 'index']);
+        Route::post('/registrar/course-shift-requests/{courseShiftRequest}/credits', [CourseShiftRequestController::class, 'storeCredit']);
+        Route::post('/registrar/course-shift-requests/{courseShiftRequest}/review', [CourseShiftRequestController::class, 'review']);
+        Route::get('/registrar/subject-change-requests',    [SubjectChangeRequestController::class, 'index']);
+        Route::post('/registrar/subject-change-requests/{subjectChangeRequest}/approve', [SubjectChangeRequestController::class, 'approve']);
+        Route::post('/registrar/subject-change-requests/{subjectChangeRequest}/reject', [SubjectChangeRequestController::class, 'reject']);
+        Route::get('/registrar/enrollments/{id}',           [EnrollmentController::class, 'show']);
+        Route::post('/registrar/enrollments/{id}/approve',  [EnrollmentController::class, 'approve']);
+        Route::post('/registrar/enrollments/{id}/reject',   [EnrollmentController::class, 'reject']);
+        Route::post('/registrar/students',                  [EnrollmentController::class, 'storeStudent']);
+        Route::get('/registrar/students',                   [AdminStudentController::class, 'index']);
+        Route::put('/registrar/students/{student}',         [AdminStudentController::class, 'update']);
+        Route::post('/registrar/students/{student}/reset-password', [AdminStudentController::class, 'resetPassword']);
+        Route::post('/registrar/students/{student}/subjects/{subject}/drop', [AdminStudentController::class, 'dropSubject']);
+        Route::post('/registrar/students/{student}/subjects/{subject}/restore', [AdminStudentController::class, 'restoreSubject']);
+    });
+
+    // Admin-only management endpoints
     Route::middleware('role:admin')->group(function () {
         Route::post('/courses',        [CourseController::class, 'store']);
         Route::put('/courses/{id}',    [CourseController::class, 'update']);
@@ -100,48 +135,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/subjects/{id}/prerequisites',                         [SubjectSectionController::class, 'addSubjectPrerequisite']);
         Route::delete('/subjects/{id}/prerequisites/{prerequisiteId}',      [SubjectSectionController::class, 'removeSubjectPrerequisite']);
 
-        // Sections (registrar and department chair)
-        Route::post('/sections',                             [SubjectSectionController::class, 'sectionStore']);
-        Route::put('/sections/{id}',                         [SubjectSectionController::class, 'sectionUpdate']);
-        Route::delete('/sections/{id}',                      [SubjectSectionController::class, 'sectionDestroy']);
-        Route::post('/sections/{id}/subjects',               [SubjectSectionController::class, 'assignSubject']);
-        Route::delete('/sections/{id}/subjects/{subjectId}', [SubjectSectionController::class, 'removeSubject']);
-        Route::post('/sections/{id}/students',               [SubjectSectionController::class, 'enrollStudent']);
-        Route::delete('/sections/{id}/students/{userId}',    [SubjectSectionController::class, 'removeStudent']);
-
-        Route::middleware('role:registrar,head_department')->group(function () {
-            // Registrar
-            Route::get('/registrar/teachers',                   [SubjectSectionController::class, 'teacherIndex']);
-            Route::get('/registrar/section-students',           [SubjectSectionController::class, 'studentIndex']);
-            Route::get('/registrar/enrollments',                [EnrollmentController::class, 'index']);
-            Route::get('/registrar/course-shift-requests',     [CourseShiftRequestController::class, 'index']);
-            Route::post('/registrar/course-shift-requests/{courseShiftRequest}/review', [CourseShiftRequestController::class, 'review']);
-            Route::get('/registrar/subject-change-requests',    [SubjectChangeRequestController::class, 'index']);
-            Route::post('/registrar/subject-change-requests/{subjectChangeRequest}/approve', [SubjectChangeRequestController::class, 'approve']);
-            Route::post('/registrar/subject-change-requests/{subjectChangeRequest}/reject', [SubjectChangeRequestController::class, 'reject']);
-            Route::get('/registrar/enrollments/{id}',           [EnrollmentController::class, 'show']);
-            Route::post('/registrar/enrollments/{id}/approve',  [EnrollmentController::class, 'approve']);
-            Route::post('/registrar/enrollments/{id}/reject',   [EnrollmentController::class, 'reject']);
-            Route::post('/registrar/students',                  [EnrollmentController::class, 'storeStudent']);
-            Route::get('/registrar/students',                   [AdminStudentController::class, 'index']);
-            Route::put('/registrar/students/{student}',         [AdminStudentController::class, 'update']);
-            Route::post('/registrar/students/{student}/reset-password', [AdminStudentController::class, 'resetPassword']);
-            Route::post('/registrar/students/{student}/subjects/{subject}/drop', [AdminStudentController::class, 'dropSubject']);
-            Route::post('/registrar/students/{student}/subjects/{subject}/restore', [AdminStudentController::class, 'restoreSubject']);
-        });
-
-        Route::middleware('role:admin')->group(function () {
-            Route::get('/registrar/event-participations', [RewardController::class, 'eventIndex']);
-            Route::post('/registrar/event-participations/{participation}/approve', [RewardController::class, 'approveEvent']);
-            Route::post('/registrar/event-participations/{participation}/reject', [RewardController::class, 'rejectEvent']);
-        });
+        Route::get('/registrar/event-participations', [RewardController::class, 'eventIndex']);
+        Route::post('/registrar/event-participations/{participation}/approve', [RewardController::class, 'approveEvent']);
+        Route::post('/registrar/event-participations/{participation}/reject', [RewardController::class, 'rejectEvent']);
     });
 
-    // Department chairs can create and manage sections for their department.
-    Route::middleware('role:head_department')->group(function () {
+    // Admins, registrars, and department chairs can manage sections.
+    // Keep these routes separate from admin-only course/subject catalog routes.
+    Route::middleware('role:admin,registrar,head_department')->group(function () {
+        Route::get('/registrar/sections', [SubjectSectionController::class, 'registrarSectionIndex']);
         Route::post('/sections',                             [SubjectSectionController::class, 'sectionStore']);
         Route::put('/sections/{id}',                         [SubjectSectionController::class, 'sectionUpdate']);
         Route::delete('/sections/{id}',                      [SubjectSectionController::class, 'sectionDestroy']);
+        Route::post('/sections/{id}/submit',                 [SubjectSectionController::class, 'submitSection']);
+        Route::post('/sections/{id}/review',                 [SubjectSectionController::class, 'reviewSection']);
+        Route::post('/sections/{id}/close',                  [SubjectSectionController::class, 'closeSection']);
+        Route::post('/sections/{id}/reopen',                 [SubjectSectionController::class, 'reopenSection']);
         Route::post('/sections/{id}/subjects',               [SubjectSectionController::class, 'assignSubject']);
         Route::delete('/sections/{id}/subjects/{subjectId}', [SubjectSectionController::class, 'removeSubject']);
         Route::post('/sections/{id}/students',               [SubjectSectionController::class, 'enrollStudent']);
@@ -153,7 +162,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/ai/quick-quiz', [AiStudyController::class, 'quickQuiz']);
 
     // Teacher & Admin
-    Route::middleware('role:admin,faculty')->group(function () {
+    Route::middleware('role:admin,faculty,teacher,head_teacher')->group(function () {
         Route::get('/teacher/dashboard',                 [TeacherController::class, 'dashboard']);
         Route::get('/teacher/classes',                   [TeacherController::class, 'classes']);
         Route::get('/teacher/class/{class}/students',    [TeacherController::class, 'classStudents']);

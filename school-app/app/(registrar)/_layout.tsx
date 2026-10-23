@@ -152,6 +152,10 @@ export default function RegistrarLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen
+        name="course-shift-requests"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
         name="reports"
         options={{ href: null }}
       />
@@ -159,6 +163,8 @@ export default function RegistrarLayout() {
         name="profile"
         options={{ href: null }}
       />
+      <Tabs.Screen name="tuition" options={{ href: null }} />
+      <Tabs.Screen name="grades" options={{ href: null }} />
     </Tabs>
   );
 }

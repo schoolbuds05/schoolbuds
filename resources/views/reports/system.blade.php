@@ -12,7 +12,7 @@
         ['label' => 'Subjects', 'value' => number_format($summary['subjects']), 'tone' => 'violet'],
         ['label' => 'Sections', 'value' => number_format($summary['sections']), 'tone' => 'slate'],
         ['label' => 'Points Issued', 'value' => number_format($summary['points']), 'tone' => 'purple'],
-        ['label' => 'Fees Collected', 'value' => $money($summary['collected_fees']), 'tone' => 'green'],
+        ['label' => 'Fees Paid', 'value' => $money($summary['collected_fees']), 'tone' => 'green'],
         ['label' => 'Fees Receivable', 'value' => $money($summary['unpaid_fees']), 'tone' => 'orange'],
     ];
     if ($isAdmin) {

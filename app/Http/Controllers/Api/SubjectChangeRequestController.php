@@ -108,7 +108,7 @@ class SubjectChangeRequestController extends Controller
 
         return response()->json(
             SubjectChangeRequest::query()
-                ->with(['student:id,name,email', 'subject:id,code,name,units_lec,units_lab', 'section:id,name', 'reviewer:id,name'])
+                ->with(['student:id,name,email', 'subject:id,code,name,units_lec,units_lab', 'section:id,name,course,year_level,school_year,semester', 'reviewer:id,name'])
                 ->when($request->status, fn ($query) => $query->where('status', $request->status))
                 ->latest()
                 ->get()

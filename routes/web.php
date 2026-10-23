@@ -26,6 +26,7 @@ use App\Http\Controllers\Teacher\GradeEntryController;
 use App\Http\Controllers\Teacher\GradeChangeRequestController as TeacherGradeChangeRequestController;
 use App\Http\Controllers\Teacher\AttendanceController as TeacherAttendance;
 use App\Http\Controllers\Api\AssignmentController;
+use App\Http\Controllers\Api\FeeController;
 use App\Http\Controllers\DepartmentChairController;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -108,6 +109,8 @@ Route::get('/dashboard', function () use ($redirectToPortalDashboard) {
 
 Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/fees', [DashboardController::class, 'fees'])->name('fees.index');
+    Route::post('/fees/{fee}/verify-payment', [FeeController::class, 'verifyPayment'])->name('fees.verify-payment');
     Route::get('/students', [StudentManageController::class, 'index'])->name('students.index');
     Route::get('/students/template', [StudentManageController::class, 'template'])->name('students.template');
     Route::get('/students/export', [StudentManageController::class, 'export'])->name('students.export');

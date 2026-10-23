@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Course;
+use App\Models\CourseShiftCreditEvaluation;
 use App\Models\CourseShiftRequest;
 use App\Models\EnrollmentApplication;
 use App\Models\Student;
@@ -77,10 +78,43 @@ class CourseShiftRequestController extends Controller
     {
         return response()->json(
             CourseShiftRequest::query()
-                ->with(['student:id,name,email', 'currentCourse:id,name', 'requestedCourse:id,name', 'reviewer:id,name'])
+                ->with([
+                    'student:id,name,email',
+                    'currentCourse:id,name',
+                    'requestedCourse:id,name',
+                    'reviewer:id,name',
+                    'creditEvaluations.targetSubject:id,code,name',
+                ])
                 ->when($request->filled('status'), fn ($query) => $query->where('status', $request->status))
                 ->latest()
                 ->paginate(25)
+        );
+    }
+
+    public function storeCredit(Request $request, CourseShiftRequest $courseShiftRequest)
+    {
+        $data = $request->validate([
+            'source_subject_code' => ['required', 'string', 'max:50'],
+            'source_subject_name' => ['required', 'string', 'max:255'],
+            'target_subject_id' => ['nullable', 'integer', 'exists:subjects,id'],
+            'decision' => ['required', 'in:credited,not_credited'],
+            'remarks' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if ($data['decision'] === 'credited' && empty($data['target_subject_id'])) {
+            return response()->json(['message' => 'Select the equivalent subject when granting credit.'], 422);
+        }
+
+        CourseShiftCreditEvaluation::create([
+            ...$data,
+            'course_shift_request_id' => $courseShiftRequest->id,
+            'evaluated_by' => $request->user()->id,
+            'evaluated_at' => now(),
+        ]);
+
+        return response()->json(
+            $courseShiftRequest->fresh()->load('creditEvaluations.targetSubject:id,code,name'),
+            201
         );
     }
 

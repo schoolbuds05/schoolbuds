@@ -16,7 +16,11 @@ export default function StudentHomeReference({
   const upcomingClass = isClassNow
     ? findUpcomingClass(data?.today_classes, localCurrentClass || data?.current_class)
     : null;
-  const grades = data?.grades?.['4'] || data?.grades?.['1'] || [];
+  const grades = Object.values(data?.grades || {}).flat().sort((left, right) => {
+    const leftDate = new Date(left.updated_at || left.created_at || 0).getTime();
+    const rightDate = new Date(right.updated_at || right.created_at || 0).getTime();
+    return rightDate - leftDate;
+  });
   const unread = notifications?.unread_count || 0;
   const name = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || user?.name || 'Student';
   const profilePhotoUrl = resolveApiAssetUrl(user?.profile_photo_url);

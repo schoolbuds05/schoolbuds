@@ -59,6 +59,7 @@ class EnrollmentController extends Controller
         if ($request->filled('student_type') && $request->student_type === 'old_student' && $request->filled('id_no')) {
             $existingApplication = EnrollmentApplication::where('id_no', $request->id_no)
                 ->where('status', 'approved')
+                ->where('user_id', $studentUser->id)
                 ->latest()
                 ->first();
         }
@@ -133,10 +134,14 @@ class EnrollmentController extends Controller
             // id_no must match an approved application
             $rules['id_no'] = [
                 'required', 'string', 'max:50',
-                function ($attribute, $value, $fail) {
+                function ($attribute, $value, $fail) use ($studentUser) {
                     $exists = EnrollmentApplication::where('id_no', $value)
                         ->where('status', 'approved')
-                        ->exists();
+                        ->where('user_id', $studentUser->id)
+                        ->exists()
+                        || Student::where('student_id', $value)
+                            ->where('user_id', $studentUser->id)
+                            ->exists();
                     if (!$exists) {
                         $fail('No approved student record found with that ID.');
                     }
@@ -315,6 +320,8 @@ class EnrollmentController extends Controller
                 'school_year', 'semester',
                 'status', 'remarks', 'reviewed_at', 'created_at',
             ])
+            ->latest('created_at')
+            ->latest('id')
             ->first();
 
         if (!$app) {
@@ -352,33 +359,29 @@ class EnrollmentController extends Controller
     }
 
     // GET /api/enrollment/lookup?id_no=xxx
-    // Looks up a student by student_id from the students table first,
-    // then falls back to enrollment_applications for extra details.
+    // Returns saved enrollment details only to the authenticated owner of an exact student ID.
     public function lookup(Request $request)
     {
         $request->validate(['id_no' => 'required|string|max:50']);
 
         $idNo = trim($request->id_no);
+        $user = $request->user();
+        abort_unless($user && ($user->role === User::ROLE_STUDENT || $user->hasRole(User::ROLE_STUDENT)), 403);
 
-        // 1. Search students table by student_id (exact match)
-        $student = Student::where('student_id', $idNo)->first();
+        // Stored personal data is only available to the authenticated student who owns this exact ID.
+        $student = Student::where('student_id', $idNo)
+            ->where('user_id', $user->id)
+            ->first();
 
         // 2. Partial match — user typed just the number e.g. "14266"
-        if (!$student) {
-            $student = Student::where('student_id', 'like', '%' . $idNo)->first();
-        }
-
-        // 3. Match by email
-        if (!$student && filter_var($idNo, FILTER_VALIDATE_EMAIL)) {
-            $student = Student::where('email', $idNo)->first();
-        }
+        // No suffix or email lookup: IDs must match exactly.
 
         if (!$student) {
             return response()->json(['message' => 'No student found with that ID.'], 404);
         }
 
         // Pull extra details from their most recent approved application
-        $app = EnrollmentApplication::where('user_id', $student->user_id)
+        $app = EnrollmentApplication::where('user_id', $user->id)
             ->where('status', 'approved')
             ->latest()
             ->first();
@@ -448,7 +451,19 @@ class EnrollmentController extends Controller
     public function show(Request $request, $id)
     {
         $this->authorizeRegistrar($request);
-        return response()->json(EnrollmentApplication::findOrFail($id));
+        $application = EnrollmentApplication::findOrFail($id);
+        $subjectIds = collect($application->subject_ids ?? [])
+            ->map(fn ($subjectId) => (int) $subjectId)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $application->setAttribute('subjects', Subject::query()
+            ->whereIn('id', $subjectIds)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'units_lec', 'units_lab']));
+
+        return response()->json($application);
     }
 
     // POST /api/registrar/enrollments/{id}/approve

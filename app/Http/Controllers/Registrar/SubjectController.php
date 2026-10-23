@@ -45,6 +45,19 @@ class SubjectController extends Controller
                 }
 
                 $courseValue = (string) $request->course;
+                if (in_array($courseValue, ['__general__', '__general_shs__'], true)) {
+                    $programType = $courseValue === '__general_shs__' ? 'shs' : 'college';
+                    $scopeColumn = $programType === 'shs' ? 'strand' : 'course';
+
+                    $query->where('program_type', $programType)
+                        ->where(function ($scopeQuery) use ($scopeColumn) {
+                            $scopeQuery->whereNull($scopeColumn)
+                                ->orWhere($scopeColumn, '');
+                        });
+
+                    return;
+                }
+
                 $query->where(function ($courseQuery) use ($courseValue) {
                     $courseQuery->where('course', $courseValue)
                         ->orWhere('strand', $courseValue);
@@ -52,9 +65,23 @@ class SubjectController extends Controller
             })
             ->when($request->filled('semester'), fn ($query) => $query->where('semester', $request->semester))
             ->when($request->filled('year_level'), fn ($query) => $query->where('year_level', $request->year_level))
-            ->when($request->search, fn ($query) => $query->where(fn ($inner) => $inner
-                ->where('code', 'like', "%{$request->search}%")
-                ->orWhere('name', 'like', "%{$request->search}%")))
+            ->when($request->search, function ($query) use ($request) {
+                $search = trim((string) $request->search);
+                $matchingCourses = Course::query()
+                    ->where(function ($courseQuery) use ($search) {
+                        $courseQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('acronym', 'like', "%{$search}%");
+                    });
+
+                $query->where(function ($searchQuery) use ($search, $matchingCourses) {
+                    $searchQuery->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhere('course', 'like', "%{$search}%")
+                        ->orWhere('strand', 'like', "%{$search}%")
+                        ->orWhereIn('course', (clone $matchingCourses)->select('name'))
+                        ->orWhereIn('course', (clone $matchingCourses)->select('acronym'));
+                });
+            })
             ->orderBy('code')
             ->paginate(20)
             ->withQueryString();

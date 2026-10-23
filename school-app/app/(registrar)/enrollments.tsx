@@ -5,31 +5,29 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput,
   TouchableOpacity, ActivityIndicator, Alert, Modal,
-  RefreshControl, Platform, StatusBar,
+  RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../src/api';
-import HeaderGradient from '../components/ui/HeaderGradient';
-import SearchBar from '../components/ui/SearchBar';
+import { useTheme } from '../../src/theme-context';
 
 const C = {
-  blue:        '#378ADD',
-  blueLight:   '#E6F1FB',
+  brand:       '#B51F3B',
+  brandLight:  '#FBE5E9',
   green:       '#1D9E75',
   greenLight:  '#E1F5EE',
-  danger:      '#E24B4A',
-  dangerLight: '#FCEBEB',
-  warning:     '#BA7517',
-  warningLight:'#FFF3CD',
-  bg:          '#F4F6F9',
+  danger:      '#B51F3B',
+  dangerLight: '#FBE5E9',
+  warning:     '#9A6900',
+  warningLight:'#F9EAC4',
+  bg:          '#FBF8F5',
   card:        '#FFFFFF',
-  border:      '#EFEFEF',
-  text:        '#1A1A2E',
-  sub:         '#6B7280',
-  muted:       '#B0B7C3',
+  border:      '#F0E8E3',
+  text:        '#2A171B',
+  sub:         '#735D62',
+  muted:       '#89777B',
 };
-
-const HEADER_TOP = Platform.OS === 'android'
-  ? (StatusBar.currentHeight ?? 24) + 10 : 52;
 
 const STATUS_CONFIG = {
   pending:  { label: 'Pending',  bg: C.warningLight, color: C.warning, dot: '🟡' },
@@ -37,20 +35,17 @@ const STATUS_CONFIG = {
   rejected: { label: 'Rejected', bg: C.dangerLight,  color: C.danger,  dot: '🔴' },
 };
 
-const FILTER_TABS = [
-  { key: 'all',      label: 'All'      },
-  { key: 'pending',  label: 'Pending'  },
-  { key: 'approved', label: 'Approved' },
-  { key: 'rejected', label: 'Rejected' },
-];
-
 export default function RegistrarEnrollments() {
+  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const [applications, setApplications] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [refreshing, setRefreshing]     = useState(false);
   const [filter, setFilter]             = useState('all');
+  const [showFilters, setShowFilters]   = useState(false);
   const [search, setSearch]             = useState('');
   const [selected, setSelected]         = useState(null);
+  const [showSubjectCount, setShowSubjectCount] = useState(false);
   const [showAction, setShowAction]     = useState(false);
   const [actionType, setActionType]     = useState('');
   const [remarks, setRemarks]           = useState('');
@@ -58,20 +53,17 @@ export default function RegistrarEnrollments() {
 
   const fetchApplications = useCallback(async () => {
     try {
-      const params = {};
-      if (filter !== 'all') params.status = filter;
-      if (search.trim())    params.search  = search.trim();
-      const res = await api.get('/registrar/enrollments', { params });
-      setApplications(res.data);
+      const res = await api.get('/registrar/enrollments');
+      setApplications(Array.isArray(res.data) ? res.data : res.data?.data ?? []);
     } catch (e) {
       console.log('Enrollments fetch error:', e.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter, search]);
+  }, []);
 
-  useEffect(() => { fetchApplications(); }, [filter]);
+  useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
   const counts = {
     all:      applications.length,
@@ -80,7 +72,15 @@ export default function RegistrarEnrollments() {
     rejected: applications.filter(a => a.status === 'rejected').length,
   };
 
+  const visibleApplications = applications.filter((application) => {
+    const matchesFilter = filter === 'all' || application.status === filter;
+    const query = search.trim().toLowerCase();
+    const fullName = `${application.first_name ?? ''} ${application.middle_name ?? ''} ${application.last_name ?? ''}`.toLowerCase();
+    return matchesFilter && (!query || fullName.includes(query) || String(application.email ?? '').toLowerCase().includes(query));
+  });
+
   const openDetail = async (app) => {
+    setShowSubjectCount(false);
     try {
       const res = await api.get(`/registrar/enrollments/${app.id}`);
       setSelected(res.data);
@@ -130,80 +130,95 @@ export default function RegistrarEnrollments() {
     return `${app.course} (${app.year_level}${['st','nd','rd','th'][app.year_level - 1] ?? 'th'} Year)`;
   };
 
-  const InfoRow = ({ label, value }) => value ? (
-    <View style={s.infoRow}>
-      <Text style={s.infoLabel}>{label}</Text>
-      <Text style={s.infoValue}>{value}</Text>
+  const InfoRow = ({ label, value }) => value !== null && value !== undefined && value !== '' ? (
+    <View style={[s.infoRow, { borderBottomColor: theme.border }]}>
+      <Text style={[s.infoLabel, { color: theme.textSub }]}>{label}</Text>
+      <Text style={[s.infoValue, { color: theme.text }]}>{String(value)}</Text>
     </View>
   ) : null;
 
-  const SectionTitle = ({ children }) => (
-    <Text style={s.sectionTitle}>{children}</Text>
+  const SectionTitle = ({ children, icon }) => (
+    <View style={s.sectionTitleRow}>
+      <View style={[s.sectionIcon, { backgroundColor: theme.primaryLight }]}><Ionicons name={icon} size={15} color={theme.primary} /></View>
+      <Text style={[s.sectionTitle, { color: theme.text }]}>{children}</Text>
+    </View>
   );
+  const subjectCount = selected?.subjects?.length || selected?.subject_ids?.length || 0;
 
   return (
-    <View style={s.container}>
-      <HeaderGradient
-        title="Applications"
-        subtitle="Review and manage student enrollment requests"
-        initials="EN"
-        stats={[
-          { label: 'Pending', value: counts.pending, accent: '#FBBF24' },
-          { label: 'Approved', value: counts.approved, accent: '#34D399' },
-          { label: 'Rejected', value: counts.rejected, accent: '#FCA5A5' },
-        ]}
-      >
-        <SearchBar
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search by name or email..."
-          onSubmitEditing={fetchApplications}
-        />
-      </HeaderGradient>
-
-      {/* Summary bar */}
-      {!loading && (
-        <View style={s.summaryBar}>
-          {FILTER_TABS.slice(1).map(t => (
-            <View key={t.key} style={s.summaryItem}>
-              <Text style={[s.summaryCount, {
-                color: t.key === 'pending'  ? C.warning
-                     : t.key === 'approved' ? C.green
-                     : C.danger
-              }]}>
-                {counts[t.key]}
-              </Text>
-              <Text style={s.summaryLabel}>{t.label}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Filter tabs */}
-      <View style={s.tabWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabScroll}>
-          {FILTER_TABS.map(tab => {
-            const active = filter === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[s.tab, active && s.tabActive]}
-                onPress={() => setFilter(tab.key)}
-              >
-                <Text style={[s.tabText, active && s.tabTextActive]}>
-                  {tab.label}
-                  {tab.key !== 'all' && ` (${counts[tab.key]})`}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+    <View style={[s.container, { backgroundColor: theme.bg }]}>
+      <View style={[s.heading, { paddingTop: 12 + insets.top }]}>
+        <Text style={s.title}>Applications</Text>
+        <Text style={s.subtitle}>Review student enrollment requests</Text>
       </View>
+
+      <View style={s.searchAndFilter}>
+        <View style={[s.searchBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <Ionicons name="search-outline" size={17} color={theme.textSub} />
+          <TextInput
+            style={[s.searchInput, { color: theme.text }]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by name or email"
+            placeholderTextColor={theme.textMuted}
+            returnKeyType="search"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={17} color={theme.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[s.filterToggleBtn, { backgroundColor: theme.card, borderColor: theme.primary }, filter !== 'all' && { backgroundColor: theme.primaryLight }]}
+          onPress={() => setShowFilters(true)}
+        >
+          <Ionicons name="options-outline" size={15} color={theme.primary} />
+          <Text style={[s.filterToggleText, { color: theme.primary }]}>Filter</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
+        <View style={s.filterBackdrop}>
+          <View style={[s.filterSheet, { backgroundColor: theme.bg }]}>
+            <View style={[s.filterSheetHeader, { borderBottomColor: theme.border }]}>
+              <View>
+                <Text style={[s.filterSheetTitle, { color: theme.text }]}>Filter applications</Text>
+                <Text style={[s.filterSheetSubtitle, { color: theme.textSub }]}>Choose application status</Text>
+              </View>
+              <TouchableOpacity style={[s.filterClose, { backgroundColor: theme.card }]} onPress={() => setShowFilters(false)} accessibilityLabel="Close filters">
+                <Ionicons name="close" size={19} color={theme.textSub} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[s.filterLabel, { color: theme.textSub }]}>Status</Text>
+            <View style={s.filterOptions}>
+              {[
+                { key: 'all', label: 'All', count: counts.all },
+                { key: 'pending', label: 'Pending', count: counts.pending },
+                { key: 'approved', label: 'Approved', count: counts.approved },
+                { key: 'rejected', label: 'Rejected', count: counts.rejected },
+              ].map(option => (
+                <TouchableOpacity key={option.key} style={[s.filterOption, { backgroundColor: theme.card, borderColor: theme.border }, filter === option.key && { backgroundColor: theme.primaryLight, borderColor: theme.primary }]} onPress={() => setFilter(option.key)}>
+                  <Text style={[s.filterOptionText, { color: theme.textSub }, filter === option.key && { color: theme.primary, fontWeight: '800' }]}>{option.label} {option.count}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={[s.filterActions, { borderTopColor: theme.border }]}>
+              <TouchableOpacity style={[s.filterReset, { backgroundColor: theme.card, borderColor: theme.primary }]} onPress={() => setFilter('all')}>
+                <Text style={[s.filterResetText, { color: theme.primary }]}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.filterDone, { backgroundColor: theme.primary }]} onPress={() => setShowFilters(false)}>
+                <Text style={s.filterDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* List */}
       {loading ? (
         <View style={s.center}>
-          <ActivityIndicator size="large" color={C.blue} />
+          <ActivityIndicator size="large" color={C.brand} />
         </View>
       ) : (
         <ScrollView
@@ -213,7 +228,7 @@ export default function RegistrarEnrollments() {
               onRefresh={() => { setRefreshing(true); fetchApplications(); }} />
           }
         >
-          {applications.length === 0 ? (
+          {visibleApplications.length === 0 ? (
             <View style={s.emptyWrap}>
               <Text style={s.emptyIcon}>📋</Text>
               <Text style={s.emptyTitle}>No applications found</Text>
@@ -222,20 +237,20 @@ export default function RegistrarEnrollments() {
               </Text>
             </View>
           ) : (
-            applications.map((app, i) => {
+            visibleApplications.map((app) => {
               const cfg = STATUS_CONFIG[app.status] ?? STATUS_CONFIG.pending;
               return (
-                <TouchableOpacity key={i} style={s.appCard} onPress={() => openDetail(app)} activeOpacity={0.75}>
+                <TouchableOpacity key={app.id} style={s.appCard} onPress={() => openDetail(app)} activeOpacity={0.75}>
                   <View style={s.appCardTop}>
                     <View style={s.avatar}>
                       <Text style={s.avatarText}>
                         {app.first_name?.[0]}{app.last_name?.[0]}
                       </Text>
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={s.appCopy}>
                       <Text style={s.appName}>{app.first_name} {app.last_name}</Text>
                       <Text style={s.appEmail} numberOfLines={1}>{app.email}</Text>
-                      <Text style={s.appProgram} numberOfLines={1}>{programLabel(app)}</Text>
+                      <Text style={s.appProgram} numberOfLines={2}>{programLabel(app)}</Text>
                     </View>
                     <View style={[s.statusBadge, { backgroundColor: cfg.bg }]}>
                       <Text style={[s.statusBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
@@ -273,35 +288,44 @@ export default function RegistrarEnrollments() {
       )}
 
       {/* ── Detail Modal ── */}
-      <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSelected(null)}>
         {selected && (
-          <View style={s.modal}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Application Detail</Text>
-              <TouchableOpacity onPress={() => setSelected(null)} style={s.modalCloseBtn}>
-                <Text style={s.modalCloseText}>✕</Text>
+          <View style={[s.modal, { backgroundColor: theme.bg }]}>
+            <View style={[s.modalHeader, { paddingTop: 16 + insets.top, backgroundColor: theme.card, borderBottomColor: theme.border }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.modalTitle, { color: theme.text }]}>Application</Text>
+                <Text style={[s.modalSubtitle, { color: theme.textSub }]}>Enrollment request details</Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelected(null)} style={[s.modalCloseBtn, { backgroundColor: theme.bg }]} accessibilityLabel="Close application details">
+                <Ionicons name="close" size={21} color={theme.textSub} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={s.modalBody}>
-              {/* Status banner */}
+            <ScrollView contentContainerStyle={[s.modalBody, { paddingBottom: selected.status === 'pending' ? 24 : 34 }]}>
+              {/* Applicant summary */}
               {(() => {
                 const cfg = STATUS_CONFIG[selected.status] ?? STATUS_CONFIG.pending;
+                const initials = `${selected.first_name?.[0] ?? ''}${selected.last_name?.[0] ?? ''}`.toUpperCase();
                 return (
-                  <View style={[s.detailStatusBanner, { backgroundColor: cfg.bg, borderColor: cfg.color }]}>
-                    <Text style={[s.detailStatusLabel, { color: cfg.color }]}>
-                      {cfg.dot}  {cfg.label}
-                    </Text>
+                  <View style={[s.applicantSummary, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <View style={[s.summaryAvatar, { backgroundColor: theme.primaryLight }]}>
+                      <Text style={[s.summaryInitials, { color: theme.primary }]}>{initials || 'S'}</Text>
+                    </View>
+                    <View style={s.summaryCopy}>
+                      <Text style={[s.summaryName, { color: theme.text }]} numberOfLines={1}>{`${selected.first_name ?? ''} ${selected.middle_name ?? ''} ${selected.last_name ?? ''}`.trim()}</Text>
+                      <Text style={[s.summaryEmail, { color: theme.textSub }]} numberOfLines={1}>{selected.email}</Text>
+                    </View>
+                    <View style={[s.detailStatusBadge, { backgroundColor: cfg.bg }]}>
+                      <Text style={[s.detailStatusLabel, { color: cfg.color }]}>{cfg.label}</Text>
+                    </View>
                   </View>
                 );
               })()}
 
               {/* ── Personal Information ── */}
-              <SectionTitle>👤 Personal Information</SectionTitle>
-              <View style={s.infoCard}>
-                <InfoRow label="Full Name"     value={`${selected.first_name ?? ''} ${selected.middle_name ?? ''} ${selected.last_name ?? ''}`.trim()} />
-                <InfoRow label="Email"         value={selected.email} />
-                <InfoRow label="Birthdate"     value={selected.birthdate} />
+              <SectionTitle icon="person-outline">Personal information</SectionTitle>
+              <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <InfoRow label="Birthdate"     value={formatBirthdate(selected.birthdate)} />
                 <InfoRow label="Gender"        value={selected.gender} />
                 <InfoRow label="Religion"      value={selected.religion} />
                 <InfoRow label="Civil Status"  value={selected.civil_status} />
@@ -312,8 +336,8 @@ export default function RegistrarEnrollments() {
               </View>
 
               {/* ── Classification ── */}
-              <SectionTitle>🎓 Student Classification</SectionTitle>
-              <View style={s.infoCard}>
+              <SectionTitle icon="school-outline">Student classification</SectionTitle>
+              <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <InfoRow label="Student Type"    value={selected.student_type?.replace('_', ' ')} />
                 <InfoRow label="Academic Status" value={selected.academic_status} />
                 <InfoRow label="Student ID"      value={selected.id_no} />
@@ -326,8 +350,8 @@ export default function RegistrarEnrollments() {
               </View>
 
               {/* ── Program ── */}
-              <SectionTitle>📚 Academic Program</SectionTitle>
-              <View style={s.infoCard}>
+              <SectionTitle icon="book-outline">Academic program</SectionTitle>
+              <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <InfoRow label="Program Type" value={selected.program_type === 'shs' ? 'Senior High School' : 'College'} />
                 {selected.program_type === 'shs' && (
                   <>
@@ -342,14 +366,14 @@ export default function RegistrarEnrollments() {
                   </>
                 )}
                 <InfoRow label="School Year" value={selected.school_year} />
-                <InfoRow label="Semester"    value={`${selected.semester} Semester`} />
+                <InfoRow label="Semester"    value={selected.semester ? `${selected.semester} Semester` : null} />
               </View>
 
               {/* ── Previous School ── */}
               {(selected.prev_school || selected.prev_school_address) && (
                 <>
-                  <SectionTitle>🏫 Previous School</SectionTitle>
-                  <View style={s.infoCard}>
+                  <SectionTitle icon="business-outline">Previous school</SectionTitle>
+                  <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                     <InfoRow label="School Name"    value={selected.prev_school} />
                     <InfoRow label="School Address" value={selected.prev_school_address} />
                   </View>
@@ -359,8 +383,8 @@ export default function RegistrarEnrollments() {
               {/* ── Parents / Guardian ── */}
               {(selected.father_name || selected.mother_name || selected.parent_email) && (
                 <>
-                  <SectionTitle>👨‍👩‍👧 Parents / Guardian</SectionTitle>
-                  <View style={s.infoCard}>
+                  <SectionTitle icon="people-outline">Parents / guardian</SectionTitle>
+                  <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                     <InfoRow label="Father's Name"       value={selected.father_name} />
                     <InfoRow label="Father's Occupation" value={selected.father_occupation} />
                     <InfoRow label="Mother's Name"       value={selected.mother_name} />
@@ -371,39 +395,59 @@ export default function RegistrarEnrollments() {
               )}
 
               {/* ── Subjects ── */}
-              {Array.isArray(selected.subject_ids) && selected.subject_ids.length > 0 && (
+              {subjectCount > 0 && (
                 <>
-                  <SectionTitle>📋 Enrolled Subjects</SectionTitle>
-                  <View style={s.infoCard}>
-                    <InfoRow label="Total Subjects" value={String(selected.subject_ids.length)} />
-                  </View>
+                  <TouchableOpacity
+                    style={[s.subjectCountToggle, { backgroundColor: theme.card, borderColor: theme.border }]}
+                    onPress={() => setShowSubjectCount(value => !value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showSubjectCount }}
+                  >
+                    <View style={s.subjectCountHeading}>
+                      <View style={[s.sectionIcon, { backgroundColor: theme.primaryLight }]}><Ionicons name="library-outline" size={15} color={theme.primary} /></View>
+                      <View>
+                        <Text style={[s.subjectCountTitle, { color: theme.text }]}>Enrolled subjects</Text>
+                        <Text style={[s.subjectCountSubtitle, { color: theme.textSub }]}>{subjectCount} subject{subjectCount === 1 ? '' : 's'}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name={showSubjectCount ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textSub} />
+                  </TouchableOpacity>
+                  {showSubjectCount && <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border, marginTop: 8 }]}>
+                    {selected.subjects?.length ? selected.subjects.map(subject => (
+                      <View key={subject.id} style={[s.subjectDetailRow, { borderBottomColor: theme.border }]}>
+                        <View style={[s.subjectCodeTag, { backgroundColor: theme.primaryLight }]}>
+                          <Text style={[s.subjectCodeText, { color: theme.primary }]}>{subject.code || 'Subject'}</Text>
+                        </View>
+                        <View style={s.subjectDetailCopy}>
+                          <Text style={[s.subjectDetailName, { color: theme.text }]}>{subject.name}</Text>
+                          <Text style={[s.subjectCountSubtitle, { color: theme.textSub }]}>{Number(subject.units_lec || 0) + Number(subject.units_lab || 0)} units</Text>
+                        </View>
+                      </View>
+                    )) : <Text style={[s.subjectUnavailable, { color: theme.textSub }]}>Subject details are unavailable for this application.</Text>}
+                  </View>}
                 </>
               )}
 
               {/* ── Remarks ── */}
               {selected.remarks && (
                 <>
-                  <SectionTitle>{"💬 Registrar's Remarks"}</SectionTitle>
-                  <View style={s.infoCard}>
-                    <Text style={s.remarksText}>{selected.remarks}</Text>
+                  <SectionTitle icon="chatbubble-ellipses-outline">Registrar's remarks</SectionTitle>
+                  <View style={[s.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Text style={[s.remarksText, { color: theme.text }]}>{selected.remarks}</Text>
                   </View>
                 </>
               )}
 
               {/* Action buttons — only for pending */}
-              {selected.status === 'pending' && (
-                <View style={s.actionRow}>
-                  <TouchableOpacity style={s.approveBtn} onPress={() => openAction('approve')}>
-                    <Text style={s.approveBtnText}>✅  Approve</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.rejectBtn} onPress={() => openAction('reject')}>
-                    <Text style={s.rejectBtnText}>❌  Reject</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              <View style={{ height: 40 }} />
             </ScrollView>
+            {selected.status === 'pending' && <View style={[s.detailFooter, { backgroundColor: theme.card, borderTopColor: theme.border, paddingBottom: 12 + insets.bottom }]}>
+              <TouchableOpacity style={[s.rejectBtn, { backgroundColor: theme.card, borderColor: theme.danger }]} onPress={() => openAction('reject')}>
+                <Text style={[s.rejectBtnText, { color: theme.danger }]}>Reject</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.approveBtn, { backgroundColor: theme.primary }]} onPress={() => openAction('approve')}>
+                <Text style={s.approveBtnText}>Approve</Text>
+              </TouchableOpacity>
+            </View>}
           </View>
         )}
       </Modal>
@@ -468,130 +512,142 @@ export default function RegistrarEnrollments() {
   );
 }
 
+function formatBirthdate(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
+    return date.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  header: {
-    backgroundColor: C.blue,
-    paddingTop: HEADER_TOP,
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-  },
-  headerTop:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  title:       { color: '#fff', fontSize: 22, fontWeight: '700' },
-  subtitle:    { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
+  heading: { paddingHorizontal: 16, paddingBottom: 2 },
+  title:       { color: C.text, fontSize: 23, fontWeight: '700', fontFamily: 'serif' },
+  subtitle:    { color: C.sub, fontSize: 11, marginTop: 2 },
   searchBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, gap: 8,
-  },
-  searchIcon:  { fontSize: 14 },
-  searchInput: { flex: 1, color: '#fff', fontSize: 13 },
-
-  summaryBar: {
-    flexDirection: 'row',
+    flex: 1, flexDirection: 'row', alignItems: 'center',
     backgroundColor: C.card,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-    paddingVertical: 10,
+    borderRadius: 13, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 12, height: 42, gap: 8,
   },
-  summaryItem:  { flex: 1, alignItems: 'center' },
-  summaryCount: { fontSize: 20, fontWeight: '800' },
-  summaryLabel: { fontSize: 11, color: C.muted, marginTop: 2 },
+  searchInput: { flex: 1, color: C.text, fontSize: 12, paddingVertical: 0 },
+  searchAndFilter: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 8, gap: 7 },
+  filterToggleBtn: { height: 42, paddingHorizontal: 10, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1 },
+  filterToggleText: { fontSize: 10, fontWeight: '600' },
+  filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(35,20,24,0.38)' },
+  filterSheet: { maxHeight: '82%', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 14 },
+  filterSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 15, borderBottomWidth: 1 },
+  filterSheetTitle: { fontSize: 17, fontWeight: '800' },
+  filterSheetSubtitle: { fontSize: 11, marginTop: 3 },
+  filterClose: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  filterLabel: { fontSize: 11, fontWeight: '800', marginTop: 16, marginBottom: 8 },
+  filterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  filterOption: { minHeight: 36, paddingHorizontal: 13, borderWidth: 1, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  filterOptionText: { fontSize: 11, fontWeight: '600' },
+  filterActions: { flexDirection: 'row', gap: 9, paddingTop: 12, borderTopWidth: 1 },
+  filterReset: { flex: 1, height: 43, borderRadius: 11, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  filterResetText: { fontSize: 12, fontWeight: '700' },
+  filterDone: { flex: 1.5, height: 43, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  filterDoneText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 
-  tabWrapper: { backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border },
-  tabScroll:  { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  tab: {
-    paddingHorizontal: 16, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: C.bg,
-    borderWidth: 1, borderColor: C.border,
-  },
-  tabActive:     { backgroundColor: C.blueLight, borderColor: C.blue },
-  tabText:       { fontSize: 12, color: C.sub, fontWeight: '500' },
-  tabTextActive: { color: C.blue, fontWeight: '700' },
-
-  list: { padding: 12, gap: 10, paddingBottom: 24 },
+  list: { paddingHorizontal: 16, paddingTop: 2, gap: 10, paddingBottom: 24 },
   appCard: {
     backgroundColor: C.card,
     borderRadius: 14, borderWidth: 1, borderColor: C.border,
-    padding: 14,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 }, elevation: 2,
+    padding: 12,
   },
-  appCardTop:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10 },
+  appCardTop:    { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 8 },
   avatar: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: C.blueLight,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.brandLight,
     justifyContent: 'center', alignItems: 'center',
   },
-  avatarText:  { fontSize: 15, fontWeight: '700', color: C.blue },
-  appName:     { fontSize: 14, fontWeight: '700', color: C.text },
-  appEmail:    { fontSize: 12, color: C.muted, marginTop: 1 },
-  appProgram:  { fontSize: 12, color: C.sub, marginTop: 2 },
-  statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start' },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+  avatarText:  { fontSize: 12, fontWeight: '700', color: C.brand },
+  appCopy:     { flex: 1, minWidth: 0 },
+  appName:     { fontSize: 12, fontWeight: '700', color: C.text },
+  appEmail:    { fontSize: 10, color: C.sub, marginTop: 1 },
+  appProgram:  { fontSize: 10, color: C.text, marginTop: 2 },
+  statusBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
+  statusBadgeText: { fontSize: 9, fontWeight: '700' },
 
-  appCardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  appDate:       { fontSize: 11, color: C.muted },
-  quickActions:  { flexDirection: 'row', gap: 8 },
+  appCardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 6 },
+  appDate:       { flex: 1, fontSize: 9, color: C.sub },
+  quickActions:  { flexDirection: 'row', gap: 6 },
   quickApprove: {
-    backgroundColor: C.greenLight, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: C.green,
+    backgroundColor: C.brand, borderRadius: 9,
+    paddingHorizontal: 12, paddingVertical: 8,
   },
-  quickApproveText: { fontSize: 12, color: C.green, fontWeight: '600' },
+  quickApproveText: { fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
   quickReject: {
-    backgroundColor: C.dangerLight, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: C.danger,
+    backgroundColor: C.card, borderRadius: 9,
+    paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: C.brand,
   },
-  quickRejectText: { fontSize: 12, color: C.danger, fontWeight: '600' },
+  quickRejectText: { fontSize: 10, color: C.brand, fontWeight: '700' },
 
   emptyWrap:  { alignItems: 'center', paddingVertical: 60 },
   emptyIcon:  { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: C.text },
   emptySub:   { fontSize: 13, color: C.muted, marginTop: 4 },
 
-  modal:       { flex: 1, backgroundColor: C.card },
+  modal:       { flex: 1, backgroundColor: C.bg },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 16, paddingTop: 52,
+    paddingHorizontal: 18, paddingBottom: 13,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  modalTitle:     { fontSize: 18, fontWeight: '700', color: C.text },
-  modalCloseBtn:  { padding: 4 },
-  modalCloseText: { fontSize: 18, color: C.muted },
-  modalBody:      { padding: 16 },
+  modalTitle:     { fontSize: 20, fontWeight: '800', color: C.text },
+  modalSubtitle:  { fontSize: 12, marginTop: 2 },
+  modalCloseBtn:  { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  modalBody:      { padding: 16, paddingBottom: 28 },
 
-  detailStatusBanner: {
-    borderRadius: 12, borderWidth: 1.5,
-    padding: 12, marginBottom: 16,
-    alignItems: 'center',
-  },
-  detailStatusLabel: { fontSize: 15, fontWeight: '700' },
+  applicantSummary: { flexDirection: 'row', alignItems: 'center', gap: 11, borderRadius: 15, borderWidth: 1, padding: 13, marginBottom: 18 },
+  summaryAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  summaryInitials: { fontSize: 14, fontWeight: '800' },
+  summaryCopy: { flex: 1, minWidth: 0 },
+  summaryName: { fontSize: 14, fontWeight: '800' },
+  summaryEmail: { fontSize: 11, marginTop: 3 },
+  detailStatusBadge: { borderRadius: 99, paddingHorizontal: 10, paddingVertical: 6 },
+  detailStatusLabel: { fontSize: 10, fontWeight: '800' },
 
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7, marginTop: 3 },
+  sectionIcon: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   sectionTitle: {
-    fontSize: 13, fontWeight: '700', color: C.sub,
-    marginBottom: 8, marginTop: 4,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: 13, fontWeight: '800', color: C.text,
   },
+  subjectCountToggle: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, marginTop: 3 },
+  subjectCountHeading: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  subjectCountTitle: { fontSize: 12, fontWeight: '800' },
+  subjectCountSubtitle: { fontSize: 10, marginTop: 2 },
+  subjectDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1 },
+  subjectCodeTag: { minWidth: 58, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 9, alignItems: 'center' },
+  subjectCodeText: { fontSize: 9, fontWeight: '800' },
+  subjectDetailCopy: { flex: 1 },
+  subjectDetailName: { fontSize: 11, fontWeight: '700' },
+  subjectUnavailable: { fontSize: 11, paddingVertical: 12 },
   infoCard: {
-    backgroundColor: C.bg, borderRadius: 12,
+    backgroundColor: C.card, borderRadius: 14,
     borderWidth: 1, borderColor: C.border,
-    paddingHorizontal: 14, marginBottom: 16,
+    paddingHorizontal: 12, marginBottom: 14,
   },
   infoRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+    paddingVertical: 9,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  infoLabel: { fontSize: 13, color: C.sub, flex: 1 },
-  infoValue: { fontSize: 13, color: C.text, fontWeight: '600', maxWidth: '55%', textAlign: 'right' },
-  remarksText: { fontSize: 13, color: C.text, lineHeight: 20, paddingVertical: 10 },
+  infoLabel: { fontSize: 11, color: C.sub, flex: 1 },
+  infoValue: { fontSize: 11, color: C.text, fontWeight: '700', flex: 1.2, textAlign: 'right', lineHeight: 16 },
+  remarksText: { fontSize: 13, color: C.text, lineHeight: 20, paddingVertical: 12 },
 
-  actionRow:     { flexDirection: 'row', gap: 10, marginTop: 8 },
-  approveBtn:    { flex: 1, backgroundColor: C.green,  borderRadius: 12, padding: 15, alignItems: 'center' },
-  approveBtnText:{ color: '#fff', fontWeight: '700', fontSize: 14 },
-  rejectBtn:     { flex: 1, backgroundColor: C.danger, borderRadius: 12, padding: 15, alignItems: 'center' },
-  rejectBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  detailFooter: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1 },
+  approveBtn:    { flex: 1, backgroundColor: C.green, borderRadius: 12, padding: 14, alignItems: 'center' },
+  approveBtnText:{ color: '#fff', fontWeight: '800', fontSize: 13 },
+  rejectBtn:     { flex: 1, backgroundColor: C.danger, borderRadius: 12, borderWidth: 1, padding: 14, alignItems: 'center' },
+  rejectBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 
   overlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',

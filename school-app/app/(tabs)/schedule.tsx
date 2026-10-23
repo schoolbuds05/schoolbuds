@@ -20,22 +20,35 @@ function daysForSubject(value) {
   });
   return [...new Set(values)];
 }
+function parseTimeMinutes(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?\s*(am|pm)?$/i);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const second = Number(match[3] || 0);
+  const suffix = match[4]?.toLowerCase();
+  if (minute > 59 || second > 59) return null;
+  if (suffix) {
+    if (hour < 1 || hour > 12) return null;
+    if (suffix === 'pm' && hour < 12) hour += 12;
+    if (suffix === 'am' && hour === 12) hour = 0;
+  } else if (hour > 23) {
+    return null;
+  }
+  return hour * 60 + minute;
+}
 function timeSortValue(subject) {
-  const found = String(subject.time_start || '').match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-  if (!found) return Number.MAX_SAFE_INTEGER;
-  let hour = Number(found[1]) % 12;
-  if (found[3]?.toLowerCase() === 'pm') hour += 12;
-  return hour * 60 + Number(found[2] || 0);
+  return parseTimeMinutes(subject.time_start) ?? Number.MAX_SAFE_INTEGER;
 }
 function formatTime12(value) {
   if (!value) return '';
-  const match = String(value).trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-  if (!match) return String(value);
-  let hour = Number(match[1]);
-  const minutes = match[2] || '00';
-  const suffix = match[3]?.toUpperCase() || (hour >= 12 ? 'PM' : 'AM');
-  hour %= 12;
-  return `${hour || 12}:${minutes} ${suffix}`;
+  const totalMinutes = parseTimeMinutes(value);
+  if (totalMinutes === null) return String(value);
+  const hour24 = Math.floor(totalMinutes / 60);
+  const hour12 = hour24 % 12 || 12;
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
+  return `${hour12}:${minutes} ${hour24 >= 12 ? 'PM' : 'AM'}`;
 }
 function timeFor(subject) { return subject.time_start || subject.time_end ? `${formatTime12(subject.time_start) || 'Time TBA'}${subject.time_end ? `–${formatTime12(subject.time_end)}` : ''}` : 'Time TBA'; }
 

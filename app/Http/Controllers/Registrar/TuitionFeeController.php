@@ -7,6 +7,7 @@ use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
 use App\Models\AcademicTerm;
 use App\Models\Fee;
 use App\Models\Student;
+use App\Models\Section;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -155,5 +156,108 @@ class TuitionFeeController extends Controller
         return redirect()
             ->route('registrar.tuition.index', $request->only(['search', 'grade_level', 'section']))
             ->with('status', $message);
+    }
+
+    public function mobileSections(Request $request)
+    {
+        $this->requireAnyRole($request, ['registrar']);
+
+        $sections = Section::query()
+            ->with(['students.student'])
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(function (Section $section) {
+                $activeStudents = $section->students
+                    ->filter(fn ($user) => $user->pivot?->status === 'enrolled'
+                        && $user->student?->status === 'active');
+
+                return [
+                    'id' => $section->id,
+                    'name' => $section->name,
+                    'course' => $section->course,
+                    'year_level' => $section->year_level,
+                    'program_type' => $section->program_type,
+                    'school_year' => $section->school_year,
+                    'semester' => $section->semester,
+                    'student_count' => $activeStudents->count(),
+                ];
+            })
+            ->filter(fn ($section) => $section['student_count'] > 0)
+            ->values();
+
+        return response()->json($sections);
+    }
+
+    public function storeMobile(Request $request)
+    {
+        $this->requireAnyRole($request, ['registrar']);
+
+        $data = $request->validate([
+            'section_id' => ['required', 'integer', 'exists:sections,id'],
+            'amount' => ['required', 'numeric', 'min:1', 'max:10000000'],
+            'due_date' => ['required', 'date'],
+        ]);
+
+        $section = Section::query()->where('is_active', true)->findOrFail($data['section_id']);
+        $result = DB::transaction(function () use ($section, $data) {
+            $userIds = $section->students()
+                ->wherePivot('status', 'enrolled')
+                ->pluck('users.id')
+                ->all();
+            $studentIds = Student::query()
+                ->whereIn('user_id', $userIds)
+                ->where('status', 'active')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            if (!$studentIds) {
+                throw ValidationException::withMessages([
+                    'section_id' => 'This section has no active enrolled students.',
+                ]);
+            }
+
+            $type = 'Tuition';
+            $existingStudentIds = Fee::query()
+                ->whereIn('student_id', $studentIds)
+                ->where('type', $type)
+                ->where('school_year', $section->school_year)
+                ->when($section->semester, fn ($query) => $query->where('semester', $section->semester), fn ($query) => $query->whereNull('semester'))
+                ->pluck('student_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            $existing = array_fill_keys($existingStudentIds, true);
+            $created = 0;
+            $skipped = 0;
+
+            foreach ($studentIds as $studentId) {
+                if (isset($existing[$studentId])) {
+                    $skipped++;
+                    continue;
+                }
+
+                Fee::create([
+                    'student_id' => $studentId,
+                    'type' => $type,
+                    'amount' => $data['amount'],
+                    'paid_amount' => 0,
+                    'status' => 'unpaid',
+                    'due_date' => $data['due_date'],
+                    'school_year' => $section->school_year,
+                    'semester' => $section->semester,
+                ]);
+                $created++;
+            }
+
+            return compact('created', 'skipped');
+        });
+
+        return response()->json([
+            ...$result,
+            'message' => $result['created'] > 0
+                ? "Tuition posted to {$result['created']} student(s)." . ($result['skipped'] ? " {$result['skipped']} already had tuition for this term." : '')
+                : 'All students in this section already have tuition posted for this term.',
+        ]);
     }
 }

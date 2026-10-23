@@ -22,7 +22,10 @@ export default function Login() {
 
   const handleLogin = async () => {
     setLoading(true);
+    let requestStage = 'API connection check';
     try {
+      await api.get('/enrollment/settings');
+      requestStage = 'login request';
       const res = await api.post('/login', { email, password });
       const { token, role } = res.data;
 
@@ -58,7 +61,9 @@ export default function Login() {
       }
     } catch (error) {
       const message = error?.response?.data?.message
-        || (error?.request ? 'Cannot reach the server. Check the API URL, Laravel server, and firewall.' : error?.message)
+        || (error?.request
+          ? `${requestStage} failed.\nURL: ${error?.config?.baseURL || api.defaults.baseURL}${error?.config?.url || ''}\nError: ${error?.message || 'No response received'}${error?.code ? ` (${error.code})` : ''}`
+          : error?.message)
         || 'Invalid email or password.';
       Alert.alert('Login failed', message);
     } finally {

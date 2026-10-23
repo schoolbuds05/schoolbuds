@@ -17,6 +17,7 @@ import * as Sharing from 'expo-sharing';
 import HeaderGradient from './ui/HeaderGradient';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
+import { HEADER_TOP } from '../../src/theme';
 
 const ROLE_LABELS = {
   admin: 'Admins',
@@ -125,56 +126,63 @@ export default function SystemReportScreen({ scope = 'admin' }) {
       contentContainerStyle={{ paddingBottom: 110 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
     >
-      <HeaderGradient
-        title="Reports"
-        subtitle={`${isAdmin ? 'System-wide' : 'Registrar'} snapshot generated from live school records.`}
-        initials="RP"
-        stats={[
-          { label: 'Students', value: report.totals.students, accent: theme.green },
-          { label: 'Enrollments', value: report.totals.enrollments, accent: theme.orange },
-          { label: 'Sections', value: report.totals.sections, accent: theme.purple },
-        ]}
-      />
+      {isAdmin ? (
+        <HeaderGradient
+          title="Reports"
+          subtitle="System-wide snapshot generated from live school records."
+          initials="RP"
+          stats={[
+            { label: 'Students', value: report.totals.students, accent: theme.green },
+            { label: 'Enrollments', value: report.totals.enrollments, accent: theme.orange },
+            { label: 'Sections', value: report.totals.sections, accent: theme.purple },
+          ]}
+        />
+      ) : (
+        <View style={[s.registrarHeader, { backgroundColor: theme.bg }]}>
+          <Text style={[s.registrarTitle, { color: theme.text }]}>Reports</Text>
+          <Text style={[s.registrarSubtitle, { color: theme.textSub }]}>Snapshot from live school records</Text>
+        </View>
+      )}
 
-      <View style={s.actions}>
+      <View style={[s.actions, !isAdmin && s.registrarActions]}>
         <TouchableOpacity
-          style={[s.generateBtn, { backgroundColor: theme.primary }, generating && { opacity: 0.7 }]}
+          style={[s.generateBtn, !isAdmin && s.registrarGenerateBtn, { backgroundColor: theme.primary }, generating && { opacity: 0.7 }]}
           onPress={generatePdf}
           disabled={generating}
         >
-          {generating ? <ActivityIndicator color="#fff" /> : <Text style={s.generateText}>Generate PDF report</Text>}
+          {generating ? <ActivityIndicator color="#fff" /> : <Text style={[s.generateText, !isAdmin && s.registrarGenerateText]}>Generate PDF report</Text>}
         </TouchableOpacity>
-        <Text style={[s.generatedAt, { color: theme.textSub }]}>Last refreshed {report.generatedAt}</Text>
+        <Text style={[s.generatedAt, !isAdmin && s.registrarGeneratedAt, { color: theme.textSub }]}>Last refreshed {report.generatedAt}</Text>
       </View>
 
-      <View style={s.grid}>
+      <View style={isAdmin ? s.grid : s.registrarGrid}>
         {report.cards.map(card => (
-          <View key={card.label} style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[s.cardValue, { color: theme.text }]}>{card.value}</Text>
-            <Text style={[s.cardLabel, { color: theme.textSub }]}>{card.label}</Text>
+          <View key={card.label} style={[isAdmin ? s.card : s.registrarCard, !isAdmin && card.label === 'Sections' && s.registrarWideCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Text style={[s.cardValue, !isAdmin && s.registrarCardValue, { color: theme.text }]}>{card.value}</Text>
+            <Text style={[s.cardLabel, !isAdmin && s.registrarCardLabel, { color: theme.textSub }]}>{card.label}</Text>
           </View>
         ))}
       </View>
 
-      <ReportSection title="Student Status" rows={report.studentStatus} theme={theme} />
-      <ReportSection title="Enrollment Status" rows={report.enrollmentStatus} theme={theme} />
-      <ReportSection title="Course Programs" rows={report.coursePrograms} theme={theme} />
+      <ReportSection title="Student status" rows={report.studentStatus} theme={theme} registrar={!isAdmin} />
+      {isAdmin ? <ReportSection title="Enrollment Status" rows={report.enrollmentStatus} theme={theme} /> : null}
+      {isAdmin ? <ReportSection title="Course Programs" rows={report.coursePrograms} theme={theme} /> : null}
       {isAdmin ? <ReportSection title="User Roles" rows={report.userRoles} theme={theme} /> : null}
       {isAdmin ? <ReportSection title="Recent Activity" rows={report.activityRows} theme={theme} /> : null}
     </ScrollView>
   );
 }
 
-function ReportSection({ title, rows, theme }) {
+function ReportSection({ title, rows, theme, registrar = false }) {
   return (
-    <View style={[s.panel, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <Text style={[s.panelTitle, { color: theme.text }]}>{title}</Text>
+    <View style={[s.panel, registrar && s.registrarPanel, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Text style={[s.panelTitle, registrar && s.registrarPanelTitle, { color: theme.text }]}>{title}</Text>
       {rows.length === 0 ? (
         <Text style={[s.emptyText, { color: theme.textSub }]}>No data available.</Text>
       ) : rows.map(row => (
         <View key={row.label} style={[s.row, { borderBottomColor: theme.border }]}>
-          <Text style={[s.rowLabel, { color: theme.textSub }]}>{row.label}</Text>
-          <Text style={[s.rowValue, { color: theme.text }]}>{row.value}</Text>
+          <Text style={[s.rowLabel, registrar && s.registrarRowLabel, { color: theme.textSub }]}>{row.label}</Text>
+          <Text style={[s.rowValue, registrar && s.registrarRowValue, { color: theme.text }]}>{row.value}</Text>
         </View>
       ))}
     </View>
@@ -290,17 +298,33 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   actions: { paddingHorizontal: 16, marginBottom: 12 },
+  registrarHeader: { paddingHorizontal: 18, paddingTop: HEADER_TOP, paddingBottom: 8 },
+  registrarTitle: { fontSize: 24, fontWeight: '700', fontFamily: 'serif' },
+  registrarSubtitle: { fontSize: 10, marginTop: 2 },
+  registrarActions: { paddingHorizontal: 18, marginBottom: 10 },
+  registrarGeneratedAt: { fontSize: 10, fontWeight: '500', marginTop: 8 },
+  registrarGenerateBtn: { minHeight: 35, borderRadius: 9 },
+  registrarGenerateText: { fontSize: 10, fontWeight: '800' },
   generateBtn: { borderRadius: 12, minHeight: 50, alignItems: 'center', justifyContent: 'center' },
+  registrarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, paddingHorizontal: 18, marginBottom: 2 },
+  registrarCard: { flexBasis: '47%', flexGrow: 1, minHeight: 68, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 },
+  registrarWideCard: { flexBasis: '100%' },
+  registrarPanel: { marginHorizontal: 18, marginTop: 10, borderRadius: 14, padding: 12 },
   generateText: { color: '#fff', fontSize: 14, fontWeight: '900' },
   generatedAt: { fontSize: 12, fontWeight: '700', marginTop: 8, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, marginBottom: 4 },
   card: { flexBasis: '47%', flexGrow: 1, borderWidth: 1, borderRadius: 12, padding: 14 },
   cardValue: { fontSize: 24, fontWeight: '900' },
   cardLabel: { fontSize: 12, fontWeight: '800', marginTop: 4 },
+  registrarCardValue: { fontFamily: 'serif', fontSize: 24, fontWeight: '700' },
+  registrarCardLabel: { fontSize: 10, fontWeight: '500', marginTop: 1 },
   panel: { marginHorizontal: 16, marginTop: 12, borderWidth: 1, borderRadius: 12, padding: 14 },
   panelTitle: { fontSize: 15, fontWeight: '900', marginBottom: 6 },
+  registrarPanelTitle: { fontSize: 12, fontWeight: '800', marginBottom: 2 },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 9, borderBottomWidth: 1 },
   rowLabel: { flex: 1, fontSize: 12, fontWeight: '800' },
   rowValue: { fontSize: 13, fontWeight: '900' },
+  registrarRowLabel: { fontSize: 10, fontWeight: '500' },
+  registrarRowValue: { fontSize: 11, fontWeight: '700' },
   emptyText: { fontSize: 12, fontWeight: '700', paddingTop: 6 },
 });

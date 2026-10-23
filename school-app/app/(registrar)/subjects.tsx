@@ -1,5 +1,5 @@
-// @ts-nocheck
-// app/(registrar)/subjects.tsx — Registrar: manage subjects
+﻿// @ts-nocheck
+// app/(registrar)/subjects.tsx â€” Registrar: manage subjects
 
 import { useEffect, useState, useCallback } from 'react';
 import {
@@ -7,16 +7,17 @@ import {
   TouchableOpacity, ActivityIndicator, Alert, Modal,
   RefreshControl, Platform, StatusBar,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../../src/api';
-import HeaderGradient from '../components/ui/HeaderGradient';
-import SearchBar from '../components/ui/SearchBar';
+import { useTheme } from '../../src/theme-context';
+import SubjectRequests from './subject-requests';
 
 const C = {
-  blue: '#378ADD', blueLight: '#E6F1FB',
+  blue: '#B5233D', blueLight: '#F9E4E8',
   green: '#1D9E75', greenLight: '#E1F5EE',
-  danger: '#E24B4A', dangerLight: '#FCEBEB',
-  bg: '#F4F6F9', card: '#FFFFFF', border: '#EFEFEF',
-  text: '#1A1A2E', sub: '#6B7280', muted: '#B0B7C3',
+  danger: '#B5233D', dangerLight: '#F9E4E8',
+  bg: '#FBF8F5', card: '#FFFFFF', border: '#F0E8E3',
+  text: '#2A1B1F', sub: '#7A666B', muted: '#8D7C80',
 };
 const HEADER_TOP = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 10 : 52;
 
@@ -61,7 +62,8 @@ function ChipGroup({ options, value, onSelect }) {
   );
 }
 
-export default function RegistrarSubjects() {
+export function SubjectCatalog({ embedded = false }) {
+  const { theme } = useTheme();
   const [subjects, setSubjects]     = useState([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,27 +73,31 @@ export default function RegistrarSubjects() {
   const [form, setForm]             = useState(EMPTY_FORM);
   const [saving, setSaving]         = useState(false);
   const [courses, setCourses]       = useState([]);
+  const [subjectFilterOptions, setSubjectFilterOptions] = useState([]);
+  const [courseFilterOptions, setCourseFilterOptions] = useState([]);
   const [courseSearch, setCourseSearch]         = useState('');
   const [courseDropdownOpen, setCourseDropdownOpen] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
 
-  // ── FILTER STATE ──────────────────────────────────────────
+  // â”€â”€ FILTER STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [filterProgram, setFilterProgram]   = useState('');
+  const [filterCourse, setFilterCourse]     = useState('');
   const [filterYear, setFilterYear]         = useState('');
   const [filterSemester, setFilterSemester] = useState('');
   const [showFilters, setShowFilters]       = useState(false);
 
-  const hasActiveFilters = !!(filterProgram || filterYear || filterSemester);
+  const hasActiveFilters = !!(filterProgram || filterCourse || filterYear || filterSemester);
 
   const clearFilters = () => {
     setFilterProgram('');
+    setFilterCourse('');
     setFilterYear('');
     setFilterSemester('');
   };
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  // ── FETCH SUBJECTS — primitive deps, no object reference issue ──
+  // â”€â”€ FETCH SUBJECTS â€” primitive deps, no object reference issue â”€â”€
   const fetchSubjects = useCallback(async () => {
     setLoading(true);
     try {
@@ -99,6 +105,7 @@ export default function RegistrarSubjects() {
         params: {
           search:       search.trim() || undefined,
           program_type: filterProgram  || undefined,
+          scope:        filterCourse   || undefined,
           year_level:   filterYear     || undefined,
           semester:     filterSemester || undefined,
         },
@@ -106,7 +113,20 @@ export default function RegistrarSubjects() {
       setSubjects(res.data);
     } catch (e) { console.log(e.message); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [search, filterProgram, filterYear, filterSemester]);
+  }, [search, filterProgram, filterCourse, filterYear, filterSemester]);
+
+  const fetchSubjectFilterOptions = useCallback(async () => {
+    try {
+      const [subjectsRes, coursesRes] = await Promise.all([
+        api.get('/subjects'),
+        api.get('/courses'),
+      ]);
+      setSubjectFilterOptions(Array.isArray(subjectsRes.data) ? subjectsRes.data : []);
+      setCourseFilterOptions(Array.isArray(coursesRes.data) ? coursesRes.data : []);
+    } catch (e) {
+      console.log('Could not fetch subject filter options', e.message);
+    }
+  }, []);
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -120,9 +140,10 @@ export default function RegistrarSubjects() {
     } catch (e) { console.log('Could not fetch courses', e.message); }
   }, [form.program_type, courseSearch]);
 
-  // ── Split effects so filters don't interfere with course fetching ──
+  // â”€â”€ Split effects so filters don't interfere with course fetching â”€â”€
   useEffect(() => { fetchSubjects(); }, [fetchSubjects]);
   useEffect(() => { fetchCourses(); },  [fetchCourses]);
+  useEffect(() => { fetchSubjectFilterOptions(); }, [fetchSubjectFilterOptions]);
 
   const openAdd = () => {
     setEditing(null);
@@ -206,7 +227,7 @@ export default function RegistrarSubjects() {
     ]);
   };
 
-  // ── Year level options driven by program filter ───────────
+  // â”€â”€ Year level options driven by program filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const yearLevelOptions = filterProgram === 'shs'
     ? [
         { key: '', label: 'All' },
@@ -221,114 +242,127 @@ export default function RegistrarSubjects() {
         { key: '4', label: '4th Year' },
       ];
 
+  const courseOptions = [
+    ...['college', 'shs'].flatMap(programType => {
+      if (filterProgram && filterProgram !== programType) return [];
+      const field = programType === 'shs' ? 'strand' : 'course';
+      const catalogOptions = [...new Map(courseFilterOptions
+        .filter(course => course.program_type === programType)
+        .map(course => ({
+          key: `${programType}|${course.acronym || course.name}`,
+          label: course.acronym || course.name,
+        }))
+        .map(option => [option.key.toLowerCase(), option])).values()];
+      const representedCourseValues = new Set(courseFilterOptions
+        .filter(course => course.program_type === programType)
+        .flatMap(course => [course.name, course.acronym].filter(Boolean).map(value => value.trim().toLowerCase())));
+      const subjectOptions = [...new Set(subjectFilterOptions
+        .filter(subject => subject.program_type === programType)
+        .map(subject => subject[field])
+        .filter(Boolean))]
+        .filter(name => !representedCourseValues.has(name.trim().toLowerCase()))
+        .map(name => ({ key: `${programType}|${name}`, label: name }));
+      return [...catalogOptions, ...subjectOptions];
+    }),
+    ...(filterProgram === 'shs' || !filterProgram
+      ? [{ key: 'shs|__general__', label: 'General SHS' }]
+      : []),
+    ...(filterProgram === 'college' || !filterProgram
+      ? [{ key: 'college|__general__', label: 'General college' }]
+      : []),
+  ];
+
   return (
-    <View style={s.container}>
-      <HeaderGradient
-        title="Subjects"
-        subtitle={`${subjects.length} subject${subjects.length !== 1 ? 's' : ''} ${hasActiveFilters ? 'matched' : 'in the system'}`}
-        initials="SB"
-        stats={[
-          { label: 'Subjects', value: subjects.length, accent: '#FEF08A' },
-          { label: 'Courses',  value: courses.length,  accent: '#BFDBFE' },
-          { label: 'Status',   value: hasActiveFilters ? 'Filtered' : 'All', accent: '#FBCFE8' },
-        ]}
-      >
-        {/* ── Search + Filter toggle + Add ── */}
+    <View style={[s.container, { backgroundColor: theme.bg }]}>
+      <View style={[s.pageHeader, embedded && s.embeddedHeader, { backgroundColor: theme.bg }]}>
+        {!embedded && <>
+          <Text style={s.pageTitle}>Subjects</Text>
+          <Text style={s.pageSubtitle}>{subjects.length} subjects · {courses.length} course{courses.length !== 1 ? 's' : ''}</Text>
+        </>}
         <View style={s.searchRow}>
-          <View style={{ flex: 1 }}>
-            <SearchBar
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search subjects..."
-              onSubmitEditing={fetchSubjects}
-            />
+          <View style={s.searchBox}>
+            <Ionicons name="search-outline" size={16} color={C.sub} />
+            <TextInput value={search} onChangeText={setSearch} onSubmitEditing={fetchSubjects} placeholder="Search subjects" placeholderTextColor={C.sub} style={s.searchInput} returnKeyType="search" />
           </View>
-          <TouchableOpacity
-            style={[s.filterToggleBtn, (showFilters || hasActiveFilters) && s.filterToggleBtnActive]}
-            onPress={() => setShowFilters(v => !v)}
-          >
-            <Text style={s.filterToggleText}>
-              {hasActiveFilters ? '🔽 Filtered' : '⚙️ Filter'}
-            </Text>
+          <TouchableOpacity style={[s.filterToggleBtn, hasActiveFilters && s.filterToggleBtnActive]} onPress={() => setShowFilters(value => !value)}>
+            <Ionicons name="options-outline" size={15} color={C.blue} />
+            <Text style={s.filterToggleText}>Filter</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.addBtn} onPress={openAdd}>
-            <Text style={s.addBtnText}>+ Add</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={s.addBtn} onPress={openAdd}><Text style={s.addBtnText}>+ Add</Text></TouchableOpacity>
         </View>
+      </View>
 
-        {/* ── Filter panel ── */}
-        {showFilters && (
-          <View style={s.filterPanel}>
-
-            {/* Program Type */}
-            <Text style={s.filterLabel}>Program Type</Text>
-            <View style={s.chipRow}>
-              {[
-                { key: '', label: 'All' },
-                { key: 'college', label: '🎓 College' },
-                { key: 'shs', label: '🏫 SHS' },
-              ].map(opt => (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[s.chip, s.chipLight, filterProgram === opt.key && s.chipActive]}
-                  onPress={() => {
-                    setFilterProgram(opt.key);
-                    setFilterYear(''); // reset year when program changes
-                  }}
-                >
-                  <Text style={[s.chipText, filterProgram === opt.key && s.chipTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Year Level */}
-            <Text style={[s.filterLabel, { marginTop: 10 }]}>Year Level</Text>
-            <View style={s.chipRow}>
-              {yearLevelOptions.map(opt => (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[s.chip, s.chipLight, filterYear === opt.key && s.chipActive]}
-                  onPress={() => setFilterYear(opt.key)}
-                >
-                  <Text style={[s.chipText, filterYear === opt.key && s.chipTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Semester */}
-            <Text style={[s.filterLabel, { marginTop: 10 }]}>Semester</Text>
-            <View style={s.chipRow}>
-              {[
-                { key: '', label: 'All' },
-                { key: '1st', label: '1st Sem' },
-                { key: '2nd', label: '2nd Sem' },
-                { key: 'summer', label: '☀️ Summer' },
-              ].map(opt => (
-                <TouchableOpacity
-                  key={opt.key}
-                  style={[s.chip, s.chipLight, filterSemester === opt.key && s.chipActive]}
-                  onPress={() => setFilterSemester(opt.key)}
-                >
-                  <Text style={[s.chipText, filterSemester === opt.key && s.chipTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Clear Filters */}
-            {hasActiveFilters && (
-              <TouchableOpacity style={s.clearFiltersBtn} onPress={clearFilters}>
-                <Text style={s.clearFiltersBtnText}>✕ Clear Filters</Text>
+      <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
+        <View style={s.filterBackdrop}>
+          <View style={[s.filterSheet, { backgroundColor: theme.bg }]}>
+            <View style={s.filterSheetHeader}>
+              <View>
+                <Text style={s.filterSheetTitle}>Filter subjects</Text>
+                <Text style={s.filterSheetSubtitle}>Choose program, course, year, and semester</Text>
+              </View>
+              <TouchableOpacity style={s.filterClose} onPress={() => setShowFilters(false)} accessibilityLabel="Close filters">
+                <Ionicons name="close" size={19} color={C.sub} />
               </TouchableOpacity>
-            )}
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.filterSheetBody}>
+              <Text style={s.filterLabel}>Program type</Text>
+              <View style={s.filterOptions}>
+                {[{ key: '', label: 'All' }, { key: 'college', label: 'College' }, { key: 'shs', label: 'Senior High' }].map(opt => (
+                  <TouchableOpacity key={opt.key || 'all-programs'} style={[s.filterOption, filterProgram === opt.key && s.filterOptionActive]} onPress={() => { setFilterProgram(opt.key); setFilterCourse(''); setFilterYear(''); }}>
+                    <Text style={[s.filterOptionText, filterProgram === opt.key && s.filterOptionTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.filterLabel}>Course / strand</Text>
+              <View style={s.filterOptions}>
+                <TouchableOpacity
+                  style={[s.filterOption, !filterCourse && s.filterOptionActive]}
+                  onPress={() => setFilterCourse('')}
+                >
+                  <Text style={[s.filterOptionText, !filterCourse && s.filterOptionTextActive]}>All courses</Text>
+                </TouchableOpacity>
+                {courseOptions.map(option => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[s.filterOption, filterCourse === option.key && s.filterOptionActive]}
+                    onPress={() => {
+                      setFilterCourse(option.key);
+                      if (!filterProgram) setFilterProgram(option.key.split('|')[0]);
+                    }}
+                  >
+                    <Text style={[s.filterOptionText, filterCourse === option.key && s.filterOptionTextActive]}>{option.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.filterLabel}>Year level</Text>
+              <View style={s.filterOptions}>
+                {yearLevelOptions.map(opt => (
+                  <TouchableOpacity key={opt.key || 'all-years'} style={[s.filterOption, filterYear === opt.key && s.filterOptionActive]} onPress={() => setFilterYear(opt.key)}>
+                    <Text style={[s.filterOptionText, filterYear === opt.key && s.filterOptionTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.filterLabel}>Semester</Text>
+              <View style={s.filterOptions}>
+                {[{ key: '', label: 'All' }, { key: '1st', label: '1st semester' }, { key: '2nd', label: '2nd semester' }, { key: 'summer', label: 'Summer' }].map(opt => (
+                  <TouchableOpacity key={opt.key || 'all-semesters'} style={[s.filterOption, filterSemester === opt.key && s.filterOptionActive]} onPress={() => setFilterSemester(opt.key)}>
+                    <Text style={[s.filterOptionText, filterSemester === opt.key && s.filterOptionTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={s.filterActions}>
+              <TouchableOpacity style={s.filterReset} onPress={clearFilters}><Text style={s.filterResetText}>Reset</Text></TouchableOpacity>
+              <TouchableOpacity style={s.filterDone} onPress={() => setShowFilters(false)}><Text style={s.filterDoneText}>Done</Text></TouchableOpacity>
+            </View>
           </View>
-        )}
-      </HeaderGradient>
+        </View>
+      </Modal>
 
       {loading ? (
         <View style={s.center}><ActivityIndicator size="large" color={C.blue} /></View>
@@ -342,7 +376,7 @@ export default function RegistrarSubjects() {
         >
           {subjects.length === 0 ? (
             <View style={s.emptyWrap}>
-              <Text style={s.emptyIcon}>{hasActiveFilters ? '🔍' : '📚'}</Text>
+              <Ionicons name={hasActiveFilters ? 'search-outline' : 'book-outline'} size={34} color={C.muted} style={s.emptyIcon} />
               <Text style={s.emptyTitle}>
                 {hasActiveFilters ? 'No subjects match filters' : 'No subjects yet'}
               </Text>
@@ -374,11 +408,11 @@ export default function RegistrarSubjects() {
                   <Text style={s.subjectName}>{sub.name}</Text>
                   {!isExpanded && (
                     <Text style={s.subjectMeta}>
-                      {(sub.course || sub.strand) ? (sub.course || sub.strand) : 'General'} · {sub.units_lec + sub.units_lab} units
+                      {(sub.course || sub.strand) ? (sub.course || sub.strand) : 'General'} · {Number(sub.units_lec || 0) + Number(sub.units_lab || 0)} units
                     </Text>
                   )}
                 </View>
-                <Text style={{ fontSize: 12, color: C.muted }}>{isExpanded ? '▲' : '▼'}</Text>
+                <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-forward'} size={17} color={C.sub} />
               </View>
 
               {isExpanded && (
@@ -403,13 +437,13 @@ export default function RegistrarSubjects() {
                     </View>
                   ) : null}
                   <View style={s.subjectActions}>
-                    <Text style={s.unitDetail}>Lec: {sub.units_lec}  Lab: {sub.units_lab}  ·  Total: {sub.units_lec + sub.units_lab} units</Text>
+                    <Text style={s.unitDetail}>Lecture: {sub.units_lec}  Lab: {sub.units_lab} · Total: {Number(sub.units_lec || 0) + Number(sub.units_lab || 0)} units</Text>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TouchableOpacity style={s.editBtn} onPress={() => openEdit(sub)}>
-                        <Text style={s.editBtnText}>✏️ Edit</Text>
+                        <Text style={s.editBtnText}>Edit</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={s.deleteBtn} onPress={() => handleDelete(sub)}>
-                        <Text style={s.deleteBtnText}>🗑</Text>
+                        <Ionicons name="trash-outline" size={15} color={C.danger} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -425,7 +459,7 @@ export default function RegistrarSubjects() {
           <View style={s.modalHeader}>
             <Text style={s.modalTitle}>{editing ? 'Edit Subject' : 'New Subject'}</Text>
             <TouchableOpacity onPress={() => setShowModal(false)}>
-              <Text style={s.modalClose}>✕</Text>
+              <Ionicons name="close" size={20} color={C.muted} />
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={s.modalBody} keyboardShouldPersistTaps="handled">
@@ -442,7 +476,7 @@ export default function RegistrarSubjects() {
             </Field>
             <Field label="Program Type">
               <ChipGroup
-                options={[{ key: 'college', label: '🎓 College' }, { key: 'shs', label: '🏫 SHS' }]}
+                options={[{ key: 'college', label: 'College' }, { key: 'shs', label: 'Senior High' }]}
                 value={form.program_type}
                 onSelect={v => { set('program_type', v); set('course', ''); set('strand', ''); }}
               />
@@ -469,7 +503,7 @@ export default function RegistrarSubjects() {
                       onPress={() => setCourseDropdownOpen(open => !open)}
                     >
                       <Text style={s.dropdownLabel}>{form.course || 'Select course'}</Text>
-                      <Text style={s.dropdownArrow}>{courseDropdownOpen ? '▲' : '▼'}</Text>
+                      <Ionicons name={courseDropdownOpen ? 'chevron-up' : 'chevron-down'} size={16} color={C.sub} />
                     </TouchableOpacity>
                     {courseDropdownOpen && (
                       <View style={s.dropdownPanel}>
@@ -522,7 +556,7 @@ export default function RegistrarSubjects() {
                 options={[
                   { key: '1st', label: '1st Semester' },
                   { key: '2nd', label: '2nd Semester' },
-                  { key: 'summer', label: '☀️ Summer' },
+                  { key: 'summer', label: 'Summer' },
                 ]}
                 value={form.semester}
                 onSelect={v => set('semester', v)}
@@ -576,38 +610,55 @@ export default function RegistrarSubjects() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { backgroundColor: C.blue, paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 14 },
+  pageHeader: { paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 8, backgroundColor: C.bg },
+  embeddedHeader: { paddingTop: 0 },
+  pageTitle: { color: C.text, fontSize: 24, fontWeight: '700', fontFamily: 'serif' },
+  pageSubtitle: { color: C.sub, fontSize: 10, marginTop: 2 },
+  header: { backgroundColor: C.bg, paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 14 },
   headerTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 12 },
-  title: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  subtitle: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
+  title: { color: C.text, fontSize: 22, fontWeight: '700' },
+  subtitle: { color: C.sub, fontSize: 12, marginTop: 2 },
 
   // Search row
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  addBtn: { backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, gap: 8 },
-  searchInput: { flex: 1, color: '#fff', fontSize: 13 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 12 },
+  addBtn: { backgroundColor: C.blue, borderRadius: 11, paddingHorizontal: 13, minHeight: 39, alignItems: 'center', justifyContent: 'center' },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 11 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderColor: C.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, height: 40, gap: 7 },
+  searchInput: { flex: 1, color: C.text, fontSize: 11, paddingVertical: 6 },
 
   // Filter toggle
-  filterToggleBtn: { backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
-  filterToggleBtnActive: { backgroundColor: 'rgba(255,255,255,0.45)' },
-  filterToggleText: { color: '#fff', fontWeight: '600', fontSize: 12 },
+  filterToggleBtn: { backgroundColor: C.card, borderRadius: 11, paddingHorizontal: 9, height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1, borderColor: C.blue },
+  filterToggleBtnActive: { backgroundColor: C.blueLight },
+  filterToggleText: { color: C.blue, fontWeight: '600', fontSize: 10 },
 
-  // Filter panel
-  filterPanel: { marginTop: 10, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 12 },
-  filterLabel: { color: 'rgba(255,255,255,0.80)', fontSize: 11, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  chipLight: { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.25)' },
-  clearFiltersBtn: { marginTop: 12, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
-  clearFiltersBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  // Filter sheet
+  filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(35,20,24,0.38)' },
+  filterSheet: { maxHeight: '82%', backgroundColor: C.bg, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 14 },
+  filterSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: C.border },
+  filterSheetTitle: { color: C.text, fontSize: 17, fontWeight: '800' },
+  filterSheetSubtitle: { color: C.sub, fontSize: 11, marginTop: 3 },
+  filterClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
+  filterSheetBody: { paddingTop: 16, paddingBottom: 10 },
+  filterLabel: { color: C.sub, fontSize: 11, fontWeight: '800', marginBottom: 8, marginTop: 7 },
+  filterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 11 },
+  filterOption: { minHeight: 36, paddingHorizontal: 13, borderRadius: 18, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
+  filterOptionActive: { backgroundColor: C.blueLight, borderColor: C.blue },
+  filterOptionText: { color: C.sub, fontSize: 11, fontWeight: '600' },
+  filterOptionTextActive: { color: C.blue, fontWeight: '800' },
+  filterActions: { flexDirection: 'row', gap: 9, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border },
+  filterReset: { flex: 1, height: 43, borderRadius: 11, borderWidth: 1, borderColor: C.blue, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card },
+  filterResetText: { color: C.blue, fontSize: 12, fontWeight: '700' },
+  filterDone: { flex: 1.5, height: 43, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: C.blue },
+  filterDoneText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 
   // List
-  list: { padding: 12, gap: 10, paddingBottom: 24 },
-  subjectCard: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border, elevation: 2 },
-  subjectCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
-  codeTag: { backgroundColor: C.blueLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
-  codeTagText: { color: C.blue, fontWeight: '700', fontSize: 12 },
-  subjectName: { fontSize: 14, fontWeight: '600', color: C.text },
-  subjectMeta: { fontSize: 11, color: C.muted, marginTop: 2 },
+  list: { paddingHorizontal: 16, paddingTop: 4, gap: 9, paddingBottom: 24 },
+  subjectCard: { backgroundColor: C.card, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 11, borderWidth: 1, borderColor: C.border },
+  subjectCardTop: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 0 },
+  codeTag: { backgroundColor: C.blueLight, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, minWidth: 60, alignItems: 'center' },
+  codeTagText: { color: C.blue, fontWeight: '700', fontSize: 9 },
+  subjectName: { fontSize: 11, fontWeight: '700', color: C.text },
+  subjectMeta: { fontSize: 9, color: C.sub, marginTop: 2 },
   unitsTag: { backgroundColor: C.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   unitsText: { fontSize: 11, color: C.sub, fontWeight: '600' },
   subjectDesc: { fontSize: 12, color: C.muted, marginBottom: 8, lineHeight: 17 },
@@ -663,4 +714,37 @@ const s = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   removeSubjectBtn: { backgroundColor: C.dangerLight, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 12 },
   removeSubjectText: { color: C.danger, fontWeight: '800', fontSize: 15 },
+  combinedHeader: { paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 8 },
+  combinedTabs: { flexDirection: 'row', padding: 3, borderWidth: 1, borderRadius: 12, gap: 4, marginTop: 12 },
+  combinedTab: { flex: 1, minHeight: 35, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  combinedTabText: { fontSize: 10, fontWeight: '700' },
 });
+
+export default function RegistrarSubjects() {
+  const { theme } = useTheme();
+  const [tab, setTab] = useState('catalog');
+
+  return (
+    <View style={[s.container, { backgroundColor: theme.bg }]}>
+      <View style={[s.combinedHeader, { backgroundColor: theme.bg }]}>
+        <Text style={[s.pageTitle, { color: theme.text }]}>Subjects</Text>
+        <Text style={[s.pageSubtitle, { color: theme.textSub }]}>Browse the catalog and review add/drop requests</Text>
+        <View style={[s.combinedTabs, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {[
+            { key: 'catalog', label: 'Catalog' },
+            { key: 'requests', label: 'Requests' },
+          ].map(item => (
+            <TouchableOpacity
+              key={item.key}
+              style={[s.combinedTab, tab === item.key && { backgroundColor: theme.primary }]}
+              onPress={() => setTab(item.key)}
+            >
+              <Text style={[s.combinedTabText, { color: theme.textSub }, tab === item.key && { color: '#fff', fontWeight: '800' }]}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+      {tab === 'catalog' ? <SubjectCatalog embedded /> : <SubjectRequests embedded />}
+    </View>
+  );
+}

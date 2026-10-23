@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import api from '../../src/api';
 
-export default function ChangePasswordCard({ theme, compact = false }) {
+export default function ChangePasswordCard({ theme, compact = false, embedded = false }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
@@ -51,7 +51,7 @@ export default function ChangePasswordCard({ theme, compact = false }) {
   };
 
   return (
-    <View style={[styles.card, compact && styles.cardCompact, { backgroundColor: compact ? theme.bg : theme.card, borderColor: theme.border }]}>
+    <View style={[styles.card, compact && styles.cardCompact, embedded && styles.cardEmbedded, { backgroundColor: compact ? theme.bg : theme.card, borderColor: theme.border }]}>
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: theme.text }]}>Change Password</Text>
         <TouchableOpacity onPress={() => setVisible(value => !value)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -94,6 +94,7 @@ export default function ChangePasswordCard({ theme, compact = false }) {
 
 const styles = StyleSheet.create({
   card: { marginHorizontal: 16, marginTop: 14, borderRadius: 12, borderWidth: 1, padding: 16 },
+  cardEmbedded: { marginHorizontal: 0, marginTop: 12, padding: 12 },
   cardCompact: { marginHorizontal: 0, marginTop: 15, borderWidth: 0, borderRadius: 0, padding: 0 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   title: { fontSize: 15, fontWeight: '800' },

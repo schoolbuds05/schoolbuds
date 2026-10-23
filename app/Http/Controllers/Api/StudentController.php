@@ -9,6 +9,7 @@ use App\Models\Grade;
 use App\Models\Attendance;
 use App\Models\Fee;
 use App\Models\AcademicTerm;
+use App\Models\StudentSubject;
 use App\Services\PointsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -124,41 +125,146 @@ class StudentController extends Controller
         $schedule = collect();
 
         if ($activeTerm) {
-            $schedule = DB::table('section_students')
+            $activeOfferings = fn () => DB::table('section_students')
                 ->join('sections', 'sections.id', '=', 'section_students.section_id')
                 ->join('section_subjects', 'section_subjects.section_id', '=', 'sections.id')
-                ->leftJoin('section_subject_schedules as schedules', 'schedules.section_subject_id', '=', 'section_subjects.id')
                 ->join('subjects', 'subjects.id', '=', 'section_subjects.subject_id')
                 ->leftJoin('users as teachers', 'teachers.id', '=', 'section_subjects.teacher_id')
                 ->where('section_students.user_id', $user->id)
                 ->where('section_students.status', 'enrolled')
                 ->where('sections.school_year', $activeTerm->school_year)
                 ->where('sections.semester', $activeTerm->semester)
-                ->where('sections.is_active', true)
-                ->orderByRaw('COALESCE(schedules.time_start, section_subjects.time_start)')
+                ->where('sections.is_active', true);
+
+            $schedule = $activeOfferings()
                 ->distinct()
                 ->get([
                     'sections.id as section_id',
                     'sections.name as section_name',
+                    'section_subjects.id as section_subject_id',
                     'subjects.id as subject_id',
                     'subjects.code',
                     'subjects.name as subject_name',
                     'subjects.units_lec',
                     'subjects.units_lab',
-                    DB::raw('COALESCE(schedules.day, section_subjects.day) as day'),
-                    DB::raw('COALESCE(schedules.time_start, section_subjects.time_start) as time_start'),
-                    DB::raw('COALESCE(schedules.time_end, section_subjects.time_end) as time_end'),
-                    DB::raw('COALESCE(schedules.room, section_subjects.room) as room'),
+                    'section_subjects.day',
+                    'section_subjects.time_start',
+                    'section_subjects.time_end',
+                    'section_subjects.room',
                     'teachers.name as teacher_name',
                 ])
-                ->map(fn ($item) => (array) $item)
+                ->map(fn ($item) => (array) $item);
+
+            $additionalMeetings = $activeOfferings()
+                ->join('section_subject_schedules as schedules', 'schedules.section_subject_id', '=', 'section_subjects.id')
+                ->orderBy('schedules.time_start')
+                ->get([
+                    'sections.id as section_id',
+                    'sections.name as section_name',
+                    'section_subjects.id as section_subject_id',
+                    'subjects.id as subject_id',
+                    'subjects.code',
+                    'subjects.name as subject_name',
+                    'subjects.units_lec',
+                    'subjects.units_lab',
+                    'schedules.day',
+                    'schedules.time_start',
+                    'schedules.time_end',
+                    'schedules.room',
+                    'teachers.name as teacher_name',
+                ])
+                ->map(fn ($item) => (array) $item);
+
+            $schedule = $schedule->concat($additionalMeetings)->values();
+
+            $subjectOverrides = StudentSubject::query()
+                ->where('user_id', $user->id)
+                ->get(['section_id', 'subject_id', 'status']);
+            $isDropped = fn (int $sectionId, int $subjectId) => $subjectOverrides->contains(fn (StudentSubject $record) =>
+                (int) $record->subject_id === $subjectId
+                && $record->status === 'dropped'
+                && ($record->section_id === null || (int) $record->section_id === $sectionId)
+            );
+
+            $schedule = $schedule
+                ->reject(fn (array $item) => $isDropped((int) $item['section_id'], (int) $item['subject_id']))
                 ->values();
+            $scheduledOfferings = $schedule
+                ->map(fn (array $item) => $item['section_id'] . ':' . $item['subject_id'])
+                ->unique()
+                ->all();
+
+            // Add individually enrolled offerings that do not appear through section membership.
+            $individualEnrollments = StudentSubject::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'enrolled')
+                ->whereNotNull('section_id')
+                ->whereHas('section', fn ($query) => $query
+                    ->where('school_year', $activeTerm->school_year)
+                    ->where('semester', $activeTerm->semester)
+                    ->where('is_active', true))
+                ->with(['subject', 'section.sectionSubjects.teacher:id,name', 'section.sectionSubjects.schedules'])
+                ->get();
+
+            foreach ($individualEnrollments as $enrollment) {
+                $section = $enrollment->section;
+                $subject = $enrollment->subject;
+                if (!$section || !$subject || $isDropped((int) $section->id, (int) $subject->id)) {
+                    continue;
+                }
+
+                $offeringKey = $section->id . ':' . $subject->id;
+                if (in_array($offeringKey, $scheduledOfferings, true)) {
+                    continue;
+                }
+
+                $offering = $section->sectionSubjects->first(fn ($item) => (int) $item->subject_id === (int) $subject->id);
+                if (!$offering) {
+                    continue;
+                }
+
+                $meetings = collect([$offering])
+                    ->concat($offering->schedules)
+                    ->unique(fn ($meeting) => implode('|', [
+                        strtolower(trim((string) $meeting->day)),
+                        trim((string) $meeting->time_start),
+                        trim((string) $meeting->time_end),
+                        strtolower(trim((string) $meeting->room)),
+                    ]));
+                foreach ($meetings as $meeting) {
+                    $schedule->push([
+                        'section_id' => $section->id,
+                        'section_name' => $section->name,
+                        'subject_id' => $subject->id,
+                        'code' => $subject->code,
+                        'subject_name' => $subject->name,
+                        'units_lec' => $subject->units_lec,
+                        'units_lab' => $subject->units_lab,
+                        'day' => $meeting->day,
+                        'time_start' => $meeting->time_start,
+                        'time_end' => $meeting->time_end,
+                        'room' => $meeting->room,
+                        'teacher_name' => $offering->teacher?->name,
+                    ]);
+                }
+                $scheduledOfferings[] = $offeringKey;
+            }
+
+            $schedule = $schedule->unique(fn (array $item) => implode('|', [
+                $item['section_id'] ?? '',
+                $item['subject_id'] ?? '',
+                $item['day'] ?? '',
+                $item['time_start'] ?? '',
+                $item['time_end'] ?? '',
+                $item['room'] ?? '',
+            ]))->values();
         }
 
-        $today = now()->format('D');
+        $schoolNow = now('Asia/Manila');
+        $today = $schoolNow->format('D');
         $todayClasses = $schedule->filter(fn (array $item) => $this->scheduleIncludesDay($item['day'] ?? null, $today))->values();
         $unitsTotal = $schedule->unique('subject_id')->sum(fn (array $item) => (float) ($item['units_lec'] ?? 0) + (float) ($item['units_lab'] ?? 0));
-        $currentMinutes = now()->hour * 60 + now()->minute;
+        $currentMinutes = $schoolNow->hour * 60 + $schoolNow->minute;
         $currentClass = $todayClasses->first(function (array $item) use ($currentMinutes) {
             $start = $this->scheduleTimeMinutes($item['time_start'] ?? null);
             $end = $this->scheduleTimeMinutes($item['time_end'] ?? null);
@@ -206,30 +312,56 @@ class StudentController extends Controller
                     return true;
                 }
             }
+
+            $compactDays = [
+                'M' => 'MON',
+                'T' => 'TUE',
+                'W' => 'WED',
+                'R' => 'THU',
+                'F' => 'FRI',
+                'S' => 'SAT',
+                'U' => 'SUN',
+            ];
+            if ($token === 'TTH' || $token === 'TR' || $token === 'TUTH' || $token === 'TUETH') {
+                if (in_array($today, ['TUE', 'THU'], true)) {
+                    return true;
+                }
+            } elseif (preg_match('/^[MTWRFSU]+$/', $token)) {
+                foreach (str_split($token) as $letter) {
+                    if (($compactDays[$letter] ?? null) === $today) {
+                        return true;
+                    }
+                }
+            }
         }
 
-        // Common compact schedule codes used by the section editor.
-        return ($today === 'MON' && str_contains($day, 'M'))
-            || ($today === 'TUE' && (str_contains($day, 'TUE') || str_contains($day, 'TTH')))
-            || ($today === 'WED' && str_contains($day, 'W'))
-            || ($today === 'THU' && (str_contains($day, 'TH') || str_contains($day, 'TTH')))
-            || ($today === 'FRI' && str_contains($day, 'F'))
-            || ($today === 'SAT' && str_contains($day, 'S'))
-            || ($today === 'SUN' && str_contains($day, 'SU'));
+        return false;
     }
 
     private function scheduleTimeMinutes(?string $value): ?int
     {
-        if (!$value || !preg_match('/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i', trim($value), $match)) {
+        if (!$value || !preg_match('/^(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?\s*(am|pm)?$/i', trim($value), $match)) {
             return null;
         }
 
         $hour = (int) $match[1];
         $minute = (int) ($match[2] ?? 0);
-        $suffix = strtolower($match[3] ?? '');
-        if ($suffix === 'pm' && $hour < 12) $hour += 12;
-        if ($suffix === 'am' && $hour === 12) $hour = 0;
-        return ($hour % 24) * 60 + $minute;
+        $second = (int) ($match[3] ?? 0);
+        $suffix = strtolower($match[4] ?? '');
+        if ($minute > 59 || $second > 59) {
+            return null;
+        }
+        if ($suffix !== '') {
+            if ($hour < 1 || $hour > 12) {
+                return null;
+            }
+            if ($suffix === 'pm' && $hour < 12) $hour += 12;
+            if ($suffix === 'am' && $hour === 12) $hour = 0;
+        } elseif ($hour > 23) {
+            return null;
+        }
+
+        return $hour * 60 + $minute;
     }
 
     private function applyDisplaySection(Student $student): void

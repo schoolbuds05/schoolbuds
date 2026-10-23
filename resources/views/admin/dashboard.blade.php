@@ -9,12 +9,13 @@
     action-label="Browse students"
 />
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
     <x-stat-card label="Students" :value="$stats['total_students']" />
     <x-stat-card label="Active" :value="$stats['active_students']" tone="emerald" />
     <x-stat-card label="Teachers" :value="$stats['total_teachers']" tone="accent" />
-    <x-stat-card label="Collected" value="PHP {{ number_format($stats['total_collected']) }}" tone="accent" />
-    <x-stat-card label="Outstanding" value="PHP {{ number_format($stats['total_fees_due']) }}" tone="red" />
+    <x-stat-card label="Fees Paid · View details" value="PHP {{ number_format($stats['total_collected']) }}" tone="accent" :href="route('admin.fees.index', ['type' => 'paid'])" />
+    <x-stat-card label="Fees Still Due · View details" value="PHP {{ number_format($stats['total_fees_due']) }}" tone="red" :href="route('admin.fees.index', ['type' => 'due'])" />
+    <x-stat-card label="Payments to Verify · View details" value="PHP {{ number_format($stats['pending_payments']) }}" tone="slate" :href="route('admin.fees.index', ['type' => 'pending'])" />
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -39,7 +40,7 @@
     </section>
 
     <section class="portal-card p-5">
-        <h2 class="font-bold text-slate-800 mb-4">Outstanding fees</h2>
+        <h2 class="font-bold text-slate-800 mb-4">Unpaid fees</h2>
         <div class="divide-y divide-slate-100">
             @forelse($unpaidFees as $fee)
                 <div class="flex items-center justify-between py-3">
@@ -47,10 +48,10 @@
                         <p class="font-semibold text-slate-800">{{ $fee->student?->first_name }} {{ $fee->student?->last_name }}</p>
                         <p class="text-xs text-slate-500">{{ $fee->type }} / {{ ucfirst($fee->status) }}</p>
                     </div>
-                    <p class="font-black text-red-600">PHP {{ number_format($fee->amount) }}</p>
+                    <p class="font-black text-red-600">PHP {{ number_format(max(0, (float) $fee->amount - (float) $fee->paid_amount), 2) }}</p>
                 </div>
             @empty
-                <p class="py-6 text-sm text-slate-500">No outstanding fees.</p>
+                <p class="py-6 text-sm text-slate-500">No unpaid fees.</p>
             @endforelse
         </div>
     </section>

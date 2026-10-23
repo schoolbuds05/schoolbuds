@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicTerm;
 use App\Models\ActivityLog;
+use App\Models\Course;
 use App\Models\EnrollmentApplication;
 use App\Models\Fee;
 use App\Models\SchoolClass;
@@ -29,7 +30,28 @@ class SubjectSectionController extends Controller
         $subjects = Subject::query()
             ->with('prerequisites:id,code,name')
             ->when($request->program_type, fn($q) => $q->where('program_type', $request->program_type))
-            ->when($request->course, fn($q) => $q->where(function ($q2) use ($request) {
+            ->when($request->filled('scope'), function ($query) use ($request) {
+                $scopeParts = explode('|', (string) $request->query('scope'), 2);
+                if (count($scopeParts) !== 2 || !in_array($scopeParts[0], ['college', 'shs'], true)) {
+                    return;
+                }
+
+                [$programType, $scopeValue] = $scopeParts;
+                $scopeColumn = $programType === 'college' ? 'course' : 'strand';
+                $query->where('program_type', $programType)
+                    ->where(function ($scopeQuery) use ($scopeColumn, $scopeValue, $programType) {
+                        if ($scopeValue === '__general__') {
+                            $scopeQuery->whereNull($scopeColumn)->orWhere($scopeColumn, '');
+                        } else {
+                            $scopeQuery->where($scopeColumn, $scopeValue)
+                                ->orWhereIn($scopeColumn, Course::query()
+                                    ->select('name')
+                                    ->where('program_type', $programType)
+                                    ->where('acronym', $scopeValue));
+                        }
+                    });
+            })
+            ->when(!$request->filled('scope') && $request->course, fn($q) => $q->where(function ($q2) use ($request) {
                 $q2->where('course', $request->course)
                    ->orWhereNull('course')
                    ->orWhere('course', '');
@@ -41,11 +63,21 @@ class SubjectSectionController extends Controller
                    ->orWhere('strand', '');
             }))
             ->when($request->semester, fn($q) => $q->where('semester', $request->semester))
-            ->when($request->search, function ($q) use ($request) {
-                $search = $request->search;
-                $q->where(function ($q2) use ($search) {
-                    $q2->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%");
+            ->when($request->search, function ($query) use ($request) {
+                $search = trim((string) $request->search);
+                $matchingCourses = Course::query()
+                    ->where(function ($courseQuery) use ($search) {
+                        $courseQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('acronym', 'like', "%{$search}%");
+                    });
+
+                $query->where(function ($searchQuery) use ($search, $matchingCourses) {
+                    $searchQuery->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('course', 'like', "%{$search}%")
+                        ->orWhere('strand', 'like', "%{$search}%")
+                        ->orWhereIn('course', (clone $matchingCourses)->select('name'))
+                        ->orWhereIn('course', (clone $matchingCourses)->select('acronym'));
                 });
             })
             ->where('is_active', true)
@@ -328,12 +360,43 @@ class SubjectSectionController extends Controller
         return response()->json($sections);
     }
 
+    // GET /api/registrar/sections — include closed and awaiting-review sections for the registrar portal.
+    public function registrarSectionIndex(Request $request)
+    {
+        $this->authorizeRegistrar($request);
+        $user = $request->user();
+        $sections = Section::with([
+            'sectionSubjects.subject',
+            'sectionSubjects.teacher',
+            'sectionSubjects.schedules',
+        ])
+            ->when($user?->role === 'head_department' || $user?->position === 'head_department', fn ($query) => $query->where('department_id', $user->department_id))
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $term = '%' . trim($request->search) . '%';
+                $query->where(function ($inner) use ($term) {
+                    $inner->where('name', 'like', $term)
+                        ->orWhere('course', 'like', $term)
+                        ->orWhere('strand', 'like', $term)
+                        ->orWhere('school_year', 'like', $term);
+                });
+            })
+            ->orderByDesc('school_year')
+            ->orderBy('name')
+            ->get()
+            ->map(function (Section $section) {
+                $section->setAttribute('student_count', $section->students()->wherePivot('status', 'enrolled')->count());
+                return $section;
+            });
+
+        return response()->json($sections);
+    }
+
     // POST /api/sections
     public function sectionStore(Request $request)
     {
         $this->authorizeRegistrar($request);
 
-        $request->validate([
+        $data = $request->validate([
             'name'         => 'required|string|max:100',
             'course'       => 'nullable|string|max:100',
             'year_level'   => 'nullable|string|max:5',
@@ -342,15 +405,30 @@ class SubjectSectionController extends Controller
             'school_year'  => 'required|string|max:20',
             'semester'     => 'required|in:1st,2nd,summer',
             'max_students' => 'nullable|integer|min:1',
+            'is_active'    => 'nullable|boolean',
         ]);
 
-        $section = Section::create($request->all());
+        $user = $request->user();
+        $isDepartmentChair = $user->role === 'head_department' || $user->position === 'head_department';
+        $data['created_by'] = $user->id;
+        if ($isDepartmentChair) {
+            $data['department_id'] = $user->department_id;
+            $data['workflow_status'] = 'draft';
+            $data['is_active'] = false;
+        } else {
+            $data['is_active'] = (bool) ($data['is_active'] ?? false);
+            $data['workflow_status'] = $data['is_active'] ? 'approved' : 'draft';
+        }
+
+        $section = Section::create($data);
         return response()->json($section, 201);
     }
 
     // GET /api/sections/{id}
     public function sectionShow(Request $request, $id)
     {
+        $this->authorizeRegistrar($request);
+
         $section = Section::with([
             'sectionSubjects.subject',
             'sectionSubjects.teacher',
@@ -359,6 +437,90 @@ class SubjectSectionController extends Controller
         ])->findOrFail($id);
 
         return response()->json($section);
+    }
+
+    public function submitSection(Request $request, $id)
+    {
+        $this->authorizeSectionWorkflow($request, ['head_department']);
+        $section = Section::findOrFail($id);
+        abort_unless((int) $section->department_id === (int) $request->user()->department_id, 403, 'You can only submit sections from your department.');
+        abort_unless(in_array($section->workflow_status, ['draft', 'rejected'], true), 422, 'Only draft or rejected sections can be submitted.');
+
+        $section->update([
+            'workflow_status' => 'pending',
+            'workflow_remarks' => null,
+            'submitted_at' => now(),
+            'is_active' => false,
+        ]);
+        ActivityLog::record($request, 'section_submitted', 'Submitted section ' . $section->name . ' for Registrar review.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
+
+        return response()->json(['message' => 'Section submitted for Registrar review.', 'section' => $section->fresh()]);
+    }
+
+    public function reviewSection(Request $request, $id)
+    {
+        $this->authorizeSectionWorkflow($request, ['admin', 'registrar']);
+        $section = Section::findOrFail($id);
+        abort_unless($section->workflow_status === 'pending', 422, 'Only sections awaiting review can be approved or rejected.');
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'reject'])],
+            'remarks' => ['nullable', 'string', 'max:2000'],
+        ]);
+        if ($data['decision'] === 'reject' && blank($data['remarks'] ?? null)) {
+            return response()->json(['message' => 'Remarks are required when rejecting a section.'], 422);
+        }
+        if ($data['decision'] === 'approve') {
+            $assignments = SectionSubject::query()
+                ->where('section_id', $section->id)
+                ->whereNotNull('room')->whereNotNull('day')->whereNotNull('time_start')->whereNotNull('time_end')
+                ->get();
+            foreach ($assignments as $assignment) {
+                $conflict = SectionSubject::query()
+                    ->where('id', '!=', $assignment->id)
+                    ->where('room', $assignment->room)
+                    ->where('day', $assignment->day)
+                    ->where('time_start', '<', $assignment->time_end)
+                    ->where('time_end', '>', $assignment->time_start)
+                    ->exists();
+                if ($conflict) {
+                    return response()->json(['message' => "Schedule conflict: {$assignment->room} on {$assignment->day} ({$assignment->time_start}-{$assignment->time_end}) is already assigned to another section."], 422);
+                }
+            }
+        }
+
+        $approved = $data['decision'] === 'approve';
+        $section->update([
+            'workflow_status' => $approved ? 'approved' : 'rejected',
+            'workflow_remarks' => $data['remarks'] ?? null,
+            'reviewed_by' => $request->user()->id,
+            'reviewed_at' => now(),
+            'is_active' => $approved,
+        ]);
+        ActivityLog::record($request, 'section_reviewed', ucfirst($data['decision']) . ' section ' . $section->name . '.', ['subject_type' => Section::class, 'subject_id' => $section->id, 'meta' => ['remarks' => $data['remarks'] ?? null]]);
+
+        return response()->json(['message' => $approved ? 'Section approved and opened for enrollment.' : 'Section returned to the Chair.', 'section' => $section->fresh()]);
+    }
+
+    public function closeSection(Request $request, $id)
+    {
+        $this->authorizeSectionWorkflow($request, ['admin', 'registrar']);
+        $section = Section::findOrFail($id);
+        abort_unless($section->workflow_status === 'approved', 422, 'Only approved sections can be closed.');
+        $section->update(['workflow_status' => 'closed', 'is_active' => false]);
+        ActivityLog::record($request, 'section_closed', 'Closed section ' . $section->name . '.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
+
+        return response()->json(['message' => 'Section closed.', 'section' => $section->fresh()]);
+    }
+
+    public function reopenSection(Request $request, $id)
+    {
+        $this->authorizeSectionWorkflow($request, ['admin', 'registrar']);
+        $section = Section::findOrFail($id);
+        abort_unless(in_array($section->workflow_status, ['closed', 'approved'], true), 422, 'Only approved or closed sections can be reopened.');
+        $section->update(['workflow_status' => 'approved', 'is_active' => true, 'workflow_remarks' => null]);
+        ActivityLog::record($request, 'section_reopened', 'Reopened section ' . $section->name . '.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
+
+        return response()->json(['message' => 'Section reopened for enrollment.', 'section' => $section->fresh()]);
     }
 
     // PUT /api/sections/{id}
@@ -610,22 +772,38 @@ class SubjectSectionController extends Controller
             $section->sectionSubjects
             ->filter(fn($ss) => ($overrides->get($this->subjectOverrideKey($section->id, $ss->subject->id))?->status ?? 'enrolled') !== 'dropped'
                 && ($overrides->get($this->subjectOverrideKey(null, $ss->subject->id))?->status ?? 'enrolled') !== 'dropped')
-            ->flatMap(fn($ss) => ( ($meetings = $ss->schedules->reject(fn($schedule) => $schedule->day === $ss->day && $schedule->time_start === $ss->time_start && $schedule->time_end === $ss->time_end && $schedule->room === $ss->room))->isEmpty() ? collect([null]) : $meetings )->map(fn($schedule) => [
-                'section_id'   => $section->id,
-                'section_name' => $section->name,
-                'school_year'  => $section->school_year,
-                'semester'     => $section->semester,
-                'subject_id'   => $ss->subject->id,
-                'code'         => $ss->subject->code,
-                'name'         => $ss->subject->name,
-                'units_lec'    => $ss->subject->units_lec,
-                'units_lab'    => $ss->subject->units_lab,
-                'day'          => $schedule?->day ?? $ss->day,
-                'time_start'   => $schedule?->time_start ?? $ss->time_start,
-                'time_end'     => $schedule?->time_end ?? $ss->time_end,
-                'room'         => $schedule?->room ?? $ss->room,
-                'teacher'      => $ss->teacher?->name,
-            ]))
+            ->flatMap(function ($ss) use ($section) {
+                $meetings = collect([$ss])
+                    ->concat($ss->schedules)
+                    ->filter(fn ($meeting) => $meeting->day || $meeting->time_start || $meeting->time_end || $meeting->room)
+                    ->unique(fn ($meeting) => implode('|', [
+                        strtolower(trim((string) $meeting->day)),
+                        trim((string) $meeting->time_start),
+                        trim((string) $meeting->time_end),
+                        strtolower(trim((string) $meeting->room)),
+                    ]));
+
+                if ($meetings->isEmpty()) {
+                    $meetings = collect([null]);
+                }
+
+                return $meetings->map(fn($schedule) => [
+                    'section_id'   => $section->id,
+                    'section_name' => $section->name,
+                    'school_year'  => $section->school_year,
+                    'semester'     => $section->semester,
+                    'subject_id'   => $ss->subject->id,
+                    'code'         => $ss->subject->code,
+                    'name'         => $ss->subject->name,
+                    'units_lec'    => $ss->subject->units_lec,
+                    'units_lab'    => $ss->subject->units_lab,
+                    'day'          => $schedule ? $schedule->day : $ss->day,
+                    'time_start'   => $schedule ? $schedule->time_start : $ss->time_start,
+                    'time_end'     => $schedule ? $schedule->time_end : $ss->time_end,
+                    'room'         => $schedule ? $schedule->room : $ss->room,
+                    'teacher'      => $ss->teacher?->name,
+                ]);
+            })
         );
 
         $sectionSubjectIds = $subjects->pluck('subject_id')->unique()->all();
@@ -648,11 +826,27 @@ class SubjectSectionController extends Controller
             ->get()
             ->reject(fn (StudentSubject $record) => in_array((int) $record->subject_id, $sectionSubjectIds, true))
             ->filter(fn (StudentSubject $record) => $record->status !== 'dropped')
-            ->map(function (StudentSubject $record) {
+            ->flatMap(function (StudentSubject $record) {
                 $offering = $record->section?->sectionSubjects
                     ->first(fn ($sectionSubject) => (int) $sectionSubject->subject_id === (int) $record->subject_id);
 
-                return [
+                $meetings = $offering
+                    ? collect([$offering])
+                        ->concat($offering->schedules)
+                        ->filter(fn ($meeting) => $meeting->day || $meeting->time_start || $meeting->time_end || $meeting->room)
+                        ->unique(fn ($meeting) => implode('|', [
+                            strtolower(trim((string) $meeting->day)),
+                            trim((string) $meeting->time_start),
+                            trim((string) $meeting->time_end),
+                            strtolower(trim((string) $meeting->room)),
+                        ]))
+                    : collect();
+
+                if ($meetings->isEmpty()) {
+                    $meetings = collect([null]);
+                }
+
+                return $meetings->map(fn ($meeting) => [
                     'section_id'   => $record->section_id,
                     'section_name' => $record->section?->name ?? 'Irregular enrollment',
                     'school_year'  => $record->section?->school_year,
@@ -662,12 +856,12 @@ class SubjectSectionController extends Controller
                     'name'         => $record->subject?->name,
                     'units_lec'    => $record->subject?->units_lec,
                     'units_lab'    => $record->subject?->units_lab,
-                    'day'          => $offering?->day,
-                    'time_start'   => $offering?->time_start,
-                    'time_end'     => $offering?->time_end,
-                    'room'         => $offering?->room,
+                    'day'          => $meeting ? $meeting->day : null,
+                    'time_start'   => $meeting ? $meeting->time_start : null,
+                    'time_end'     => $meeting ? $meeting->time_end : null,
+                    'room'         => $meeting ? $meeting->room : null,
                     'teacher'      => $offering?->teacher?->name,
-                ];
+                ]);
             });
 
         if ($directSectionSubjects->isNotEmpty()) {
@@ -834,6 +1028,14 @@ class SubjectSectionController extends Controller
     {
         $user = $request->user();
         if (!$user || (!in_array($user->role, ['registrar', 'admin', 'head_department']) && !$user->hasAnyRole(['registrar', 'admin', 'head_department']))) {
+            abort(403, 'Unauthorized.');
+        }
+    }
+
+    private function authorizeSectionWorkflow(Request $request, array $roles): void
+    {
+        $user = $request->user();
+        if (!$user || (!in_array($user->role, $roles, true) && !$user->hasAnyRole($roles))) {
             abort(403, 'Unauthorized.');
         }
     }

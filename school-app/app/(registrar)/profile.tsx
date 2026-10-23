@@ -1,177 +1,107 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
-import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  ActivityIndicator, Alert, Platform,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import api, { removeToken } from '../../src/api';
+import api from '../../src/api';
+import { HEADER_TOP } from '../../src/theme';
 import { useTheme } from '../../src/theme-context';
 import ChangePasswordCard from '../components/ChangePasswordCard';
 
 export default function RegistrarProfile() {
-  const router = useRouter();
   const { theme } = useTheme();
   const [user, setUser] = useState(null);
-  const [stats, setStats] = useState({
-    totalStudents: 0,
-    pendingApplications: 0,
-    approvedApplications: 0,
-    rejectedApplications: 0,
-  });
+  const [stats, setStats] = useState({ students: 0, pending: 0, approved: 0, rejected: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem('user').then(u => {
-      if (u) setUser(JSON.parse(u));
-    });
+    AsyncStorage.getItem('user').then(value => {
+      if (value) setUser(JSON.parse(value));
+    }).catch(() => {});
 
-    const load = async () => {
-      try {
-        const [meRes, studentsRes, enrollmentsRes] = await Promise.all([
-          api.get('/me'),
-          api.get('/registrar/students'),
-          api.get('/registrar/enrollments'),
-        ]);
-
+    Promise.all([api.get('/me'), api.get('/registrar/students'), api.get('/registrar/enrollments')])
+      .then(([meRes, studentsRes, enrollmentsRes]) => {
         const me = meRes.data?.user ?? meRes.data;
         setUser(me);
-
-        const students = studentsRes.data || [];
-        const enrollments = enrollmentsRes.data || [];
+        const unwrap = value => Array.isArray(value) ? value : value?.data ?? value?.students ?? value?.enrollments ?? [];
+        const enrollments = unwrap(enrollmentsRes.data);
         setStats({
-          totalStudents: students.length,
-          pendingApplications: enrollments.filter(e => e.status === 'pending').length,
-          approvedApplications: enrollments.filter(e => e.status === 'approved').length,
-          rejectedApplications: enrollments.filter(e => e.status === 'rejected').length,
+          students: unwrap(studentsRes.data).length,
+          pending: enrollments.filter(item => item.status === 'pending').length,
+          approved: enrollments.filter(item => item.status === 'approved').length,
+          rejected: enrollments.filter(item => item.status === 'rejected').length,
         });
-      } catch (e) {
-        console.log('Registrar profile error:', e.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
+      })
+      .catch(error => console.log('Registrar profile error:', error.message))
+      .finally(() => setLoading(false));
   }, []);
 
-  const logout = async () => {
-    await api.post('/logout').catch(() => {});
-    await AsyncStorage.multiRemove(['token', 'role', 'position', 'user']);
-    removeToken();
-    router.replace('/login');
-  };
+  if (loading) return <View style={[styles.center, { backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={theme.primary} /></View>;
 
-  const handleLogout = () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to log out?')) {
-        logout();
-      }
-      return;
-    }
-
-    Alert.alert('Logout', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: logout,
-      },
-    ]);
-  };
-
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color="#378ADD" />
-      </View>
-    );
-  }
-
-  const initials = user?.name
-    ? user.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()
-    : 'RG';
-  const roleLabel = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Registrar';
+  const initials = user?.name ? user.name.trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() : 'RG';
+  const role = user?.role ? user.role.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()) : 'Registrar';
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <View style={s.hero}>
-        <View style={s.avatar}>
-          <Text style={s.initials}>{initials}</Text>
-        </View>
-        <Text style={s.name}>{user?.name ?? 'Registrar'}</Text>
-        <Text style={s.email}>{user?.email ?? 'registrar@school.com'}</Text>
-        <View style={s.roleBadge}>
-          <Text style={s.roleText}>🛂 {roleLabel}</Text>
-        </View>
+    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} contentContainerStyle={styles.content}>
+      <View style={styles.identity}>
+        <View style={[styles.avatar, { backgroundColor: theme.primary }]}><Text style={styles.initials}>{initials}</Text></View>
+        <Text style={[styles.name, { color: theme.text }]}>{user?.name || 'Registrar'}</Text>
+        <Text style={[styles.email, { color: theme.textSub }]}>{user?.email || '—'}</Text>
+        <View style={[styles.roleBadge, { backgroundColor: theme.primaryLight }]}><Text style={[styles.roleText, { color: theme.primary }]}>{role}</Text></View>
       </View>
 
-      <View style={s.statsRow}>
-        <View style={s.statCard}>
-          <Text style={s.statValue}>{stats.totalStudents}</Text>
-          <Text style={s.statLabel}>Students</Text>
-        </View>
-        <View style={s.statCard}>
-          <Text style={s.statValue}>{stats.pendingApplications}</Text>
-          <Text style={s.statLabel}>Pending apps</Text>
-        </View>
+      <View style={styles.stats}>
+        <Stat value={stats.students} label="Students" theme={theme} />
+        <Stat value={stats.pending} label="Pending" theme={theme} />
+        <Stat value={stats.approved} label="Approved" theme={theme} />
+        <Stat value={stats.rejected} label="Rejected" theme={theme} />
       </View>
 
-      <View style={s.statsRow}>
-        <View style={s.statCard}>
-          <Text style={s.statValue}>{stats.approvedApplications}</Text>
-          <Text style={s.statLabel}>Approved</Text>
-        </View>
-        <View style={s.statCard}>
-          <Text style={s.statValue}>{stats.rejectedApplications}</Text>
-          <Text style={s.statLabel}>Rejected</Text>
-        </View>
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
+        <Text style={[styles.cardTitle, { color: theme.text }]}>Account</Text>
+        <InfoRow label="Email" value={user?.email} theme={theme} />
+        <InfoRow label="Role" value={role} theme={theme} />
+        <InfoRow label="Member since" value={memberSince} theme={theme} last />
       </View>
 
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Account information</Text>
-        {[
-          ['Name', user?.name ?? 'Registrar'],
-          ['Email', user?.email ?? '—'],
-          ['Role', roleLabel],
-          ['Member since', user?.created_at ? new Date(user.created_at).toLocaleDateString() : '—'],
-        ].map(([label, value]) => (
-          <View key={label} style={s.infoRow}>
-            <Text style={s.infoLabel}>{label}</Text>
-            <Text style={s.infoValue}>{value}</Text>
-          </View>
-        ))}
-      </View>
-
-      <ChangePasswordCard theme={theme} />
-
-      <TouchableOpacity style={s.logoutBtn} onPress={handleLogout}>
-        <Text style={s.logoutText}>Logout</Text>
-      </TouchableOpacity>
+      <ChangePasswordCard theme={theme} embedded />
     </ScrollView>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F6F9' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F6F9' },
-  hero: { backgroundColor: '#378ADD', paddingTop: 50, paddingBottom: 24, paddingHorizontal: 20, alignItems: 'center' },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.24)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  initials: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  name: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  email: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 4 },
-  roleBadge: { marginTop: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.22)' },
-  roleText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 16, gap: 10 },
-  statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
-  statValue: { fontSize: 24, fontWeight: '700', color: '#111827' },
-  statLabel: { fontSize: 12, color: '#6B7280', marginTop: 6 },
-  card: { margin: 16, backgroundColor: '#fff', borderRadius: 18, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 14 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#EFF2F7' },
-  infoLabel: { fontSize: 13, color: '#6B7280' },
-  infoValue: { fontSize: 13, color: '#111827', fontWeight: '600', textAlign: 'right', maxWidth: '55%' },
-  logoutBtn: { marginHorizontal: 16, marginTop: 10, backgroundColor: '#FCEBEB', borderRadius: 14, padding: 16, alignItems: 'center' },
-  logoutText: { color: '#D14343', fontWeight: '700', fontSize: 14 },
+function Stat({ value, label, theme }) {
+  return <View style={[styles.stat, { backgroundColor: theme.card }]}><Text style={[styles.statValue, { color: theme.text }]}>{value}</Text><Text style={[styles.statLabel, { color: theme.textSub }]}>{label}</Text></View>;
+}
+
+function InfoRow({ label, value, theme, last }) {
+  return (
+    <View style={[styles.infoRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}>
+      <Text style={[styles.infoLabel, { color: theme.textSub }]}>{label}</Text>
+      <Text style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>{value || '—'}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  content: { width: '100%', maxWidth: 600, alignSelf: 'center', paddingHorizontal: 18, paddingTop: HEADER_TOP + 8, paddingBottom: 26 },
+  identity: { alignItems: 'center', marginBottom: 12 },
+  avatar: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  initials: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  name: { fontSize: 18, fontFamily: 'serif', fontWeight: '700' },
+  email: { fontSize: 10, marginTop: 3 },
+  roleBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, marginTop: 5 },
+  roleText: { fontSize: 9, fontWeight: '700' },
+  stats: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  stat: { flex: 1, minWidth: 0, height: 45, borderRadius: 12, borderWidth: 1, borderColor: '#F0E8E3', alignItems: 'center', justifyContent: 'center' },
+  statValue: { fontSize: 13, fontWeight: '800' },
+  statLabel: { fontSize: 8, marginTop: 1 },
+  card: { borderRadius: 14, borderWidth: 1, borderColor: '#F0E8E3', paddingHorizontal: 12, paddingTop: 11, paddingBottom: 3 },
+  cardTitle: { fontSize: 12, fontWeight: '800', marginBottom: 2 },
+  infoRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  infoLabel: { fontSize: 10 },
+  infoValue: { fontSize: 10, fontWeight: '700', maxWidth: '65%', textAlign: 'right' },
 });

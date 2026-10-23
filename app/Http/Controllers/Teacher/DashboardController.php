@@ -28,13 +28,13 @@ class DashboardController extends Controller
         $teacher = auth()->user();
 
         [$activeTerm, $classes] = $this->currentTermTeacherClasses();
-        $todayName = now()->format('l');
+        $todayName = now('Asia/Manila')->format('l');
         $classes = $classes->filter(function (SchoolClass $class) use ($todayName) {
             $segments = collect(explode(' · ', (string) $class->schedule));
-            return $segments->contains(fn ($segment) => str_starts_with(strtolower(trim($segment)), strtolower($todayName)));
+            return $segments->contains(fn ($segment) => $this->scheduleIncludesDay($segment, $todayName));
         })->map(function (SchoolClass $class) use ($todayName) {
             $class->schedule = collect(explode(' · ', (string) $class->schedule))
-                ->filter(fn ($segment) => str_starts_with(strtolower(trim($segment)), strtolower($todayName)))
+                ->filter(fn ($segment) => $this->scheduleIncludesDay($segment, $todayName))
                 ->implode(' · ');
             $meeting = SectionSubject::query()
                 ->where('teacher_id', auth()->id())
@@ -43,8 +43,8 @@ class DashboardController extends Controller
                 ->with('schedules')
                 ->first();
             if ($meeting) {
-                $todayMeeting = $meeting->schedules
-                    ->first(fn ($slot) => str_contains(strtolower((string) $slot->day), strtolower($todayName)));
+                $todayMeeting = $this->sectionSubjectMeetings($meeting)
+                    ->first(fn ($slot) => $this->scheduleIncludesDay($slot->day, $todayName));
                 $class->room = $todayMeeting?->room ?: $meeting->room;
             }
             return $class;
@@ -61,7 +61,7 @@ class DashboardController extends Controller
 
         $todayAttendance = Attendance::whereHas('schoolClass', fn($q) =>
             $q->where('teacher_id', $teacher->id)
-        )->whereDate('date', today())->count();
+        )->whereDate('date', now('Asia/Manila')->toDateString())->count();
 
         return view('teacher.dashboard', compact(
             'activeTerm', 'classes', 'totalStudents', 'recentGrades', 'todayAttendance'
@@ -619,7 +619,7 @@ class DashboardController extends Controller
     {
         SectionSubject::query()
             ->where('teacher_id', auth()->id())
-            ->with(['section', 'subject'])
+            ->with(['section', 'subject', 'schedules'])
             ->get()
             ->each(fn (SectionSubject $sectionSubject) => $this->schoolClassForSectionSubject($sectionSubject));
 
@@ -649,10 +649,8 @@ class DashboardController extends Controller
         $schoolClass->section = $section?->name ?? '';
         $schoolClass->school_year = $section?->school_year ?? '';
         $schoolClass->teacher_id = $sectionSubject->teacher_id;
-        $meetings = $sectionSubject->schedules->isNotEmpty()
-            ? $sectionSubject->schedules
-            : collect([(object) ['day' => $sectionSubject->day, 'time_start' => $sectionSubject->time_start, 'time_end' => $sectionSubject->time_end, 'room' => $sectionSubject->room]]);
-        $schoolClass->room = $meetings->pluck('room')->filter()->unique()->implode(', ') ?: $sectionSubject->room;
+        $meetings = $this->sectionSubjectMeetings($sectionSubject);
+        $schoolClass->room = $meetings->pluck('room')->map(fn ($room) => trim((string) $room))->filter()->unique(fn ($room) => mb_strtolower($room))->implode(', ') ?: $sectionSubject->room;
         $schoolClass->schedule = $meetings->map(fn ($meeting) => trim(implode(' ', array_filter([
             $meeting->day,
             ($meeting->time_start && $meeting->time_end) ? "{$meeting->time_start}-{$meeting->time_end}" : null,
@@ -660,6 +658,63 @@ class DashboardController extends Controller
         $schoolClass->save();
 
         return $schoolClass;
+    }
+
+    private function sectionSubjectMeetings(SectionSubject $sectionSubject)
+    {
+        return collect([$sectionSubject])
+            ->concat($sectionSubject->schedules)
+            ->filter(fn ($meeting) => $meeting->day || $meeting->time_start || $meeting->time_end || $meeting->room)
+            ->unique(fn ($meeting) => implode('|', [
+                strtolower(trim((string) $meeting->day)),
+                trim((string) $meeting->time_start),
+                trim((string) $meeting->time_end),
+                strtolower(trim((string) $meeting->room)),
+            ]))
+            ->values();
+    }
+
+    private function scheduleIncludesDay(?string $value, string $day): bool
+    {
+        if (!$value) {
+            return false;
+        }
+
+        $selected = strtoupper(substr($day, 0, 3));
+        $aliases = [
+            'MON' => ['MON', 'MONDAY'],
+            'TUE' => ['TUE', 'TUES', 'TUESDAY'],
+            'WED' => ['WED', 'WEDNESDAY'],
+            'THU' => ['THU', 'THUR', 'THURS', 'THURSDAY'],
+            'FRI' => ['FRI', 'FRIDAY'],
+            'SAT' => ['SAT', 'SATURDAY'],
+            'SUN' => ['SUN', 'SUNDAY'],
+        ];
+        $compactDays = ['M' => 'MON', 'T' => 'TUE', 'W' => 'WED', 'R' => 'THU', 'F' => 'FRI', 'S' => 'SAT', 'U' => 'SUN'];
+
+        foreach (preg_split('/[\s,\/;&-]+/', strtoupper($value), -1, PREG_SPLIT_NO_EMPTY) as $token) {
+            if (in_array($token, $aliases[$selected] ?? [], true)) {
+                return true;
+            }
+
+            if ($token === 'TH' && $selected === 'THU') {
+                return true;
+            }
+
+            if (in_array($token, ['TTH', 'TR', 'TUTH', 'TUETH'], true)) {
+                if (in_array($selected, ['TUE', 'THU'], true)) {
+                    return true;
+                }
+            } elseif (preg_match('/^[MTWRFSU]+$/', $token)) {
+                foreach (str_split($token) as $letter) {
+                    if (($compactDays[$letter] ?? null) === $selected) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private function teacherStudents(GradeWorkflowService $workflow)

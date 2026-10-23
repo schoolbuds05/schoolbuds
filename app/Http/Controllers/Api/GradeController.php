@@ -130,7 +130,7 @@ class GradeController extends Controller
             return response()->json(['active_term' => null, 'view' => 'current', 'grades' => (object) []]);
         }
 
-        $activeTerm = AcademicTerm::query()->latest('updated_at')->first();
+        $activeTerm = AcademicTerm::query()->where('is_active', true)->latest('updated_at')->first();
         $view = $request->query('view') === 'past' ? 'past' : 'current';
         $grades = Grade::query()
             ->with('schoolClass')

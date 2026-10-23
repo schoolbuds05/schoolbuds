@@ -27,7 +27,8 @@ export default function TeacherDashboard() {
     }
     const matching = meetings.filter(meeting => dayMatches(meeting.day, selectedDay));
     if (!matching.length) return null;
-    return { ...item, day: selectedDay, schedule: matching.map(meeting => `${meeting.time_start || 'Time TBA'}${meeting.time_end ? `-${meeting.time_end}` : ''}`).join(' · '), room: matching.map(meeting => meeting.room).filter(Boolean).join(', ') || item.room };
+    const rooms = [...new Map(matching.map(meeting => [String(meeting.room || '').trim().toLowerCase(), String(meeting.room || '').trim()]).filter(([key]) => key)).values()];
+    return { ...item, day: selectedDay, schedule: matching.map(meeting => `${meeting.time_start || 'Time TBA'}${meeting.time_end ? `-${meeting.time_end}` : ''}`).join(' · '), room: rooms.join(', ') || item.room };
   }).filter(Boolean), [classes, selectedDay]);
   const next = selectedClasses.find(item => item.schedule && item.schedule !== 'No schedule') ?? selectedClasses[0] ?? null;
   if (loading) return <View style={[styles.center, { backgroundColor: theme.bg }]}><ActivityIndicator size="large" color={theme.primary} /></View>;
@@ -46,11 +47,11 @@ export default function TeacherDashboard() {
 }
 function dayMatches(value, selected) {
   const daysByShortName = {
-    mon: ['mon', 'monday', 'm'],
-    tue: ['tue', 'tues', 'tuesday', 'tu', 't'],
-    wed: ['wed', 'wednesday', 'w'],
-    thu: ['thu', 'thur', 'thurs', 'thursday', 'th'],
-    fri: ['fri', 'friday', 'f'],
+    mon: ['mon', 'monday'],
+    tue: ['tue', 'tues', 'tuesday'],
+    wed: ['wed', 'wednesday'],
+    thu: ['thu', 'thur', 'thurs', 'thursday'],
+    fri: ['fri', 'friday'],
     sat: ['sat', 'saturday'],
     sun: ['sun', 'sunday'],
   };
@@ -59,10 +60,11 @@ function dayMatches(value, selected) {
   if (!aliases) return false;
 
   const tokens = String(value || '').toLowerCase().match(/[a-z]+/g) || [];
+  const compactDays = { m: 'mon', t: 'tue', w: 'wed', r: 'thu', f: 'fri', s: 'sat', u: 'sun' };
   return tokens.some(token => {
     if (aliases.includes(token)) return true;
-    if (token === 'mwf') return ['mon', 'wed', 'fri'].includes(selectedKey);
-    if (token === 'tth') return ['tue', 'thu'].includes(selectedKey);
+    if (['tth', 'tr', 'tuth', 'tueth'].includes(token)) return ['tue', 'thu'].includes(selectedKey);
+    if (/^[mtwrfsu]+$/.test(token)) return [...token].some(day => compactDays[day] === selectedKey);
     return false;
   });
 }

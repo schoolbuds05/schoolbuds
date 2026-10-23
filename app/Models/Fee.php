@@ -8,6 +8,7 @@ class Fee extends Model
 {
     protected $fillable = [
         'student_id', 'type', 'amount', 'paid_amount',
+        'pending_payment_amount', 'payment_verification_status',
         'status', 'due_date', 'paid_date',
         'payment_method', 'payment_reference', 'paid_by',
         'verified_by', 'payment_verified_at',
@@ -17,6 +18,7 @@ class Fee extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'paid_amount' => 'decimal:2',
+        'pending_payment_amount' => 'decimal:2',
         'due_date' => 'date',
         'paid_date' => 'date',
         'payment_verified_at' => 'datetime',

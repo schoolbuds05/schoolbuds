@@ -328,13 +328,19 @@ class TeacherController extends Controller
     {
         $section = $sectionSubject->section;
         $subject = $sectionSubject->subject;
-        $meetings = $sectionSubject->schedules->isNotEmpty()
-            ? $sectionSubject->schedules
-            : collect([(object) ['day' => $sectionSubject->day, 'time_start' => $sectionSubject->time_start, 'time_end' => $sectionSubject->time_end, 'room' => $sectionSubject->room]]);
+        $meetings = collect([$sectionSubject])
+            ->concat($sectionSubject->schedules)
+            ->filter(fn ($meeting) => $meeting->day || $meeting->time_start || $meeting->time_end || $meeting->room)
+            ->unique(fn ($meeting) => implode('|', [
+                strtolower(trim((string) $meeting->day)),
+                trim((string) $meeting->time_start),
+                trim((string) $meeting->time_end),
+                strtolower(trim((string) $meeting->room)),
+            ]))
+            ->values();
         $meetingLabels = $meetings->map(fn ($meeting) => trim(implode(' ', array_filter([
             $meeting->day,
             ($meeting->time_start && $meeting->time_end) ? "{$meeting->time_start}-{$meeting->time_end}" : null,
-            $meeting->room,
         ]))))->filter()->values();
 
         return [
@@ -349,7 +355,7 @@ class TeacherController extends Controller
             'school_year' => $section?->school_year,
             'semester' => $section?->semester,
             'is_current' => $this->isCurrentSectionSubject($sectionSubject),
-            'room' => $meetings->pluck('room')->filter()->unique()->implode(', ') ?: $sectionSubject->room,
+            'room' => $meetings->pluck('room')->map(fn ($room) => trim((string) $room))->filter()->unique(fn ($room) => mb_strtolower($room))->implode(', ') ?: $sectionSubject->room,
             'day' => $meetings->pluck('day')->filter()->unique()->implode(', '),
             'meetings' => $meetings->map(fn ($meeting) => ['day' => $meeting->day, 'time_start' => $meeting->time_start, 'time_end' => $meeting->time_end, 'room' => $meeting->room])->values(),
             'schedule' => $meetingLabels->implode(' · ') ?: 'No schedule',

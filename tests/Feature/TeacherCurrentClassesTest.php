@@ -6,6 +6,7 @@ use App\Models\AcademicTerm;
 use App\Models\SchoolClass;
 use App\Models\Section;
 use App\Models\SectionSubject;
+use App\Models\SectionSubjectSchedule;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
@@ -15,6 +16,44 @@ use Tests\TestCase;
 class TeacherCurrentClassesTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_mobile_teacher_role_can_load_assigned_classes_and_all_meetings(): void
+    {
+        $teacher = User::factory()->create([
+            'role' => User::ROLE_TEACHER,
+            'position' => User::POSITION_TEACHER,
+        ]);
+        AcademicTerm::create([
+            'school_year' => '2026-2027',
+            'semester' => '1st',
+        ]);
+        $offering = $this->createOffering($teacher, 'Mobile Teacher Mathematics', '2026-2027', '1st');
+        $offering->update([
+            'day' => 'Monday',
+            'time_start' => '08:30',
+            'time_end' => '10:30',
+            'room' => 'Room 502',
+        ]);
+        SectionSubjectSchedule::create([
+            'section_subject_id' => $offering->id,
+            'day' => 'Saturday',
+            'time_start' => '08:30',
+            'time_end' => '10:30',
+            'room' => 'Room 503',
+        ]);
+
+        $this->actingAs($teacher)
+            ->getJson('/api/teacher/dashboard')
+            ->assertOk()
+            ->assertJsonPath('total_classes', 1)
+            ->assertJsonPath('classes.0.meetings.0.day', 'Monday')
+            ->assertJsonPath('classes.0.meetings.1.day', 'Saturday');
+
+        $this->getJson('/api/teacher/classes')
+            ->assertOk()
+            ->assertJsonPath('0.meetings.0.day', 'Monday')
+            ->assertJsonPath('0.meetings.1.day', 'Saturday');
+    }
 
     public function test_teacher_classes_only_shows_offerings_in_the_current_academic_term(): void
     {

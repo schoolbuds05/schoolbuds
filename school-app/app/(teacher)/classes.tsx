@@ -64,11 +64,13 @@ export default function Classes() {
 
   const greeting = `Teacher · S.Y. ${data?.classes?.[0]?.school_year || '2025–2026'}`;
   const todayClasses = (() => {
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-    const shortToday = today.slice(0, 3);
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'short' });
     return (data?.classes ?? []).filter(classItem => {
-      const schedule = `${classItem.day ?? ''} ${classItem.schedule ?? ''}`.toLowerCase();
-      return schedule.includes(today) || new RegExp(`\\b${shortToday}\\b`, 'i').test(schedule);
+      const meetings = Array.isArray(classItem.meetings) ? classItem.meetings : [];
+      const dayValues = meetings.length
+        ? meetings.map(meeting => meeting.day)
+        : [classItem.day, classItem.weekday, classItem.day_of_week, classItem.schedule];
+      return dayValues.some(day => dayMatches(day, today));
     });
   })();
   const visibleClasses = classFilter === 'today' ? todayClasses : (data?.classes ?? []);
@@ -279,6 +281,30 @@ export default function Classes() {
     </Modal>
     </>
   );
+}
+
+function dayMatches(value, selected) {
+  const selectedKey = String(selected || '').toLowerCase().slice(0, 3);
+  const shortDays = {
+    mon: ['mon', 'monday'],
+    tue: ['tue', 'tues', 'tuesday'],
+    wed: ['wed', 'wednesday'],
+    thu: ['thu', 'thur', 'thurs', 'thursday'],
+    fri: ['fri', 'friday'],
+    sat: ['sat', 'saturday'],
+    sun: ['sun', 'sunday'],
+  };
+  const tokens = String(value || '').toLowerCase().match(/[a-z]+/g) || [];
+  const compactDays = { m: 'mon', t: 'tue', w: 'wed', r: 'thu', f: 'fri', s: 'sat', u: 'sun' };
+
+  return tokens.some(token => {
+    if (shortDays[selectedKey]?.includes(token)) return true;
+    if (['tth', 'tr', 'tuth', 'tueth'].includes(token)) return ['tue', 'thu'].includes(selectedKey);
+    if (/^[mtwrfsu]+$/.test(token)) {
+      return [...token].some(day => compactDays[day] === selectedKey);
+    }
+    return false;
+  });
 }
 
 const styles = StyleSheet.create({

@@ -18,6 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import HeaderGradient from '../../app/components/ui/HeaderGradient';
 import api from '../api';
 import { useTheme } from '../theme-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const STATUS = [
   { value: 'active', label: 'Active', bg: '#DCFCE7', color: '#15803D' },
@@ -42,12 +43,16 @@ const emptyForm = {
 
 export default function StudentManagement({ role }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(role === 'registrar' ? 'active' : 'all');
+  const [filters, setFilters] = useState({ yearLevel: '', schoolYear: '', course: '' });
+  const [draftFilters, setDraftFilters] = useState({ yearLevel: '', schoolYear: '', course: '' });
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [password, setPassword] = useState('');
@@ -71,7 +76,7 @@ export default function StudentManagement({ role }) {
     try {
       const params = {};
       if (role === 'admin' && statusFilter !== 'all') params.status = statusFilter;
-      if (search.trim()) params.search = search.trim();
+      if (role === 'admin' && search.trim()) params.search = search.trim();
 
       const res = await api.get(`/${role}/students`, { params });
       setStudents(res.data || []);
@@ -86,13 +91,25 @@ export default function StudentManagement({ role }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const filteredStudents = role === 'registrar' && search.trim()
+  const filterOptions = useMemo(() => ({
+    yearLevels: [...new Set(students.map(student => String(student.grade_level ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    schoolYears: [...new Set(students.map(student => String(student.school_year ?? '').trim()).filter(Boolean))].sort().reverse(),
+    courses: [...new Set(students.flatMap(student => [student.course, student.strand]).map(value => String(value ?? '').trim()).filter(Boolean))].sort(),
+  }), [students]);
+
+  const filteredStudents = role === 'registrar'
     ? students.filter(student => {
         const term = search.trim().toLowerCase();
-        return [student.first_name, student.last_name, student.email, student.student_id, student.grade_level, student.section]
+        const matchesSearch = !term || [student.first_name, student.last_name, student.email, student.student_id, student.grade_level, student.section, student.course, student.strand]
           .some(value => value?.toString().toLowerCase().includes(term));
+        const matchesAcademicFilters = (!filters.yearLevel || String(student.grade_level) === filters.yearLevel)
+          && (!filters.schoolYear || String(student.school_year) === filters.schoolYear)
+          && (!filters.course || [student.course, student.strand].some(value => String(value ?? '') === filters.course));
+        return matchesSearch && matchesAcademicFilters && (statusFilter === 'all' || student.status === statusFilter);
       })
     : students;
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   const openStudent = (student) => {
     setSelected(student);
@@ -294,32 +311,75 @@ export default function StudentManagement({ role }) {
 
   return (
     <View style={[s.container, role === 'registrar' && { backgroundColor: theme?.bg }]}>
-      <HeaderGradient
-        title={role === 'admin' ? "Manage students" : "Students"}
-        subtitle={role === 'admin' ? "Review student profiles, status, and classroom assignments." : "Review approved learners and student profiles."}
-        initials="ST"
-        stats={[
-          { label: 'Active', value: totals.active, accent: role === 'admin' ? '#15803D' : '#1D9E75' },
-          { label: 'Inactive', value: totals.inactive, accent: role === 'admin' ? '#B91C1C' : '#D85A30' },
-          { label: 'Graduated', value: totals.graduated, accent: role === 'admin' ? '#0369A1' : '#378ADD' },
-        ]}
-      />
+      {role === 'registrar' ? (
+        <View style={[s.registrarHeader, { paddingTop: 12 + insets.top }]}>
+          <Text style={s.registrarTitle}>Students</Text>
+          <Text style={s.registrarSubtitle}>
+            Approved learners{students[0]?.school_year ? ` · ${students[0].school_year}` : ''}
+          </Text>
+        </View>
+      ) : (
+        <HeaderGradient
+          title="Manage students"
+          subtitle="Review student profiles, status, and classroom assignments."
+          initials="ST"
+          stats={[
+            { label: 'Active', value: totals.active, accent: '#15803D' },
+            { label: 'Inactive', value: totals.inactive, accent: '#B91C1C' },
+            { label: 'Graduated', value: totals.graduated, accent: '#0369A1' },
+          ]}
+        />
+      )}
 
-      <View style={s.searchRow}>
-        <View style={s.searchCard}>
+      <View style={[s.searchRow, role === 'registrar' && s.registrarSearchRow]}>
+        <View style={[s.searchCard, role === 'registrar' && s.registrarSearchCard]}>
           <Feather name="search" size={18} color="#9CA3AF" style={s.searchIcon} />
           <TextInput
             style={s.searchInput}
-            placeholder="Search student ID, name, email, section"
+            placeholder={role === 'registrar' ? 'Search ID, name, email or section' : 'Search student ID, name, email, section'}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
             returnKeyType="search"
           />
         </View>
+        {role === 'registrar' && (
+          <TouchableOpacity
+            style={[s.filterButton, activeFilterCount > 0 && s.filterButtonActive]}
+            onPress={() => {
+              setDraftFilters(filters);
+              setFilterModalVisible(true);
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Filter students"
+          >
+            <Feather name="sliders" size={15} color={activeFilterCount > 0 ? '#FFFFFF' : '#B51F3B'} />
+            <Text style={[s.filterButtonText, activeFilterCount > 0 && s.filterButtonTextActive]}>
+              Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ''}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {role === 'admin' && (
+      {role === 'registrar' ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={s.filtersScroll}>
+          {STATUS.map(status => {
+            const active = statusFilter === status.value;
+            return (
+              <TouchableOpacity
+                key={status.value}
+                style={[s.filterChip, s.registrarFilterChip, active && s.registrarFilterChipActive]}
+                onPress={() => setStatusFilter(status.value)}
+              >
+                <Text style={[s.filterText, s.registrarFilterText, active && s.filterTextActive]}>
+                  {status.label} {totals[status.value]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={s.filtersScroll}>
           <TouchableOpacity
             style={[s.filterChip, statusFilter === 'all' && s.filterChipActive]}
@@ -339,13 +399,88 @@ export default function StudentManagement({ role }) {
         </ScrollView>
       )}
 
+      {role === 'registrar' && (
+        <Modal
+          visible={filterModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setFilterModalVisible(false)}
+        >
+          <View style={s.filterOverlay}>
+            <TouchableOpacity style={s.filterBackdrop} activeOpacity={1} onPress={() => setFilterModalVisible(false)} />
+            <View style={s.filterSheet}>
+              <View style={s.filterSheetHeader}>
+                <View>
+                  <Text style={s.filterSheetTitle}>Filter students</Text>
+                  <Text style={s.filterSheetSubtitle}>Narrow the list by academic details.</Text>
+                </View>
+                <TouchableOpacity onPress={() => setFilterModalVisible(false)} style={s.filterClose} accessibilityLabel="Close filters">
+                  <Feather name="x" size={18} color="#735D62" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={s.filterGroups} showsVerticalScrollIndicator={false}>
+                {[
+                  { key: 'yearLevel', label: 'Year level', options: filterOptions.yearLevels },
+                  { key: 'schoolYear', label: 'School year', options: filterOptions.schoolYears },
+                  { key: 'course', label: 'Course / strand', options: filterOptions.courses },
+                ].map(group => (
+                  <View key={group.key} style={s.filterGroup}>
+                    <Text style={s.filterGroupTitle}>{group.label}</Text>
+                    <View style={s.filterOptions}>
+                      {['', ...group.options].map((option, index) => {
+                        const selectedOption = draftFilters[group.key] === option;
+                        return (
+                          <TouchableOpacity
+                            key={`${group.key}-${option || 'all'}-${index}`}
+                            style={[s.filterOption, selectedOption && s.filterOptionActive]}
+                            onPress={() => setDraftFilters(current => ({ ...current, [group.key]: option }))}
+                          >
+                            <Text style={[s.filterOptionText, selectedOption && s.filterOptionTextActive]}>
+                              {option || `All ${group.label.toLowerCase()}s`}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={s.filterActions}>
+                <TouchableOpacity
+                  style={s.filterResetButton}
+                  onPress={() => {
+                    const emptyFilters = { yearLevel: '', schoolYear: '', course: '' };
+                    setDraftFilters(emptyFilters);
+                    setFilters(emptyFilters);
+                    setFilterModalVisible(false);
+                  }}
+                >
+                  <Text style={s.filterResetText}>Reset</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.filterApplyButton}
+                  onPress={() => {
+                    setFilters(draftFilters);
+                    setFilterModalVisible(false);
+                  }}
+                >
+                  <Text style={s.filterApplyText}>Apply filters</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color="#334155" />
         </View>
       ) : (
         <ScrollView
-          style={[s.list, role === 'registrar' && { paddingTop: 12 }]}
+          style={[s.list, role === 'registrar' && { paddingHorizontal: 16, paddingTop: 4 }]}
           contentContainerStyle={{ paddingBottom: 110 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         >
@@ -357,21 +492,30 @@ export default function StudentManagement({ role }) {
           ) : filteredStudents.map(student => {
             const status = STATUS.find(item => item.value === student.status) || STATUS[0];
             return (
-              <TouchableOpacity key={student.id} style={s.card} onPress={() => openStudent(student)} activeOpacity={0.82}>
+              <TouchableOpacity key={student.id} style={[s.card, role === 'registrar' && s.registrarCard]} onPress={() => openStudent(student)} activeOpacity={0.82}>
                 <View style={s.cardTop}>
-                  <View style={[s.avatar, role === 'registrar' && { backgroundColor: '#E1F5EE' }]}>
-                    <Text style={[s.avatarText, role === 'registrar' && { color: '#1D9E75' }]}>{initials(student)}</Text>
+                  <View style={[s.avatar, role === 'registrar' && s.registrarAvatar]}>
+                    <Text style={[s.avatarText, role === 'registrar' && s.registrarAvatarText]}>{initials(student)}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.name}>{student.first_name} {student.last_name}</Text>
-                    <Text style={s.meta}>{student.student_id} · {student.email}</Text>
-                    <Text style={s.program}>{student.grade_level} · {student.section} · {student.school_year}</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[s.name, role === 'registrar' && s.registrarName]}>{student.first_name} {student.last_name}</Text>
+                    <Text style={[s.meta, role === 'registrar' && s.registrarMeta]} numberOfLines={1}>{student.email}</Text>
+                    {role === 'registrar' ? (
+                      <View style={s.registrarStudentDetails}>
+                        <Text style={s.registrarStudentId}>{student.student_id || 'No student ID'}</Text>
+                        <Text style={s.registrarProgram} numberOfLines={2}>
+                          {student.section || 'No section'}{student.grade_level ? ` · ${student.grade_level}` : ''}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={s.program}>{student.grade_level} · {student.section} · {student.school_year}</Text>
+                    )}
                     {role === 'admin' && (
                       <Text style={s.program}>{student.subjects?.length || 0} subject{student.subjects?.length === 1 ? '' : 's'}</Text>
                     )}
                   </View>
-                  <View style={[s.statusBadge, { backgroundColor: role === 'registrar' ? (status.value === 'active' ? '#E1F5EE' : status.value === 'inactive' ? '#F8F0F2' : '#E8F1FF') : status.bg }]}>
-                    <Text style={[s.statusText, { color: role === 'registrar' ? (status.value === 'active' ? '#1D9E75' : status.value === 'inactive' ? '#D85A30' : '#378ADD') : status.color }]}>
+                  <View style={[s.statusBadge, role === 'registrar' && s.registrarStatusBadge, { backgroundColor: role === 'registrar' ? (status.value === 'active' ? '#DDF1E8' : status.value === 'inactive' ? '#F8F0F2' : '#E8F1FF') : status.bg }]}>
+                    <Text style={[s.statusText, role === 'registrar' && s.registrarStatusText, { color: role === 'registrar' ? (status.value === 'active' ? '#1D8062' : status.value === 'inactive' ? '#D85A30' : '#378ADD') : status.color }]}>
                       {status.label}
                     </Text>
                   </View>
@@ -632,26 +776,68 @@ function flattenErrors(errors) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  registrarHeader: { paddingHorizontal: 20, paddingBottom: 10 },
+  registrarTitle: { color: '#2A171B', fontSize: 23, fontWeight: '700', fontFamily: 'serif' },
+  registrarSubtitle: { color: '#735D62', fontSize: 10, marginTop: 2 },
   searchRow: { paddingHorizontal: 16, marginBottom: 16 },
   searchCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, height: 52, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  registrarSearchRow: { marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  registrarSearchCard: { flex: 1, borderRadius: 13, height: 40, borderWidth: 1, borderColor: '#F0E8E3', elevation: 0, shadowOpacity: 0 },
+  filterButton: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0E8E3' },
+  filterButtonActive: { backgroundColor: '#B51F3B', borderColor: '#B51F3B' },
+  filterButtonText: { color: '#B51F3B', fontSize: 10, fontWeight: '800' },
+  filterButtonTextActive: { color: '#FFFFFF' },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, color: '#0F172A', fontSize: 14, height: 52 },
   filtersScroll: { flexGrow: 0, maxHeight: 48, marginBottom: 12 },
   filters: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
+  registrarFilterChip: { paddingHorizontal: 11, paddingVertical: 7, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F0E8E3' },
+  registrarFilterChipActive: { backgroundColor: '#B51F3B', borderColor: '#B51F3B' },
+  registrarFilterText: { color: '#2A171B', fontSize: 10, fontWeight: '700' },
   filterChip: { borderRadius: 999, paddingHorizontal: 13, paddingVertical: 10, backgroundColor: '#F1F5F9' },
   filterChipActive: { backgroundColor: '#334155' },
   filterText: { color: '#334155', fontSize: 12, fontWeight: '700' },
   filterTextActive: { color: '#fff' },
   list: { flex: 1, paddingHorizontal: 12 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  registrarCard: { borderRadius: 14, padding: 12, marginBottom: 10, borderColor: '#F0E8E3' },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
+  registrarAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FBE5E9' },
+  registrarAvatarText: { color: '#B51F3B' },
   avatarText: { color: '#334155', fontWeight: '900', fontSize: 13 },
   name: { color: '#111827', fontSize: 15, fontWeight: '800' },
+  registrarName: { color: '#21171A', fontSize: 12, fontWeight: '700' },
   meta: { color: '#64748B', fontSize: 12, marginTop: 2 },
+  registrarMeta: { color: '#806F73', fontSize: 10, marginTop: 1 },
   program: { color: '#94A3B8', fontSize: 11, marginTop: 3 },
+  registrarStudentDetails: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  registrarStudentId: { flex: 1, color: '#21171A', fontSize: 10, fontWeight: '600' },
+  registrarProgram: { flex: 1, color: '#735D62', fontSize: 10 },
+  filterOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(36,20,25,0.36)' },
+  filterBackdrop: { ...StyleSheet.absoluteFillObject },
+  filterSheet: { maxHeight: '82%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 24 },
+  filterSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0E8E3' },
+  filterSheetTitle: { color: '#2A171B', fontSize: 17, fontWeight: '800' },
+  filterSheetSubtitle: { color: '#735D62', fontSize: 11, marginTop: 3 },
+  filterClose: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#FBF8F5' },
+  filterGroups: { flexGrow: 0, paddingTop: 4 },
+  filterGroup: { paddingTop: 14 },
+  filterGroupTitle: { color: '#735D62', fontSize: 11, fontWeight: '800', marginBottom: 8 },
+  filterOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  filterOption: { borderWidth: 1, borderColor: '#F0E8E3', borderRadius: 18, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 7 },
+  filterOptionActive: { borderColor: '#B51F3B', backgroundColor: '#FBE5E9' },
+  filterOptionText: { color: '#735D62', fontSize: 10, fontWeight: '600' },
+  filterOptionTextActive: { color: '#B51F3B', fontWeight: '800' },
+  filterActions: { flexDirection: 'row', gap: 9, borderTopWidth: 1, borderTopColor: '#F0E8E3', paddingTop: 14, marginTop: 14 },
+  filterResetButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#B51F3B', borderRadius: 11, minHeight: 43 },
+  filterResetText: { color: '#B51F3B', fontSize: 12, fontWeight: '800' },
+  filterApplyButton: { flex: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: '#B51F3B', borderRadius: 11, minHeight: 43 },
+  filterApplyText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   statusBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start' },
+  registrarStatusBadge: { paddingHorizontal: 8, paddingVertical: 4 },
   statusText: { fontSize: 11, fontWeight: '900' },
+  registrarStatusText: { fontSize: 9, fontWeight: '700' },
   empty: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 30 },
   emptyTitle: { color: '#111827', fontSize: 16, fontWeight: '800' },
   emptySub: { color: '#64748B', fontSize: 13, textAlign: 'center', marginTop: 6 },
