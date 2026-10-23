@@ -7,7 +7,7 @@
       "environment": "preview",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://schoolbuds.online"
+        "EXPO_PUBLIC_API_URL": "https://scc.schoolbuds.online"
       },
       "android": {
         "buildType": "apk"
@@ -15,6 +15,9 @@
     },
     "production": {
       "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://scc.schoolbuds.online"
+      },
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"

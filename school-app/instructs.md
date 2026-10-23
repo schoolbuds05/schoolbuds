@@ -1,34 +1,34 @@
-1st: Laravel backend
+# SchoolBuds mobile app
 
-cd C:\xampp\htdocs\school-system
-composer install
-php artisan key:generate
-php artisan migrate --seed
-php artisan storage:link
-php artisan serve --host=0.0.0.0 --port=8000
+## Local development
 
-Before opening Expo Go, check your PC LAN IP:
+1. Start Laravel from the project root:
 
-ipconfig
+   ```powershell
+   php artisan serve --host=0.0.0.0 --port=8000
+   ```
 
-Then make sure this file uses that same IP:
+2. Set `EXPO_PUBLIC_API_URL` in `.env.local` to your computer's LAN IP, for example `http://192.168.1.22:8000`. Do not add `/api`; `src/api.js` appends it automatically.
+3. Connect the phone and computer to the same network, then start Expo:
 
-C:\xampp\htdocs\school-system\school-app\src\api.js
+   ```powershell
+   npx expo start --clear
+   ```
 
-Example:
+## Android builds
 
-baseURL: 'http://192.168.16.182:8000/api'
+Both EAS profiles in `eas.json` use `https://scc.schoolbuds.online` as the API base URL. The app calls `https://scc.schoolbuds.online/api/...`.
 
-2nd: Expo app
+Build an installable APK for internal distribution:
 
-cd C:\xampp\htdocs\school-system\school-app
-npm install
-npm install babel-preset-expo --save-dev
-npx expo start --clear
+```powershell
+eas build --platform android --profile preview
+```
 
-Notes:
+Build the production Android App Bundle:
 
-- Your phone and PC must be connected to the same Wi-Fi/network.
-- Do not use localhost in the Expo app API URL because localhost means the phone itself, not your PC.
-- If your PC IP changes, update school-app\src\api.js with the new IP.
-- This app is named SchoolBuds and uses the API URL configured in school-app\app.json or .env.local.
+```powershell
+eas build --platform android --profile production
+```
+
+The domain must have valid DNS and HTTPS and route to this Laravel installation for the API to work.
