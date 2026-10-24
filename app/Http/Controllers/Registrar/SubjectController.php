@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\Course;
 use App\Models\SectionSubject;
 use App\Models\Subject;
+use App\Models\SubjectChangeRequest;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ class SubjectController extends Controller
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
+        $tab = $request->query('tab') === 'requests' ? 'requests' : 'catalog';
         $subjects = Subject::query()
             ->with('prerequisites:id,code,name')
             ->when($request->program_type, fn ($query) => $query->where('program_type', $request->program_type))
@@ -85,6 +87,23 @@ class SubjectController extends Controller
             ->orderBy('code')
             ->paginate(20)
             ->withQueryString();
+        $requests = SubjectChangeRequest::query()
+            ->with([
+                'student:id,name,email',
+                'subject:id,code,name,units_lec,units_lab',
+                'section:id,name,course,year_level,semester',
+                'reviewer:id,name',
+            ])
+            ->when($request->status, fn ($query) => $query->where('status', $request->status))
+            ->when($request->action, fn ($query) => $query->where('action', $request->action))
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+        $requestStats = [
+            'pending' => SubjectChangeRequest::where('status', 'pending')->count(),
+            'approved' => SubjectChangeRequest::where('status', 'approved')->count(),
+            'rejected' => SubjectChangeRequest::where('status', 'rejected')->count(),
+        ];
         $courses = Course::query()
             ->where('is_active', true)
             ->where('program_type', 'college')
@@ -129,7 +148,7 @@ class SubjectController extends Controller
             ->values();
         $allSubjects = Subject::orderBy('code')->get(['id', 'code', 'name', 'program_type']);
 
-        return view('registrar.subjects.index', compact('subjects', 'courses', 'collegeScopes', 'collegeCourseOptions', 'shsStrands', 'yearLevels', 'allSubjects'));
+        return view('registrar.subjects.index', compact('tab', 'subjects', 'requests', 'requestStats', 'courses', 'collegeScopes', 'collegeCourseOptions', 'shsStrands', 'yearLevels', 'allSubjects'));
     }
 
     public function store(Request $request)

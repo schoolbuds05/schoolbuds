@@ -26,7 +26,6 @@
             ['label' => 'Post Tuition', 'route' => 'registrar.tuition.index', 'match' => 'registrar/tuition*', 'roles' => ['registrar']],
             ['label' => 'Student', 'route' => 'registrar.students.index', 'match' => 'registrar/students*', 'roles' => ['registrar']],
             ['label' => 'Subject', 'route' => 'registrar.subjects.index', 'match' => 'registrar/subjects*', 'roles' => ['registrar']],
-            ['label' => 'Request', 'route' => 'registrar.subject-requests.index', 'match' => 'registrar/subject-requests*', 'roles' => ['registrar']],
             ['label' => 'Course Shifts', 'route' => 'registrar.course-shift-requests.index', 'match' => 'registrar/course-shift-requests*', 'roles' => ['registrar']],
             ['label' => 'Section', 'route' => 'registrar.sections.index', 'match' => 'registrar/sections*', 'roles' => ['registrar']],
             ['label' => 'Grade', 'route' => 'registrar.grades.index', 'match' => 'registrar/grades*', 'roles' => ['registrar']],

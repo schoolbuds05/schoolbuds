@@ -5,9 +5,10 @@
     <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
             <h1 class="text-2xl font-black text-slate-900">Subjects</h1>
-            <p class="mt-1 text-sm text-slate-500">Maintain subject codes, units, program scope, and semester.</p>
+            <p class="mt-1 text-sm text-slate-500">Browse the catalog and review add/drop requests.</p>
         </div>
 
+        @if($tab === 'catalog')
         <div class="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
             <form method="GET" action="{{ route('registrar.subjects.index') }}" class="flex w-full items-center gap-2 md:w-[420px]">
                 <div class="relative flex-1">
@@ -86,9 +87,18 @@
                 </button>
             </div>
         </div>
+        @endif
     </div>
 </div>
 
+<div class="mb-5 flex gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+    <a href="{{ route('registrar.subjects.index') }}" class="flex-1 rounded-lg px-4 py-2.5 text-center text-sm font-bold {{ $tab === 'catalog' ? 'bg-portal-accent text-white' : 'text-slate-600 hover:bg-slate-50' }}">Catalog</a>
+    <a href="{{ route('registrar.subjects.index', ['tab' => 'requests']) }}" class="flex-1 rounded-lg px-4 py-2.5 text-center text-sm font-bold {{ $tab === 'requests' ? 'bg-portal-accent text-white' : 'text-slate-600 hover:bg-slate-50' }}">Requests <span class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{{ $requestStats['pending'] }}</span></a>
+</div>
+
+@if($tab === 'requests')
+    @include('registrar.subject-requests._content')
+@else
 <div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
     <label class="flex items-center gap-2 text-sm font-bold text-slate-700">
         <input type="checkbox" data-subject-select-all class="rounded border-slate-300 text-portal-accent">
@@ -519,4 +529,5 @@
         syncProgramFields();
     });
 </script>
+@endif
 @endsection
