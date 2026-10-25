@@ -165,6 +165,7 @@ export default function RegistrarLayout() {
       />
       <Tabs.Screen name="tuition" options={{ href: null }} />
       <Tabs.Screen name="grades" options={{ href: null }} />
+      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
     </Tabs>
   );
 }

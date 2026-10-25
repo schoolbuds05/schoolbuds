@@ -152,6 +152,7 @@ export default function AdminLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen name="activity" options={{ href: null }} />
+      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
     </Tabs>
   );
 }

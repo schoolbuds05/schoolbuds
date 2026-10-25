@@ -10,6 +10,7 @@ import { useTheme } from '../../src/theme-context';
 
 const MORE_ROUTES = [
   { section: 'Registrar tools', items: [
+  { name: 'teaching-eligibility', label: 'Subject departments', icon: 'book-outline' },
     { name: 'grades', label: 'Grades', icon: 'school-outline' },
     { name: 'tuition', label: 'Post tuition', icon: 'wallet-outline' },
     { name: 'course-shift-requests', label: 'Course-shift requests', icon: 'swap-horizontal-outline' },

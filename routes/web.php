@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\TeachingEligibilityController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\StudentManageController;
@@ -249,3 +250,15 @@ Route::middleware(['auth', 'web.roles:admin,property_custodian'])->prefix('prope
 });
 
 require __DIR__.'/auth.php';
+
+Route::middleware('auth')->group(function () {
+
+    Route::get('/teaching-eligibility/mine', [TeachingEligibilityController::class, 'mine'])->name('teaching-eligibility.mine');
+    Route::post('/teaching-eligibility/requests', [TeachingEligibilityController::class, 'store'])->name('teaching-eligibility.store');
+    Route::get('/teaching-eligibility/department', [TeachingEligibilityController::class, 'chairIndex'])->name('teaching-eligibility.chair');
+    Route::post('/teaching-eligibility/grants', [TeachingEligibilityController::class, 'grant'])->name('teaching-eligibility.grant');
+    Route::post('/teaching-eligibility/{eligibility}/review', [TeachingEligibilityController::class, 'review'])->name('teaching-eligibility.review');
+    Route::post('/teaching-eligibility/{eligibility}/revoke', [TeachingEligibilityController::class, 'revoke'])->name('teaching-eligibility.revoke');
+    Route::get('/teaching-eligibility/subject-departments', [TeachingEligibilityController::class, 'owners'])->name('teaching-eligibility.owners');
+    Route::put('/teaching-eligibility/subject-departments/{subject}', [TeachingEligibilityController::class, 'assignOwner'])->name('teaching-eligibility.assign-owner');
+});
