@@ -17,7 +17,7 @@ Admin and registrar section authority remains available. Section operations perf
 
 A department with assigned courses or sections cannot become a general subject department. Reassign those records first; the system returns a validation error without deleting or detaching them. Subjects and teachers do not block the conversion. A general department can become a course department and then receive programs. Omitting `type` in an existing department form preserves its type; older department creation requests default to `course`.
 
-These changes add department types and permissions. Automatic section creation, automatic timetable generation, and automatic teacher assignment are separate features.
+Course department chairs can also generate draft sections, weekly schedules and eligible teacher assignments from expected enrollment. See [Automatic section generation](section-generation.md).
 
 ## Verification
 

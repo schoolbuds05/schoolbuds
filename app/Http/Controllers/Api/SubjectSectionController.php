@@ -476,23 +476,8 @@ class SubjectSectionController extends Controller
         if ($data['decision'] === 'reject' && blank($data['remarks'] ?? null)) {
             return response()->json(['message' => 'Remarks are required when rejecting a section.'], 422);
         }
-        if ($data['decision'] === 'approve') {
-            $assignments = SectionSubject::query()
-                ->where('section_id', $section->id)
-                ->whereNotNull('room')->whereNotNull('day')->whereNotNull('time_start')->whereNotNull('time_end')
-                ->get();
-            foreach ($assignments as $assignment) {
-                $conflict = SectionSubject::query()
-                    ->where('id', '!=', $assignment->id)
-                    ->where('room', $assignment->room)
-                    ->where('day', $assignment->day)
-                    ->where('time_start', '<', $assignment->time_end)
-                    ->where('time_end', '>', $assignment->time_start)
-                    ->exists();
-                if ($conflict) {
-                    return response()->json(['message' => "Schedule conflict: {$assignment->room} on {$assignment->day} ({$assignment->time_start}-{$assignment->time_end}) is already assigned to another section."], 422);
-                }
-            }
+        if ($data['decision'] === 'approve' && ($conflict = app(\App\Services\SectionScheduleService::class)->approvalConflict($section))) {
+            return response()->json(['message' => $conflict], 422);
         }
 
         $approved = $data['decision'] === 'approve';

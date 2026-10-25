@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TeachingEligibilityController;
+use App\Http\Controllers\SectionGenerationController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\StudentManageController;
@@ -172,6 +173,9 @@ Route::middleware(['auth', 'web.roles:registrar,head_department'])->prefix('regi
     Route::get('/course-shift-requests', [EnrollmentReviewController::class, 'courseShiftRequests'])->name('course-shift-requests.index');
     Route::post('/course-shift-requests/{courseShiftRequest}/credits', [EnrollmentReviewController::class, 'storeCourseShiftCredit'])->name('course-shift-requests.credits.store');
     Route::post('/course-shift-requests/{courseShiftRequest}/review', [EnrollmentReviewController::class, 'reviewCourseShiftRequest'])->name('course-shift-requests.review');
+    Route::get('/sections/generate', [SectionGenerationController::class, 'options'])->name('sections.generate');
+    Route::post('/sections/generate/preview', [SectionGenerationController::class, 'preview'])->name('sections.generate.preview')->middleware('throttle:20,1');
+    Route::post('/sections/generate', [SectionGenerationController::class, 'store'])->name('sections.generate.store')->middleware('throttle:20,1');
     Route::get('/sections', [RegistrarSectionController::class, 'index'])->name('sections.index');
     Route::post('/sections', [RegistrarSectionController::class, 'store'])->name('sections.store');
     Route::post('/sections/{section}/submit', [RegistrarSectionController::class, 'submit'])->name('sections.submit');
@@ -219,6 +223,9 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
 });
 
 Route::middleware(['auth', 'web.roles:faculty,head_department'])->prefix('department-chair')->name('department-chair.')->group(function () {
+    Route::get('/sections/generate', [SectionGenerationController::class, 'options'])->name('sections.generate');
+    Route::post('/sections/generate/preview', [SectionGenerationController::class, 'preview'])->name('sections.generate.preview')->middleware('throttle:20,1');
+    Route::post('/sections/generate', [SectionGenerationController::class, 'store'])->name('sections.generate.store')->middleware('throttle:20,1');
     Route::get('/sections', [RegistrarSectionController::class, 'index'])->name('sections.index');
     Route::post('/sections', [RegistrarSectionController::class, 'store'])->name('sections.store');
     Route::post('/sections/{section}/submit', [RegistrarSectionController::class, 'submit'])->name('sections.submit');

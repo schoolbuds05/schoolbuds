@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TeachingEligibilityController;
+use App\Http\Controllers\SectionGenerationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\GradeController;
@@ -57,6 +58,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);
     Route::get('/enrollment/lookup', [EnrollmentController::class, 'lookup']);
+    Route::get('/section-generation/options', [SectionGenerationController::class, 'options']);
+    Route::post('/section-generation/preview', [SectionGenerationController::class, 'preview'])->middleware('throttle:20,1');
+    Route::post('/section-generation', [SectionGenerationController::class, 'store'])->middleware('throttle:20,1');
     Route::get('/sections/{id}', [SubjectSectionController::class, 'sectionShow']);
     Route::get('/enrollment/eligibility', [EnrollmentController::class, 'eligibility']);
     Route::post('/enrollment', [EnrollmentController::class, 'store']);
