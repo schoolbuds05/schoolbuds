@@ -113,8 +113,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/registrar/grade-change-requests/{changeRequest}/review', [RegistrarGradeController::class, 'reviewChangeRequest']);
         Route::get('/registrar/tuition/sections', [TuitionFeeController::class, 'mobileSections']);
         Route::post('/registrar/tuition', [TuitionFeeController::class, 'storeMobile']);
-        Route::get('/registrar/teachers',                   [SubjectSectionController::class, 'teacherIndex']);
-        Route::get('/registrar/section-students',           [SubjectSectionController::class, 'studentIndex']);
         Route::get('/registrar/enrollments',                [EnrollmentController::class, 'index']);
         Route::get('/registrar/course-shift-requests',     [CourseShiftRequestController::class, 'index']);
         Route::post('/registrar/course-shift-requests/{courseShiftRequest}/credits', [CourseShiftRequestController::class, 'storeCredit']);
@@ -153,8 +151,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Admins, registrars, and department chairs can manage sections.
     // Keep these routes separate from admin-only course/subject catalog routes.
-    Route::middleware('role:admin,registrar,head_department')->group(function () {
+    Route::group([], function () {
         Route::get('/registrar/sections', [SubjectSectionController::class, 'registrarSectionIndex']);
+        Route::get('/registrar/section-students',           [SubjectSectionController::class, 'studentIndex']);
+        Route::get('/registrar/teachers',                   [SubjectSectionController::class, 'teacherIndex']);
         Route::post('/sections',                             [SubjectSectionController::class, 'sectionStore']);
         Route::put('/sections/{id}',                         [SubjectSectionController::class, 'sectionUpdate']);
         Route::delete('/sections/{id}',                      [SubjectSectionController::class, 'sectionDestroy']);

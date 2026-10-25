@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\ArchiveService;
+use App\Services\SectionDepartmentAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,6 +23,7 @@ class SectionController extends Controller
     public function index(Request $request)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        SectionDepartmentAccess::authorize($request->user());
 
         $user = $request->user();
         $sections = Section::query()
@@ -39,7 +41,7 @@ class SectionController extends Controller
             ->when($request->filled('semester'), fn ($query) => $query->where('semester', $request->semester))
             ->when($request->filled('school_year'), fn ($query) => $query->where('school_year', $request->school_year))
             ->when($request->has('is_active'), fn ($query) => $query->where('is_active', (bool) $request->boolean('is_active')))
-            ->when($user?->position === 'head_department', fn ($query) => $query->where('department_id', $user->department_id))
+            ->when(SectionDepartmentAccess::isChair($user), fn ($query) => $query->where('department_id', $user->department_id))
             ->when($request->search, function ($query) use ($request) {
                 $term = "%{$request->search}%";
                 $query->where(function ($innerQuery) use ($term, $request) {
@@ -56,10 +58,10 @@ class SectionController extends Controller
         $courses = Course::query()
             ->where('is_active', true)
             ->where('program_type', 'college')
-            ->when($user?->position === 'head_department', fn ($query) => $query->where('department_id', $user->department_id))
+            ->when(SectionDepartmentAccess::isChair($user), fn ($query) => $query->where('department_id', $user->department_id))
             ->orderBy('name')
             ->get();
-        $defaultCourse = $user?->position === 'head_department' ? $courses->first()?->name : null;
+        $defaultCourse = SectionDepartmentAccess::isChair($user) ? $courses->first()?->name : null;
         $subjects = Subject::query()
             ->where('is_active', true)
             ->orderBy('code')
@@ -89,7 +91,9 @@ class SectionController extends Controller
     public function store(Request $request)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        $department = SectionDepartmentAccess::authorize($request->user());
         $data = $this->validated($request);
+        SectionDepartmentAccess::validateCourse($department, $data);
         if ($this->isChair($request)) {
             $data['department_id'] = $request->user()->department_id;
             $data['created_by'] = $request->user()->id;
@@ -108,11 +112,13 @@ class SectionController extends Controller
     public function update(Request $request, Section $section)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        $department = SectionDepartmentAccess::authorize($request->user(), $section);
         abort_if($this->isChair($request) && !$this->ownsSection($request, $section), 403);
         if ($this->isChair($request)) {
             abort_unless(in_array($section->workflow_status, ['draft', 'rejected']), 403, 'Only draft or rejected sections can be edited.');
         }
         $data = $this->validated($request);
+        SectionDepartmentAccess::validateCourse($department, $data);
         if ($this->isChair($request)) { $data['workflow_status'] = 'draft'; $data['is_active'] = false; }
         $section->update($data);
         ActivityLog::record($request, 'section_updated', 'Updated section '.$section->name.'.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
@@ -123,6 +129,7 @@ class SectionController extends Controller
     public function submit(Request $request, Section $section)
     {
         $this->requireAnyRole($request, ['head_department']);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless($this->ownsSection($request, $section), 403);
         abort_unless(in_array($section->workflow_status, ['draft', 'rejected']), 422, 'Only draft or rejected sections can be submitted.');
         $section->update(['workflow_status' => 'pending', 'workflow_remarks' => null, 'submitted_at' => now(), 'is_active' => false]);
@@ -162,6 +169,7 @@ class SectionController extends Controller
     public function assignSubject(Request $request, Section $section)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        SectionDepartmentAccess::authorize($request->user(), $section);
 
         $data = $request->validate([
             'subject_id' => ['required_without:subject_ids', 'nullable', 'integer', 'exists:subjects,id'],
@@ -240,6 +248,7 @@ class SectionController extends Controller
     public function removeSubject(Request $request, Section $section, SectionSubject $sectionSubject)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless((int) $sectionSubject->section_id === (int) $section->id, 404);
 
         ArchiveService::record($sectionSubject, $request->user()?->id, 'web.sections.subjects');
@@ -251,6 +260,7 @@ class SectionController extends Controller
     public function destroy(Request $request, Section $section)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        SectionDepartmentAccess::authorize($request->user(), $section);
 
         ArchiveService::record($section, $request->user()?->id, 'web.sections');
         $section->delete();
@@ -261,6 +271,7 @@ class SectionController extends Controller
     public function enrollStudent(Request $request, Section $section)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        SectionDepartmentAccess::authorize($request->user(), $section);
 
         $data = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
@@ -300,6 +311,7 @@ class SectionController extends Controller
     public function removeStudent(Request $request, Section $section, User $student)
     {
         $this->requireAnyRole($request, ['admin', 'registrar', 'head_department']);
+        SectionDepartmentAccess::authorize($request->user(), $section);
 
         $studentsBefore = $section->students()->get()
             ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
@@ -342,7 +354,7 @@ class SectionController extends Controller
         ];
     }
 
-    private function isChair(Request $request): bool { return $request->user()?->position === 'head_department'; }
+    private function isChair(Request $request): bool { return SectionDepartmentAccess::isChair($request->user()); }
     private function ownsSection(Request $request, Section $section): bool { return $this->isChair($request) && (int) $section->department_id === (int) $request->user()->department_id; }
 
     private function scheduleConflict(Section $section): ?string

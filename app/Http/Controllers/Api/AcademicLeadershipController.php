@@ -71,6 +71,8 @@ class AcademicLeadershipController extends Controller
             'leader' => $user->name,
             'position' => $user->position,
             'department' => $isDepartmentChair ? $user->academicDepartment?->name : null,
+            'department_type' => $isDepartmentChair ? $user->academicDepartment?->type : null,
+            'can_manage_sections' => $isDepartmentChair && ($user->academicDepartment?->canManageSections() ?? false),
             'summary' => [
                 'students' => $studentIds->count(),
                 'sections' => $sections->count(),
