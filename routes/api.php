@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\TeachingEligibilityController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\GradeController;
@@ -42,6 +43,16 @@ Route::get('/courses',           [CourseController::class, 'index']);
 
 // ── Protected routes (login required) ────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
+
+    Route::get('/teaching-eligibility/mine', [TeachingEligibilityController::class, 'mine']);
+    Route::post('/teaching-eligibility/requests', [TeachingEligibilityController::class, 'store']);
+    Route::get('/teaching-eligibility/department', [TeachingEligibilityController::class, 'chairIndex']);
+    Route::post('/teaching-eligibility/grants', [TeachingEligibilityController::class, 'grant']);
+    Route::post('/teaching-eligibility/{eligibility}/review', [TeachingEligibilityController::class, 'review']);
+    Route::post('/teaching-eligibility/{eligibility}/revoke', [TeachingEligibilityController::class, 'revoke']);
+    Route::get('/teaching-eligibility/subject-departments', [TeachingEligibilityController::class, 'owners']);
+    Route::put('/teaching-eligibility/subject-departments/{subject}', [TeachingEligibilityController::class, 'assignOwner']);
+
 
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Notifications\Notifiable;
@@ -96,6 +97,14 @@ class User extends Authenticatable
     protected $hidden = [
         'password', 'remember_token',
     ];
+
+    public function scopeTeachingFaculty(Builder $query): Builder
+    {
+        return $query->where(function ($teachers) {
+            $teachers->whereIn('role', self::FACULTY_ROLES)
+                ->orWhereHas('roles', fn ($roles) => $roles->whereIn('name', self::FACULTY_ROLES));
+        });
+    }
 
     public function getProfilePhotoUrlAttribute(): ?string
     {

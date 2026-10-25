@@ -32,6 +32,7 @@ export default function AcademicLeadershipDashboard() {
     <ScrollView contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
       <Text style={[s.note, { color: theme.textSub }]}>{isDean ? 'College-wide academic performance and activity.' : 'Academic performance for your assigned department/program.'}</Text>
       <TouchableOpacity style={[s.manageButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/(leadership)/sections')}><Text style={s.manageButtonText}>Manage sections</Text></TouchableOpacity>
+      {!isDean && <TouchableOpacity style={[s.manageButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/(leadership)/teaching-eligibility')}><Text style={s.manageButtonText}>Teaching approvals</Text></TouchableOpacity>}
       <View style={s.metrics}>
         <Metric label="Attendance today" value={attendance} detail={`${summary.attendance_records_today ?? 0} records`} theme={theme} color={theme.success} />
         <Metric label="Class offerings" value={summary.classes ?? 0} detail={`${summary.faculty ?? 0} assigned faculty`} theme={theme} color={theme.purple} />

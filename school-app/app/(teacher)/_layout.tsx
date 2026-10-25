@@ -145,6 +145,7 @@ export default function TeacherLayout() {
         name="profile"
         options={{ href: null }}
       />
+      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
     </Tabs>
   );
 }

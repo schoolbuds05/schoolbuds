@@ -118,6 +118,7 @@ export default function LeadershipLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -9,6 +9,7 @@ import { formatRoleAndPosition } from '../../src/user-labels';
 import { useTheme } from '../../src/theme-context';
 
 const TEACHING_ITEMS = [
+  { name: 'teaching-eligibility', label: 'Teaching subjects', icon: 'book-outline' },
   { name: 'attendance', label: 'Attendance', icon: 'calendar-outline' },
   { name: 'profile', label: 'My profile', icon: 'person-outline' },
 ];

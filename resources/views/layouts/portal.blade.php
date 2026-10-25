@@ -10,6 +10,7 @@
 
     $navGroups = [
         'Admin' => [
+            ['label' => 'Subject Departments', 'route' => 'teaching-eligibility.owners', 'match' => 'teaching-eligibility/subject-departments', 'roles' => ['admin']],
             ['label' => 'Dashboard', 'route' => 'admin.dashboard', 'match' => 'admin/dashboard', 'roles' => ['admin']],
             ['label' => 'Student', 'route' => 'admin.students.index', 'match' => 'admin/students*', 'roles' => ['admin']],
             ['label' => 'User', 'route' => 'admin.users.index', 'match' => 'admin/users*', 'roles' => ['admin']],
@@ -21,6 +22,7 @@
             ['label' => 'Archive', 'route' => 'admin.archive.index', 'match' => 'admin/archive*', 'roles' => ['admin']],
         ],
         'Registrar' => [
+            ['label' => 'Subject Departments', 'route' => 'teaching-eligibility.owners', 'match' => 'teaching-eligibility/subject-departments', 'roles' => ['registrar']],
             ['label' => 'Dashboard', 'route' => 'registrar.dashboard', 'match' => 'registrar/dashboard', 'roles' => ['registrar']],
             ['label' => 'Enrollment', 'route' => 'registrar.enrollments.index', 'match' => 'registrar/enrollments*', 'roles' => ['registrar']],
             ['label' => 'Post Tuition', 'route' => 'registrar.tuition.index', 'match' => 'registrar/tuition*', 'roles' => ['registrar']],
@@ -34,6 +36,7 @@
             ['label' => 'Profile', 'route' => 'registrar.profile.show', 'match' => 'registrar/profile*', 'roles' => ['registrar']],
         ],
         'Teacher' => [
+            ['label' => 'Teaching Subjects', 'route' => 'teaching-eligibility.mine', 'match' => 'teaching-eligibility/mine', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Dashboard', 'route' => 'teacher.dashboard', 'match' => 'teacher/dashboard', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Classes', 'route' => 'teacher.classes', 'match' => 'teacher/classes', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Work', 'route' => 'teacher.assignments', 'match' => 'teacher/assignments*', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
@@ -42,6 +45,7 @@
             ['label' => 'Profile', 'route' => 'teacher.profile', 'match' => 'teacher/profile', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
         ],
         'Department Chair' => [
+            ['label' => 'Teaching Approvals', 'route' => 'teaching-eligibility.chair', 'match' => 'teaching-eligibility/department', 'roles' => ['head_department']],
             ['label' => 'Section', 'route' => 'department-chair.sections.index', 'match' => 'department-chair/sections*', 'roles' => ['head_department']],
             ['label' => 'Teacher List', 'route' => 'department-chair.teachers', 'match' => 'department-chair/teachers', 'roles' => ['head_department']],
             ['label' => 'Grade', 'route' => 'department-chair.grades', 'match' => 'department-chair/grades', 'roles' => ['head_department']],

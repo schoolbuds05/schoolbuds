@@ -10,14 +10,37 @@ class Subject extends Model
         'code', 'name', 'description',
         'units_lec', 'units_lab',
         'program_type', 'course', 'year_level', 'strand', 'semester',
-        'is_active',
+        'is_active', 'department_id',
     ];
 
     protected $casts = [
-        'is_active'  => 'boolean',
-        'units_lec'  => 'float',
-        'units_lab'  => 'float',
+        'is_active' => 'boolean',
+        'units_lec' => 'float',
+        'units_lab' => 'float',
     ];
+
+    protected static function booted(): void
+    {
+        static::updated(function (Subject $subject): void {
+            if ($subject->wasChanged('department_id')) {
+                $subject->teachingEligibilities()->whereIn('status', ['pending', 'approved'])->get()
+                    ->each(fn (TeacherSubjectEligibility $eligibility) => $eligibility->update([
+                        'status' => 'revoked',
+                        'remarks' => 'Subject ownership changed. Approval by the new managing department is required.',
+                    ]));
+            }
+        });
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function teachingEligibilities()
+    {
+        return $this->hasMany(TeacherSubjectEligibility::class);
+    }
 
     public function sectionSubjects()
     {

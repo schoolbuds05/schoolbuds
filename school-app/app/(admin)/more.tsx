@@ -7,6 +7,7 @@ import api, { removeToken } from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 const MORE_ROUTES = [
+  { name: 'teaching-eligibility', label: 'Subject departments', icon: 'book-outline' },
   { name: 'activity', label: 'Activity', icon: 'time-outline' },
   { name: 'controls', label: 'Controls', icon: 'settings-outline' },
   { name: 'profile', label: 'Profile', icon: 'person-outline' },
