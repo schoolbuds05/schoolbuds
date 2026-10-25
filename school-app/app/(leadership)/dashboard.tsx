@@ -30,8 +30,9 @@ export default function AcademicLeadershipDashboard() {
   return <View style={[s.container, { backgroundColor: theme.bg }]}>
     <HeaderGradient title="Academic Overview" subtitle={`${title}${data?.department ? ` · ${data.department}` : ' · College-wide'}`} initials={isDean ? 'DN' : 'DC'} stats={[{ label: 'Students', value: summary.students ?? 0, accent: '#A7F3D0' }, { label: 'Sections', value: summary.sections ?? 0, accent: '#FDE68A' }, { label: 'Average', value: summary.average_grade || '—', accent: '#C7D2FE' }]} />
     <ScrollView contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
+      {data?.department_type === 'general' && <Text style={[s.note, { color: theme.textSub }]}>General subject department: manage subject teaching approvals and faculty. Sections are managed by course departments.</Text>}
       <Text style={[s.note, { color: theme.textSub }]}>{isDean ? 'College-wide academic performance and activity.' : 'Academic performance for your assigned department/program.'}</Text>
-      <TouchableOpacity style={[s.manageButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/(leadership)/sections')}><Text style={s.manageButtonText}>Manage sections</Text></TouchableOpacity>
+      {data?.can_manage_sections && <TouchableOpacity style={[s.manageButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/(leadership)/sections')}><Text style={s.manageButtonText}>Manage sections</Text></TouchableOpacity>}
       {!isDean && <TouchableOpacity style={[s.manageButton, { backgroundColor: theme.primary }]} onPress={() => router.push('/(leadership)/teaching-eligibility')}><Text style={s.manageButtonText}>Teaching approvals</Text></TouchableOpacity>}
       <View style={s.metrics}>
         <Metric label="Attendance today" value={attendance} detail={`${summary.attendance_records_today ?? 0} records`} theme={theme} color={theme.success} />

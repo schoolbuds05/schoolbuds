@@ -6,6 +6,18 @@ use Illuminate\Database\Eloquent\Model;
 
 class Section extends Model
 {
+    protected static function booted(): void
+    {
+        static::saving(function (Section $model): void {
+            if ($model->department_id && Department::query()->whereKey($model->department_id)
+                ->where('type', Department::TYPE_GENERAL)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'department_id' => 'General subject departments cannot own courses or sections.',
+                ]);
+            }
+        });
+    }
+
     protected $fillable = [
         'name', 'course', 'year_level', 'program_type',
         'strand', 'school_year', 'semester',

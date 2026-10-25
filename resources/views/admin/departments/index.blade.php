@@ -4,15 +4,20 @@
 <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
     <div>
         <h1 class="text-2xl font-black text-slate-900">Departments</h1>
-        <p class="mt-1 text-sm text-slate-500">Create college departments, assign their chair, and group programs under each department.</p>
+        <p class="mt-1 text-sm text-slate-500">Create course or general subject departments, assign a chair, and manage their teachers and subjects.</p>
     </div>
     <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
         <form method="GET" action="{{ route('admin.departments.index') }}" class="flex min-w-0 flex-1 gap-2 sm:flex-none">
             <input name="search" value="{{ request('search') }}" placeholder="Search departments" aria-label="Search departments" class="min-w-0 flex-1 rounded-lg border-slate-300 text-sm sm:w-56 sm:flex-none">
             <select name="program_type" aria-label="Filter by program type" class="min-w-28 rounded-lg border-slate-300 text-sm">
-                <option value="">All types</option>
+                <option value="">All programs</option>
                 <option value="college" @selected(request('program_type') === 'college')>College</option>
                 <option value="shs" @selected(request('program_type') === 'shs')>SHS</option>
+            </select>
+            <select name="type" aria-label="Filter by department type" class="rounded-lg border-slate-300 text-sm">
+                <option value="">All department types</option>
+                <option value="course" @selected(request('type') === 'course')>Course department</option>
+                <option value="general" @selected(request('type') === 'general')>General subject department</option>
             </select>
             <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Search</button>
         </form>
@@ -30,9 +35,17 @@
             <button type="button" data-department-modal-close class="rounded-lg bg-white px-3 py-2 text-xs font-black text-slate-600 shadow-sm hover:bg-slate-50">Close</button>
         </div>
 
-        <form method="POST" action="{{ route('admin.departments.store') }}" class="space-y-4 p-5">
+        <form method="POST" action="{{ route('admin.departments.store') }}" class="space-y-4 p-5" data-department-form>
             @csrf
             <input type="hidden" name="form_context" value="create_department">
+            <label class="block text-sm font-bold text-slate-700">Department type
+                <select name="type" class="mt-1 w-full rounded-lg border-slate-300 text-sm" data-department-type>
+                    <option value="course" @selected(old('type', 'course') === 'course')>Course department</option>
+                    <option value="general" @selected(old('type') === 'general')>General subject department</option>
+                </select>
+                <span class="mt-1 block text-xs font-normal text-slate-500">Course departments manage programs and sections. General subject departments manage subjects and teachers.</span>
+            </label>
+
 
             <div class="space-y-2">
                 <label class="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Department name</label>
@@ -66,7 +79,7 @@
                 </select>
             </div>
 
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3" data-department-programs>
                 <p class="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Programs</p>
                 <div class="max-h-40 space-y-2 overflow-y-auto pr-1">
                     @forelse($courses as $course)
@@ -92,7 +105,8 @@
                 <summary class="flex cursor-pointer list-none items-center justify-between gap-4 p-4 hover:bg-slate-50">
                     <div class="min-w-0">
                         <p class="text-sm font-black text-slate-900">{{ $department->name }}</p>
-                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $department->code }} · {{ $department->courses->count() }} programs · {{ $department->faculty_count }} faculty</p>
+                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $department->code }} · {{ $department->type === 'general' ? 'General subject department' : 'Course department' }} · {{ $department->courses->count() }} programs · {{ $department->faculty_count }} faculty</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ $department->subjects->count() }} managed subjects</p>
                         @if($department->chair)
                             <p class="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-700">Head: {{ $department->chair->name }}</p>
                         @else
@@ -102,8 +116,16 @@
                     <span class="rounded-full px-3 py-1 text-xs font-black {{ $department->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $department->is_active ? 'Active' : 'Inactive' }}</span>
                 </summary>
 
-                <form method="POST" action="{{ route('admin.departments.update', $department) }}" class="space-y-4 border-t border-slate-100 p-4">
+                <form method="POST" action="{{ route('admin.departments.update', $department) }}" class="space-y-4 border-t border-slate-100 p-4" data-department-form>
                     @csrf @method('PUT')
+                    <label class="block text-sm font-bold text-slate-700">Department type
+                        <select name="type" class="mt-1 w-full rounded-lg border-slate-300 text-sm" data-department-type>
+                            <option value="course" @selected($department->type === 'course')>Course department</option>
+                            <option value="general" @selected($department->type === 'general')>General subject department</option>
+                        </select>
+                        <span class="mt-1 block text-xs font-normal text-slate-500">Reassign existing programs and sections before changing to a general subject department.</span>
+                    </label>
+
 
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div class="space-y-2">
@@ -142,7 +164,7 @@
                         </select>
                     </div>
 
-                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-3" data-department-programs>
                         <p class="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Programs</p>
                         <div class="grid gap-2 sm:grid-cols-2">@foreach($courses as $course)<label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" name="course_ids[]" value="{{ $course->id }}" @checked($course->department_id === $department->id) class="rounded border-slate-300"> {{ $course->acronym ?: $course->name }}</label>@endforeach</div>
                     </div>
@@ -152,6 +174,12 @@
                         <button type="submit" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Save changes</button>
                     </div>
                 </form>
+
+                <div class="border-t border-slate-100 p-4">
+                    <h3 class="text-sm font-bold text-slate-700">Managed subjects</h3>
+                    <p class="mt-1 text-sm text-slate-500">@forelse($department->subjects as $subject){{ $subject->code }} — {{ $subject->name }}{{ $loop->last ? '' : ', ' }}@empty No subjects assigned yet. @endforelse</p>
+                    <a href="{{ route('teaching-eligibility.owners', ['department_id' => $department->id]) }}" class="mt-2 inline-block text-sm font-bold text-violet-700">Manage subject ownership</a>
+                </div>
 
                 @if($assignedTeachers->isNotEmpty())
                     <div class="border-t border-slate-100 px-4 pb-4 pt-3">
@@ -178,6 +206,18 @@
     </section>
 
 <script>
+    document.querySelectorAll('[data-department-form]').forEach((form) => {
+        const type = form.querySelector('[data-department-type]');
+        const programs = form.querySelector('[data-department-programs]');
+        const syncType = () => {
+            const general = type.value === 'general';
+            programs.classList.toggle('hidden', general);
+            programs.querySelectorAll('input').forEach((input) => { input.disabled = general; });
+        };
+        type.addEventListener('change', syncType);
+        syncType();
+    });
+
     const departmentModal = document.getElementById('create-department-modal');
 
     document.querySelector('[data-department-modal-open]')?.addEventListener('click', () => {

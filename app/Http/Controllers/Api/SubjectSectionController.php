@@ -16,6 +16,7 @@ use App\Models\Section;
 use App\Models\SectionSubject;
 use App\Models\User;
 use App\Services\ArchiveService;
+use App\Services\SectionDepartmentAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -364,13 +365,14 @@ class SubjectSectionController extends Controller
     public function registrarSectionIndex(Request $request)
     {
         $this->authorizeRegistrar($request);
+        SectionDepartmentAccess::authorize($request->user());
         $user = $request->user();
         $sections = Section::with([
             'sectionSubjects.subject',
             'sectionSubjects.teacher',
             'sectionSubjects.schedules',
         ])
-            ->when($user?->role === 'head_department' || $user?->position === 'head_department', fn ($query) => $query->where('department_id', $user->department_id))
+            ->when(SectionDepartmentAccess::isChair($user), fn ($query) => $query->where('department_id', $user->department_id))
             ->when($request->filled('search'), function ($query) use ($request) {
                 $term = '%' . trim($request->search) . '%';
                 $query->where(function ($inner) use ($term) {
@@ -395,6 +397,7 @@ class SubjectSectionController extends Controller
     public function sectionStore(Request $request)
     {
         $this->authorizeRegistrar($request);
+        $department = SectionDepartmentAccess::authorize($request->user());
 
         $data = $request->validate([
             'name'         => 'required|string|max:100',
@@ -409,7 +412,8 @@ class SubjectSectionController extends Controller
         ]);
 
         $user = $request->user();
-        $isDepartmentChair = $user->role === 'head_department' || $user->position === 'head_department';
+        $isDepartmentChair = SectionDepartmentAccess::isChair($user);
+        SectionDepartmentAccess::validateCourse($department, $data);
         $data['created_by'] = $user->id;
         if ($isDepartmentChair) {
             $data['department_id'] = $user->department_id;
@@ -435,6 +439,7 @@ class SubjectSectionController extends Controller
             'sectionSubjects.schedules',
             'students',
         ])->findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
 
         return response()->json($section);
     }
@@ -443,6 +448,7 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeSectionWorkflow($request, ['head_department']);
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless((int) $section->department_id === (int) $request->user()->department_id, 403, 'You can only submit sections from your department.');
         abort_unless(in_array($section->workflow_status, ['draft', 'rejected'], true), 422, 'Only draft or rejected sections can be submitted.');
 
@@ -461,6 +467,7 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeSectionWorkflow($request, ['admin', 'registrar']);
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless($section->workflow_status === 'pending', 422, 'Only sections awaiting review can be approved or rejected.');
         $data = $request->validate([
             'decision' => ['required', Rule::in(['approve', 'reject'])],
@@ -505,6 +512,7 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeSectionWorkflow($request, ['admin', 'registrar']);
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless($section->workflow_status === 'approved', 422, 'Only approved sections can be closed.');
         $section->update(['workflow_status' => 'closed', 'is_active' => false]);
         ActivityLog::record($request, 'section_closed', 'Closed section ' . $section->name . '.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
@@ -516,6 +524,7 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeSectionWorkflow($request, ['admin', 'registrar']);
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless(in_array($section->workflow_status, ['closed', 'approved'], true), 422, 'Only approved or closed sections can be reopened.');
         $section->update(['workflow_status' => 'approved', 'is_active' => true, 'workflow_remarks' => null]);
         ActivityLog::record($request, 'section_reopened', 'Reopened section ' . $section->name . '.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
@@ -528,7 +537,25 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeRegistrar($request);
         $section = Section::findOrFail($id);
-        $section->update($request->all());
+        $department = SectionDepartmentAccess::authorize($request->user(), $section);
+        $data = $request->all();
+        if ($department) {
+            abort_unless(in_array($section->workflow_status, ['draft', 'rejected'], true), 403, 'Only draft or rejected sections can be edited.');
+            $data = $request->validate([
+                'name' => 'sometimes|required|string|max:100',
+                'course' => 'nullable|string|max:100',
+                'year_level' => 'nullable|string|max:5',
+                'program_type' => 'sometimes|required|in:shs,college',
+                'strand' => 'nullable|string|max:20',
+                'school_year' => 'sometimes|required|string|max:20',
+                'semester' => 'sometimes|required|in:1st,2nd,summer',
+                'max_students' => 'sometimes|required|integer|min:1',
+            ]);
+            SectionDepartmentAccess::validateCourse($department, array_merge($section->toArray(), $data));
+            $data['workflow_status'] = 'draft';
+            $data['is_active'] = false;
+        }
+        $section->update($data);
         return response()->json($section);
     }
 
@@ -536,6 +563,7 @@ class SubjectSectionController extends Controller
     public function assignSubject(Request $request, $id)
     {
         $this->authorizeRegistrar($request);
+        SectionDepartmentAccess::authorize($request->user(), Section::findOrFail($id));
 
         $request->validate([
             'subject_id' => 'required_without:subject_ids|nullable|integer|exists:subjects,id',
@@ -606,6 +634,7 @@ class SubjectSectionController extends Controller
     public function removeSubject(Request $request, $id, $subjectId)
     {
         $this->authorizeRegistrar($request);
+        SectionDepartmentAccess::authorize($request->user(), Section::findOrFail($id));
         SectionSubject::where('section_id', $id)
             ->where('subject_id', $subjectId)
             ->get()
@@ -621,6 +650,7 @@ class SubjectSectionController extends Controller
         $this->authorizeRegistrar($request);
 
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         ArchiveService::record($section, $request->user()?->id, 'api.sections');
         $section->delete();
 
@@ -637,6 +667,7 @@ class SubjectSectionController extends Controller
         ]);
 
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         if ($section->students()->wherePivot('status', 'enrolled')->count() >= $section->max_students) {
             return response()->json(['message' => 'This section has reached its maximum students.'], 422);
         }
@@ -710,6 +741,7 @@ class SubjectSectionController extends Controller
     {
         $this->authorizeRegistrar($request);
         $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
         $studentsBefore = $section->students()->get()
             ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
             ->all();
@@ -1027,7 +1059,7 @@ class SubjectSectionController extends Controller
     private function authorizeRegistrar(Request $request)
     {
         $user = $request->user();
-        if (!$user || (!in_array($user->role, ['registrar', 'admin', 'head_department']) && !$user->hasAnyRole(['registrar', 'admin', 'head_department']))) {
+        if (!$user || (!in_array($user->role, ['registrar', 'admin', 'head_department']) && $user->position !== 'head_department' && !$user->hasAnyRole(['registrar', 'admin', 'head_department']))) {
             abort(403, 'Unauthorized.');
         }
     }
@@ -1035,7 +1067,7 @@ class SubjectSectionController extends Controller
     private function authorizeSectionWorkflow(Request $request, array $roles): void
     {
         $user = $request->user();
-        if (!$user || (!in_array($user->role, $roles, true) && !$user->hasAnyRole($roles))) {
+        if (!$user || (!in_array($user->role, $roles, true) && !in_array($user->position, $roles, true) && !$user->hasAnyRole($roles))) {
             abort(403, 'Unauthorized.');
         }
     }

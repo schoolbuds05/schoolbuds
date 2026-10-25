@@ -8,6 +8,8 @@ use App\Models\Course;
 use App\Models\Department;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class DepartmentController extends Controller
@@ -21,8 +23,9 @@ class DepartmentController extends Controller
         $search = trim((string) $request->query('search', ''));
         $programType = $request->query('program_type');
         $departments = Department::query()
-            ->with(['chair:id,name', 'courses:id,department_id,name,acronym', 'teachers:id,name,email,department_id,position'])
+            ->with(['chair:id,name', 'courses:id,department_id,name,acronym', 'teachers:id,name,email,department_id,position', 'subjects:id,department_id,code,name'])
             ->withCount(['teachers as faculty_count'])
+            ->when($request->filled('type'), fn ($query) => $query->where('type', $request->type))
             ->when(in_array($programType, ['college', 'shs'], true), function ($query) use ($programType) {
                 $query->whereHas('courses', fn ($courseQuery) => $courseQuery->where('program_type', $programType));
             })
@@ -59,8 +62,10 @@ class DepartmentController extends Controller
     {
         $this->requireAnyRole($request, ['admin']);
         $data = $this->validated($request);
-        $department = Department::create($this->departmentData($data));
-        $this->syncProgramsAndChair($department, $data);
+        DB::transaction(function () use ($data) {
+            $department = Department::create($this->departmentData($data));
+            $this->syncProgramsAndChair($department, $data);
+        });
 
         return back()->with('status', 'Department created.');
     }
@@ -68,9 +73,12 @@ class DepartmentController extends Controller
     public function update(Request $request, Department $department)
     {
         $this->requireAnyRole($request, ['admin']);
-        $data = $this->validated($request, $department);
-        $department->update($this->departmentData($data));
-        $this->syncProgramsAndChair($department, $data);
+        DB::transaction(function () use ($request, $department) {
+            $department = Department::query()->lockForUpdate()->findOrFail($department->id);
+            $data = $this->validated($request, $department);
+            $department->update($this->departmentData($data));
+            $this->syncProgramsAndChair($department, $data);
+        });
 
         return back()->with('status', 'Department updated.');
     }
@@ -93,8 +101,9 @@ class DepartmentController extends Controller
 
     private function validated(Request $request, ?Department $department = null): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->ignore($department?->id)],
+            'type' => ['sometimes', 'required', Rule::in([Department::TYPE_COURSE, Department::TYPE_GENERAL])],
             'code' => ['required', 'string', 'max:20', Rule::unique('departments', 'code')->ignore($department?->id)],
             'chair_user_id' => ['nullable', 'exists:users,id'],
             'teacher_ids' => ['nullable', 'array'],
@@ -103,11 +112,18 @@ class DepartmentController extends Controller
             'course_ids.*' => ['integer', Rule::exists('courses', 'id')->where('program_type', 'college')],
             'is_active' => ['nullable', 'boolean'],
         ]);
+        $data['type'] = $data['type'] ?? $department?->type ?? Department::TYPE_COURSE;
+        if ($data['type'] === Department::TYPE_GENERAL && !empty($data['course_ids'])) {
+            throw ValidationException::withMessages(['course_ids' => 'General subject departments manage subjects and teachers, not programs.']);
+        }
+
+        return $data;
     }
 
     private function departmentData(array $data): array
     {
         return [
+            'type' => $data['type'],
             'name' => trim($data['name']),
             'code' => strtoupper(trim($data['code'])),
             'chair_user_id' => $data['chair_user_id'] ?? null,

@@ -99,7 +99,8 @@
 
     $visibleGroups = collect($navGroups)
         ->when($portalGroupsForRole !== [], fn ($groups) => $groups->only($portalGroupsForRole))
-        ->map(fn ($items) => collect($items)->filter(fn ($item) => in_array($role, $item['roles'], true) || in_array($user?->position, $item['roles'], true))->values())
+        ->map(fn ($items) => collect($items)->filter(fn ($item) => (in_array($role, $item['roles'], true) || in_array($user?->position, $item['roles'], true))
+            && ($item['route'] !== 'department-chair.sections.index' || $user?->academicDepartment?->canManageSections()))->values())
         ->filter(fn ($items) => $items->isNotEmpty());
 @endphp
 

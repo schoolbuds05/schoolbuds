@@ -43,7 +43,9 @@ class TeachingEligibilityController extends Controller
     public function owners(Request $request)
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);
-        $rows = Subject::query()->with('department:id,name')->orderBy('code')->paginate(25);
+        $rows = Subject::query()->with('department:id,name')
+            ->when($request->filled('department_id'), fn ($query) => $query->where('department_id', $request->department_id))
+            ->orderBy('code')->paginate(25)->withQueryString();
         $departments = Department::query()->orderBy('name')->get(['id', 'name', 'is_active']);
 
         return $this->page($request, compact('rows', 'departments') + ['mode' => 'ownership']);

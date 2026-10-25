@@ -34,7 +34,7 @@ List responses include paginated `rows` (25 per page). Use the `page` query para
 
 `TeacherSubjectEligibility::eligible()` selects current approvals for active subjects and managing departments whose teacher is still faculty. A future schedule generator can query this scope by `subject_id`, then apply availability and workload rules. Eligibility is persistent qualification approval, not a semester-specific class assignment or a preference ranking.
 
-Automatic section/schedule generation, teacher availability/workload, and department types are separate features. Existing manual class assignment behavior is preserved.
+Department types are described in [Department types](department-types.md). Automatic section/schedule generation and teacher availability/workload are separate features. Existing manual class assignment behavior is preserved.
 
 ## Verification
 

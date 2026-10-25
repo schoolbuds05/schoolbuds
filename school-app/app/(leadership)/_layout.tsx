@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import api from '../../src/api';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme-context';
@@ -44,6 +46,14 @@ function TabLabel({ label, color }) {
 
 export default function LeadershipLayout() {
   const insets = useSafeAreaInsets();
+  const [canManageSections, setCanManageSections] = useState(false);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    api.get('/academic-leadership/dashboard').then(response => {
+      if (active) setCanManageSections(!!response.data.can_manage_sections);
+    }).catch(() => { if (active) setCanManageSections(false); });
+    return () => { active = false; };
+  }, []));
   const { theme } = useTheme();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
 
@@ -112,6 +122,7 @@ export default function LeadershipLayout() {
         name="sections"
         options={{
           title: 'Sections',
+          href: canManageSections ? '/(leadership)/sections' : null,
           tabBarLabel: ({ color }) => <TabLabel label="Sections" color={color} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'layers' : 'layers-outline'} focused={focused} color={color} />
