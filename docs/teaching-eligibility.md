@@ -32,9 +32,9 @@ Web and mobile use the same controller and workflow service. API routes require 
 
 List responses include paginated `rows` (25 per page). Use the `page` query parameter. Mutations return `message` and `data`.
 
-`TeacherSubjectEligibility::eligible()` selects current approvals for active subjects and managing departments whose teacher is still faculty. A future schedule generator can query this scope by `subject_id`, then apply availability and workload rules. Eligibility is persistent qualification approval, not a semester-specific class assignment or a preference ranking.
+`TeacherSubjectEligibility::eligible()` selects current approvals for active subjects and managing departments whose teacher is still faculty. The automatic section generator uses this scope by `subject_id`, then applies schedule conflict and weekly workload rules. Eligibility is persistent qualification approval, not a semester-specific class assignment or a preference ranking.
 
-Department types are described in [Department types](department-types.md). Automatic section/schedule generation and teacher availability/workload are separate features. Existing manual class assignment behavior is preserved.
+Department types are described in [Department types](department-types.md). Automatic section/schedule generation is described in [Section generation](section-generation.md). Existing manual teacher selection remains available.
 
 ## Verification
 
@@ -45,3 +45,7 @@ php artisan test --filter='TeachingEligibilityTest|DepartmentTeacherAssignmentTe
 ```
 
 Set test database connection variables in the environment to override phpunit.xml's SQLite defaults. Never point feature tests at a database containing real data.
+
+## Automatic scheduling
+
+[Section generation](section-generation.md) now uses current approved eligibility to choose teachers automatically for generated drafts. Registrar approval rechecks generated teacher eligibility. Existing manual assignment controls retain their current behavior.

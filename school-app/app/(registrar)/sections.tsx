@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../src/api';
+import SectionGeneration from '../../src/components/SectionGeneration';
 import { useTheme } from '../../src/theme-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -316,7 +317,10 @@ export default function Sections() {
 
   useEffect(() => {
     api.get('/me')
-      .then(res => setUserRole((res.data?.user ?? res.data)?.role ?? ''))
+      .then(res => {
+        const user = res.data?.user ?? res.data;
+        setUserRole(user?.position === 'head_department' ? 'head_department' : user?.role ?? '');
+      })
       .catch(error => console.log('Current user role load error:', error.message));
   }, []);
 
@@ -698,6 +702,7 @@ export default function Sections() {
             </Text>
           </View>
         </View>
+        <SectionGeneration onSaved={fetchSections} />
         <View style={s.searchRow}>
           <View style={s.searchBox}>
             <Ionicons name="search-outline" size={17} color={C.sub} />

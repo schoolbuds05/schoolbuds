@@ -359,11 +359,6 @@ class SectionController extends Controller
 
     private function scheduleConflict(Section $section): ?string
     {
-        $assignments = $section->sectionSubjects()->whereNotNull('room')->whereNotNull('day')->whereNotNull('time_start')->whereNotNull('time_end')->get();
-        foreach ($assignments as $assignment) {
-            $conflict = SectionSubject::query()->where('id', '!=', $assignment->id)->where('room', $assignment->room)->where('day', $assignment->day)->where('time_start', '<', $assignment->time_end)->where('time_end', '>', $assignment->time_start)->with('section')->first();
-            if ($conflict) return "Schedule conflict: {$assignment->room} on {$assignment->day} ({$assignment->time_start}-{$assignment->time_end}) is already assigned to another section.";
-        }
-        return null;
+        return app(\App\Services\SectionScheduleService::class)->approvalConflict($section);
     }
 }

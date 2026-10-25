@@ -88,6 +88,8 @@
     </div>
 </div>
 
+<a href="{{ route(request()->routeIs('department-chair.*') ? 'department-chair.sections.generate' : 'registrar.sections.generate') }}" class="mb-5 inline-flex rounded-lg bg-portal-accent px-4 py-2.5 text-sm font-bold text-white">Generate sections, schedules &amp; teachers</a>
+
 <div id="section-create-modal" data-modal class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="section-create-title" tabindex="-1">
     <section class="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl">
         <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
