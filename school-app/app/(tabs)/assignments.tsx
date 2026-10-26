@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
@@ -23,6 +24,7 @@ const plainQuizText = (value) => String(value ?? '')
   .replace(/(\*\*|__|~~|`)(.*?)\1/g, '$2');
 
 export default function StudentAssignments() {
+  const router = useRouter();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState([]);
@@ -258,7 +260,7 @@ export default function StudentAssignments() {
     && selected?.submission?.score !== undefined;
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
-      <View style={[s.assignmentHeader, { paddingTop: topInset + 12 }]}><View style={s.assignmentHeaderCopy}><Text style={[s.assignmentTerm, { color: theme.textSub }]}>Class work and assessments</Text><Text style={[s.assignmentTitle, { color: theme.text }]}>Assignments</Text></View><View style={[s.assignmentLogoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.assignmentLogo} resizeMode="contain" /></View></View>
+      <View style={[s.assignmentHeader, { paddingTop: topInset + 12 }]}><TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to More" onPress={() => router.back()} style={[s.assignmentBack, { backgroundColor: theme.card }]}><Ionicons name="chevron-back" size={20} color={theme.text} /></TouchableOpacity><View style={s.assignmentHeaderCopy}><Text style={[s.assignmentTerm, { color: theme.textSub }]}>Class work and assessments</Text><Text style={[s.assignmentTitle, { color: theme.text }]}>Assignments</Text></View><View style={[s.assignmentLogoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={s.assignmentLogo} resizeMode="contain" /></View></View>
       <View style={[s.assignmentTabs, { backgroundColor: theme.primaryLight }]}>{[['open', `Open ${openItems.length}`], ['submitted', `Submitted ${submitted}`], ['graded', `Graded ${graded}`]].map(([value, label]) => <TouchableOpacity key={value} style={[s.assignmentTab, listFilter === value && { backgroundColor: theme.card }]} onPress={() => setListFilter(value)}><Text style={[s.assignmentTabText, { color: listFilter === value ? theme.text : theme.textSub }]}>{label}</Text></TouchableOpacity>)}</View>
       <ScrollView
         contentContainerStyle={s.assignmentBody}
@@ -457,6 +459,7 @@ const s = StyleSheet.create({
   body: { padding: 16, gap: 12, paddingBottom: 100 },
   assignmentBody: { padding: 16, paddingTop: 16, paddingBottom: 100 },
   assignmentHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 13 },
+  assignmentBack: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   assignmentHeaderCopy: { flex: 1 }, assignmentTerm: { fontSize: 10, fontWeight: '600', marginBottom: 1 }, assignmentTitle: { fontSize: 22, fontWeight: '800' },
   assignmentLogoWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }, assignmentLogo: { width: 31, height: 31, borderRadius: 8 },
   assignmentTabs: { height: 36, borderRadius: 11, padding: 3, flexDirection: 'row', marginBottom: 16 }, assignmentTab: { flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 8 }, assignmentTabText: { fontSize: 10, fontWeight: '800' },

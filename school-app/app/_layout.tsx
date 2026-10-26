@@ -16,6 +16,12 @@ export default function RootLayout() {
         <Stack.Screen name="(staff)" />
         <Stack.Screen name="(registrar)" />
         <Stack.Screen name="student-schedule" />
+        <Stack.Screen name="student-study-load" />
+        <Stack.Screen name="student-assignments" />
+        <Stack.Screen name="student-grades" />
+        <Stack.Screen name="student-rewards" />
+        <Stack.Screen name="student-market" />
+        <Stack.Screen name="student-profile" />
         <Stack.Screen name="forgot-password" />
         <Stack.Screen name="reset-password" />
 

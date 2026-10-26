@@ -192,8 +192,8 @@ export default function Today() {
         theme={theme}
         refreshing={refreshing}
         onRefresh={() => { setRefreshing(true); fetchDashboard(); }}
-        onProfile={() => router.push('/(tabs)/profile')}
-        onGrades={() => router.push('/(tabs)/grades')}
+        onProfile={() => router.push('/student-profile')}
+        onGrades={() => router.push('/student-grades')}
         onNotification={openNotification}
         enrollmentLabel={hasApplication ? statusLabel : 'Complete your enrollment'}
         enrollmentMessage={hasApplication ? statusText : 'Your account is ready. Submit your enrollment application to unlock your classes and grades.'}
@@ -219,7 +219,7 @@ export default function Today() {
             </View>
             <TouchableOpacity
               style={styles.profileBtn}
-              onPress={() => router.push('/(tabs)/profile')}
+              onPress={() => router.push('/student-profile')}
               accessibilityLabel="Open profile"
             >
               {profilePhotoUrl ? (
@@ -310,8 +310,8 @@ export default function Today() {
       theme={theme}
       refreshing={refreshing}
       onRefresh={() => { setRefreshing(true); fetchDashboard(); }}
-      onProfile={() => router.push('/(tabs)/profile')}
-      onGrades={() => router.push('/(tabs)/grades')}
+      onProfile={() => router.push('/student-profile')}
+      onGrades={() => router.push('/student-grades')}
       onNotification={openNotification}
     />
   );
@@ -340,7 +340,7 @@ export default function Today() {
           </View>
           <TouchableOpacity
             style={styles.profileBtn}
-            onPress={() => router.push('/(tabs)/profile')}
+            onPress={() => router.push('/student-profile')}
             accessibilityLabel="Open profile"
           >
             {profilePhotoUrl ? (
@@ -395,7 +395,7 @@ export default function Today() {
         <TouchableOpacity
           style={[styles.statCard, { backgroundColor: theme.card }]}
           activeOpacity={0.75}
-          onPress={() => router.push('/(tabs)/rewards')}
+          onPress={() => router.push('/student-rewards')}
         >
           <Text style={[styles.statVal, { color: theme.success }]}>{redeemablePoints}</Text>
           <Text style={[styles.statLabel, { color: theme.textSub }]}>Points</Text>
@@ -482,7 +482,7 @@ export default function Today() {
       <View style={[styles.card, { backgroundColor: theme.card }]}> 
         <View style={styles.cardHeader}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Latest grades (Q4)</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/grades')}>
+          <TouchableOpacity onPress={() => router.push('/student-grades')}>
             <Text style={[styles.seeAll, { color: theme.primary }]}>See all →</Text>
           </TouchableOpacity>
         </View>
@@ -513,12 +513,12 @@ export default function Today() {
           <Text style={[styles.quickLabel, { color: theme.primary }]}>Study AI</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.primaryLight }]}
-          onPress={() => router.push('/(tabs)/market')}>
+          onPress={() => router.push('/student-market')}>
           <Text style={styles.quickIcon}>🛍️</Text>
           <Text style={[styles.quickLabel, { color: theme.primary }]}>Marketplace</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.primaryLight }]}
-          onPress={() => router.push('/(tabs)/grades')}>
+          onPress={() => router.push('/student-grades')}>
           <Text style={styles.quickIcon}>📊</Text>
           <Text style={[styles.quickLabel, { color: theme.primary }]}>All grades</Text>
         </TouchableOpacity>

@@ -1,10 +1,13 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 export default function StudyLoad() {
+  const router = useRouter();
   const { theme } = useTheme();
   const [data, setData] = useState(null);
   const [fees, setFees] = useState({ fees: [], total_due: 0, total_paid: 0 });
@@ -43,7 +46,8 @@ export default function StudyLoad() {
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadStudyLoad(view); }} tintColor={theme.primary} />}>
         <View style={styles.header}>
-          <View><Text style={[styles.term, { color: theme.textSub }]}>{termLabel}</Text><Text style={[styles.title, { color: theme.text }]}>Study Load</Text></View>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to More" onPress={() => router.back()} style={[styles.backButton, { backgroundColor: theme.card }]}><Ionicons name="chevron-back" size={20} color={theme.text} /></TouchableOpacity>
+          <View style={styles.headerCopy}><Text style={[styles.term, { color: theme.textSub }]}>{termLabel}</Text><Text style={[styles.title, { color: theme.text }]}>Study Load</Text></View>
           <View style={[styles.logoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={styles.logo} resizeMode="contain" /></View>
         </View>
 
@@ -96,7 +100,7 @@ function scheduleFor(subject) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 }, content: { padding: 16, paddingTop: 42, paddingBottom: 30 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }, term: { fontSize: 11, fontWeight: '600', marginBottom: 1 }, title: { fontSize: 22, fontWeight: '800' },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, backButton: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, headerCopy: { flex: 1 }, term: { fontSize: 11, fontWeight: '600', marginBottom: 1 }, title: { fontSize: 22, fontWeight: '800' },
   logoWrap: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }, logo: { width: 31, height: 31, borderRadius: 8 },
   statCard: { height: 62, borderRadius: 14, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 7 }, stat: { flex: 1, alignItems: 'center' }, statValue: { fontSize: 16, fontWeight: '900' }, statLabel: { fontSize: 9, fontWeight: '700', marginTop: 3 }, statDivider: { width: StyleSheet.hairlineWidth, height: 32 },
   switcher: { height: 34, borderRadius: 10, padding: 3, flexDirection: 'row', marginTop: 13 }, switchTab: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 8 }, switchText: { fontSize: 11, fontWeight: '800' },

@@ -130,6 +130,14 @@ export default function LeadershipLayout() {
         }}
       />
       <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: 'More',
+          tabBarLabel: ({ color }) => <TabLabel label="More" color={color} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
