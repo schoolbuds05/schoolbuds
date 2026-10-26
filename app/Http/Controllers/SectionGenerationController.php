@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\GenerateSectionsRequest;
 use App\Models\ActivityLog;
 use App\Models\Course;
+use App\Models\Room;
 use App\Services\SectionDepartmentAccess;
 use App\Services\SectionGenerationService;
 use Illuminate\Http\Request;
@@ -21,6 +22,10 @@ class SectionGenerationController extends Controller
         $courses = Course::where('is_active', true)->where('program_type', 'college')
             ->whereHas('department', fn ($q) => $q->where('type', 'course')->where('is_active', true))
             ->when($department, fn ($q) => $q->where('department_id', $department->id))->orderBy('name')->get(['id', 'name']);
+        $fixedCourse = $department && $courses->count() === 1 ? $courses->first() : null;
+        if ($fixedCourse && ! $request->filled('course_id') && ! $request->expectsJson()) {
+            $request->merge(['course_id' => $fixedCourse->id]);
+        }
         $data = $request->validate(['course_id' => ['nullable', 'integer'], 'year_level' => ['nullable', Rule::in(['1', '2', '3', '4'])], 'semester' => ['nullable', Rule::in(['1st', '2nd', 'summer'])]]);
         $subjects = collect();
         if (! empty($data['course_id'])) {
@@ -28,10 +33,16 @@ class SectionGenerationController extends Controller
             $subjects = $this->generator->subjects($course, $data['year_level'] ?? '1', $data['semester'] ?? '1st');
         }
         if ($request->expectsJson()) {
-            return response()->json(['courses' => $courses, 'subjects' => $subjects->map(fn ($subject) => $subject->only(['id', 'code', 'name', 'units_lec', 'units_lab']))]);
+            return response()->json([
+                'courses' => $courses,
+                'subjects' => $subjects->map(fn ($subject) => $subject->only(['id', 'code', 'name', 'units_lec', 'units_lab'])),
+                'rooms' => Room::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'room_type', 'capacity']),
+            ]);
         }
 
-        return view('registrar.sections.generate', compact('courses', 'subjects'));
+        $rooms = Room::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'room_type', 'capacity']);
+
+        return view('registrar.sections.generate', compact('courses', 'subjects', 'fixedCourse', 'rooms'));
     }
 
     public function preview(GenerateSectionsRequest $request)

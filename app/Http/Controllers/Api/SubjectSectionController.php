@@ -525,7 +525,6 @@ class SubjectSectionController extends Controller
         $department = SectionDepartmentAccess::authorize($request->user(), $section);
         $data = $request->all();
         if ($department) {
-            abort_unless(in_array($section->workflow_status, ['draft', 'rejected'], true), 403, 'Only draft or rejected sections can be edited.');
             $data = $request->validate([
                 'name' => 'sometimes|required|string|max:100',
                 'course' => 'nullable|string|max:100',
@@ -537,6 +536,7 @@ class SubjectSectionController extends Controller
                 'max_students' => 'sometimes|required|integer|min:1',
             ]);
             SectionDepartmentAccess::validateCourse($department, array_merge($section->toArray(), $data));
+            app(\App\Services\SectionEditAccess::class)->prepareChairEdit($request->user(), $section);
             $data['workflow_status'] = 'draft';
             $data['is_active'] = false;
         }
@@ -548,7 +548,8 @@ class SubjectSectionController extends Controller
     public function assignSubject(Request $request, $id)
     {
         $this->authorizeRegistrar($request);
-        SectionDepartmentAccess::authorize($request->user(), Section::findOrFail($id));
+        $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
 
         $request->validate([
             'subject_id' => 'required_without:subject_ids|nullable|integer|exists:subjects,id',
@@ -572,6 +573,7 @@ class SubjectSectionController extends Controller
         if ($request->filled('days')) {
             $data['day'] = implode(', ', $request->days);
         }
+        app(\App\Services\SectionEditAccess::class)->prepareChairEdit($request->user(), $section);
 
         $subjectIds = $request->input('subject_ids', [$request->input('subject_id')]);
 
@@ -619,7 +621,9 @@ class SubjectSectionController extends Controller
     public function removeSubject(Request $request, $id, $subjectId)
     {
         $this->authorizeRegistrar($request);
-        SectionDepartmentAccess::authorize($request->user(), Section::findOrFail($id));
+        $section = Section::findOrFail($id);
+        SectionDepartmentAccess::authorize($request->user(), $section);
+        app(\App\Services\SectionEditAccess::class)->prepareChairEdit($request->user(), $section);
         SectionSubject::where('section_id', $id)
             ->where('subject_id', $subjectId)
             ->get()
@@ -636,6 +640,7 @@ class SubjectSectionController extends Controller
 
         $section = Section::findOrFail($id);
         SectionDepartmentAccess::authorize($request->user(), $section);
+        app(\App\Services\SectionEditAccess::class)->prepareChairEdit($request->user(), $section);
         ArchiveService::record($section, $request->user()?->id, 'api.sections');
         $section->delete();
 
@@ -653,6 +658,7 @@ class SubjectSectionController extends Controller
 
         $section = Section::findOrFail($id);
         SectionDepartmentAccess::authorize($request->user(), $section);
+        abort_if(SectionDepartmentAccess::isChair($request->user()) && ! in_array($section->workflow_status, ['draft', 'rejected'], true), 403, 'Use a Registrar-approved transfer request to move students from an approved section.');
         if ($section->students()->wherePivot('status', 'enrolled')->count() >= $section->max_students) {
             return response()->json(['message' => 'This section has reached its maximum students.'], 422);
         }
@@ -727,6 +733,7 @@ class SubjectSectionController extends Controller
         $this->authorizeRegistrar($request);
         $section = Section::findOrFail($id);
         SectionDepartmentAccess::authorize($request->user(), $section);
+        abort_if(SectionDepartmentAccess::isChair($request->user()) && ! in_array($section->workflow_status, ['draft', 'rejected'], true), 403, 'Students in approved sections can only be moved through a Registrar-approved transfer request.');
         $studentsBefore = $section->students()->get()
             ->mapWithKeys(fn (User $student) => [$student->getKey() => ['status' => $student->pivot->status]])
             ->all();

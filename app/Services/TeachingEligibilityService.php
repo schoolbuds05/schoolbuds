@@ -29,9 +29,15 @@ class TeachingEligibilityService
     public function request(User $teacher, int $subjectId, string $qualification): TeacherSubjectEligibility
     {
         $this->requireTeacher($teacher);
+        $department = $teacher->position === User::POSITION_HEAD_DEPARTMENT
+            ? $this->chairDepartment($teacher)
+            : null;
 
-        return DB::transaction(function () use ($teacher, $subjectId, $qualification) {
+        return DB::transaction(function () use ($teacher, $subjectId, $qualification, $department) {
             $subject = Subject::query()->lockForUpdate()->findOrFail($subjectId);
+            if ($department) {
+                $this->requireOwnedSubject($subject, $department);
+            }
             $this->requireManagedSubject($subject);
             $eligibility = TeacherSubjectEligibility::firstOrNew(['teacher_id' => $teacher->id, 'subject_id' => $subject->id]);
             if ($eligibility->exists && in_array($eligibility->status, ['pending', 'approved'], true)) {
@@ -58,6 +64,7 @@ class TeachingEligibilityService
             $eligibility = TeacherSubjectEligibility::query()->lockForUpdate()->findOrFail($eligibility->id);
             $this->requireOwnedSubject($subject, $department);
             abort_if((int) $eligibility->teacher_id === (int) $chair->id, 403, 'You cannot approve your own eligibility.');
+            abort_if($eligibility->teacher?->position === User::POSITION_HEAD_DEPARTMENT, 403, 'Department chair requests must be reviewed by the Registrar.');
             if ($eligibility->status !== 'pending' || (int) $eligibility->department_id !== (int) $department->id) {
                 throw ValidationException::withMessages(['decision' => 'Only a pending request for this department can be reviewed.']);
             }
@@ -65,6 +72,38 @@ class TeachingEligibilityService
             $eligibility->update([
                 'status' => $decision === 'approve' ? 'approved' : 'rejected',
                 'remarks' => $remarks, 'reviewed_by' => $chair->id, 'reviewed_at' => now(),
+            ]);
+
+            return $eligibility;
+        });
+    }
+
+    public function reviewChairRequest(User $registrar, TeacherSubjectEligibility $eligibility, string $decision, ?string $remarks): TeacherSubjectEligibility
+    {
+        abort_unless(
+            $registrar->role === User::ROLE_REGISTRAR || $registrar->hasRole(User::ROLE_REGISTRAR),
+            403
+        );
+
+        return DB::transaction(function () use ($registrar, $eligibility, $decision, $remarks) {
+            $subject = Subject::query()->lockForUpdate()->findOrFail($eligibility->subject_id);
+            $eligibility = TeacherSubjectEligibility::query()->lockForUpdate()->findOrFail($eligibility->id);
+            $this->requireManagedSubject($subject);
+            $teacher = $eligibility->teacher;
+            if (
+                $eligibility->status !== 'pending'
+                || $eligibility->source !== 'teacher_request'
+                || (int) $eligibility->department_id !== (int) $subject->department_id
+                || $teacher?->position !== User::POSITION_HEAD_DEPARTMENT
+            ) {
+                throw ValidationException::withMessages(['decision' => 'Only a pending department-chair request can be reviewed here.']);
+            }
+
+            abort_unless($teacher, 404);
+            $this->requireTeacher($teacher);
+            $eligibility->update([
+                'status' => $decision === 'approve' ? 'approved' : 'rejected',
+                'remarks' => $remarks, 'reviewed_by' => $registrar->id, 'reviewed_at' => now(),
             ]);
 
             return $eligibility;

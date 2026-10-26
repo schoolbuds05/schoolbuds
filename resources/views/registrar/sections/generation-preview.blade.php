@@ -3,11 +3,22 @@
 @php($prefix = request()->routeIs('department-chair.*') ? 'department-chair.sections' : 'registrar.sections')
 <h1 class="text-2xl font-black">Generation preview</h1>
 <p class="my-3">{{ count($plan['sections']) }} sections for {{ $plan['course'] }}. No sections have been saved. This preview expires in 30 minutes.</p>
+@if($plan['schedule_validation']['conflict_free'])
+<section class="my-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900" role="status">
+    <h2 class="font-black">Schedule comparison passed — no conflicts found</h2>
+    <p class="mt-1 text-sm">
+        Checked {{ $plan['schedule_validation']['generated_meetings'] }} proposed meeting(s) against the term schedule;
+        {{ $plan['schedule_validation']['existing_meetings_compared'] }} existing meeting(s) were included in the comparison for
+        {{ $plan['schedule_validation']['school_year'] }} · {{ ucfirst($plan['schedule_validation']['semester']) }} semester.
+        New meetings were also checked against one another for overlapping sections, teachers, and rooms.
+    </p>
+</section>
+@endif
 @foreach($plan['sections'] as $section)
 <section class="my-4 overflow-x-auto rounded-xl bg-white p-4">
     <h2 class="mb-3 text-lg font-bold">{{ $section['name'] }} · {{ $section['expected_students'] }} expected students</h2>
-    <table class="w-full text-left text-sm"><thead><tr><th class="p-2">Subject</th><th class="p-2">Approved teacher</th><th class="p-2">Weekly meetings</th></tr></thead><tbody>
-    @foreach($section['assignments'] as $assignment)<tr class="border-t border-slate-200"><td class="p-2">{{ $assignment['subject_code'] }} — {{ $assignment['subject_name'] }}</td><td class="p-2">{{ $assignment['teacher_name'] }}</td><td class="p-2">@foreach($assignment['meetings'] as $meeting)<div>{{ $meeting['day'] }} {{ $meeting['time_start'] }}–{{ $meeting['time_end'] }} · {{ $meeting['room'] }}</div>@endforeach</td></tr>@endforeach
+    <table class="w-full text-left text-sm"><thead><tr><th class="p-2">Subject</th><th class="p-2">Assigned teacher</th><th class="p-2">Weekly meetings</th></tr></thead><tbody>
+    @foreach($section['assignments'] as $assignment)<tr class="border-t border-slate-200"><td class="p-2">{{ $assignment['subject_code'] }} — {{ $assignment['subject_name'] }}</td><td class="p-2">{{ $assignment['teacher_name'] }}</td><td class="p-2">@foreach($assignment['meetings'] as $meeting)<div>{{ $meeting['type'] }} · {{ $meeting['day'] }} {{ \Illuminate\Support\Carbon::parse($meeting['time_start'])->format('g:i A') }}–{{ \Illuminate\Support\Carbon::parse($meeting['time_end'])->format('g:i A') }} · {{ $meeting['room'] }}</div>@endforeach</td></tr>@endforeach
     </tbody></table>
 </section>
 @endforeach

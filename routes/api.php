@@ -48,6 +48,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/teaching-eligibility/mine', [TeachingEligibilityController::class, 'mine']);
     Route::post('/teaching-eligibility/requests', [TeachingEligibilityController::class, 'store']);
     Route::get('/teaching-eligibility/department', [TeachingEligibilityController::class, 'chairIndex']);
+    Route::get('/registrar/teaching-eligibility', [TeachingEligibilityController::class, 'registrarIndex'])->middleware('role:registrar');
+    Route::post('/registrar/teaching-eligibility/{eligibility}/review', [TeachingEligibilityController::class, 'reviewChairRequest'])->middleware('role:registrar');
     Route::post('/teaching-eligibility/grants', [TeachingEligibilityController::class, 'grant']);
     Route::post('/teaching-eligibility/{eligibility}/review', [TeachingEligibilityController::class, 'review']);
     Route::post('/teaching-eligibility/{eligibility}/revoke', [TeachingEligibilityController::class, 'revoke']);

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Course;
 use App\Models\Department;
+use App\Models\Room;
 use App\Models\Section;
 use App\Models\SectionSubject;
 use App\Models\Subject;
@@ -40,11 +41,15 @@ class SectionGenerationTest extends TestCase
         $this->course = Course::create(['name' => 'BS Information Technology', 'acronym' => 'BSIT', 'program_type' => 'college', 'department_id' => $department->id, 'is_active' => true]);
         $this->teacher = User::factory()->create(['role' => 'faculty', 'position' => 'teacher', 'department_id' => $math->id]);
         $this->subject = Subject::create(['code' => 'IT101', 'name' => 'Computing', 'program_type' => 'college', 'course' => $this->course->name, 'year_level' => '1', 'semester' => '1st', 'department_id' => $department->id, 'is_active' => true]);
+        $this->subject->update(['units_lec' => 3, 'units_lab' => 1]);
         $this->general = Subject::create(['code' => 'MATH101', 'name' => 'Mathematics', 'program_type' => 'college', 'year_level' => '1', 'semester' => '1st', 'department_id' => $math->id, 'is_active' => true]);
+        $lectureRoom = Room::create(['name' => 'Room 101', 'room_type' => Room::TYPE_LECTURE, 'capacity' => 40, 'is_active' => true]);
+        $secondLectureRoom = Room::create(['name' => 'Room 102', 'room_type' => Room::TYPE_LECTURE, 'capacity' => 40, 'is_active' => true]);
+        $labRoom = Room::create(['name' => 'Lab 201', 'room_type' => Room::TYPE_LAB, 'capacity' => 40, 'is_active' => true]);
         foreach ([$this->subject, $this->general] as $subject) {
             $this->approve($this->teacher, $subject);
         }
-        $this->input = ['course_id' => $this->course->id, 'year_level' => '1', 'school_year' => '2026-2027', 'semester' => '1st', 'expected_students' => 100, 'max_students' => 40, 'days' => ['Monday', 'Wednesday', 'Friday'], 'time_start' => '08:00', 'time_end' => '17:00', 'rooms' => ['Room 101', 'Room 102'], 'max_teacher_minutes' => 1080, 'subjects' => [['subject_id' => $this->subject->id, 'meetings' => 3, 'minutes' => 60], ['subject_id' => $this->general->id, 'meetings' => 3, 'minutes' => 60]]];
+        $this->input = ['course_id' => $this->course->id, 'year_level' => '1', 'school_year' => '2026-2027', 'semester' => '1st', 'expected_students' => 100, 'max_students' => 40, 'days' => ['Monday', 'Wednesday', 'Friday'], 'time_start' => '08:00', 'time_end' => '17:00', 'room_ids' => [$lectureRoom->id, $secondLectureRoom->id, $labRoom->id], 'max_teacher_minutes' => 1080, 'subjects' => [['subject_id' => $this->subject->id, 'meetings' => 3, 'minutes' => 60], ['subject_id' => $this->general->id, 'meetings' => 3, 'minutes' => 60]]];
         $this->actingAs($this->chair);
     }
 
@@ -68,7 +73,38 @@ class SectionGenerationTest extends TestCase
     public function test_preview_and_save_generate_rounded_up_draft_sections_with_general_and_course_subjects(): void
     {
         $preview = $this->preview()->assertOk()->assertJsonCount(3, 'plan.sections');
+        $meetings = $preview->json('plan.sections.0.assignments.0.meetings');
+        $this->assertSame(['Lecture', 'Lecture', 'Lab'], array_column($meetings, 'type'));
+        $roomTypes = Room::query()->pluck('room_type', 'name');
+        foreach ($preview->json('plan.sections') as $section) {
+            $subjectRoomsByType = [];
+            foreach ($section['assignments'] as $assignment) {
+                foreach ($assignment['meetings'] as $meeting) {
+                    $this->assertFalse($meeting['time_start'] < '13:00' && $meeting['time_end'] > '12:00');
+                    $this->assertContains($roomTypes[$meeting['room']], [strtolower($meeting['type']), Room::TYPE_FLEXIBLE]);
+                    $subjectRoomsByType[$assignment['subject_id']][$meeting['type']][] = $meeting['room'];
+                }
+            }
+            foreach ($subjectRoomsByType as $roomsByType) {
+                foreach ($roomsByType as $roomsForType) {
+                    $this->assertCount(1, array_unique($roomsForType));
+                }
+            }
+            $this->assertNotSame(
+                $subjectRoomsByType[$this->subject->id]['Lecture'][0],
+                $subjectRoomsByType[$this->general->id]['Lecture'][0],
+            );
+            $this->assertNotSame(
+                $subjectRoomsByType[$this->subject->id]['Lecture'][0],
+                $subjectRoomsByType[$this->subject->id]['Lab'][0],
+            );
+        }
         $this->assertSame([40, 40, 20], array_column($preview->json('plan.sections'), 'expected_students'));
+        $this->assertTrue($preview->json('plan.schedule_validation.conflict_free'));
+        $this->assertSame(18, $preview->json('plan.schedule_validation.generated_meetings'));
+        $this->assertSame(0, $preview->json('plan.schedule_validation.existing_meetings_compared'));
+        $this->assertSame('2026-2027', $preview->json('plan.schedule_validation.school_year'));
+        $this->assertSame('1st', $preview->json('plan.schedule_validation.semester'));
         $this->assertDatabaseCount('sections', 0);
         $batch = $preview->json('batch_id');
         $this->postJson('/api/section-generation', ['batch_id' => $batch])->assertOk()->assertJsonCount(3, 'section_ids');
@@ -91,12 +127,57 @@ class SectionGenerationTest extends TestCase
         $this->postJson("/api/sections/{$section->id}/review", ['decision' => 'approve'])->assertOk()->assertJsonPath('section.is_active', true);
     }
 
+    public function test_previewed_random_room_choices_remain_the_same_when_saved(): void
+    {
+        $preview = $this->preview(['expected_students' => 1])->assertOk();
+        $plan = $preview->json('plan.sections.0');
+        $saved = $this->postJson('/api/section-generation', ['batch_id' => $preview->json('batch_id')])
+            ->assertOk()
+            ->assertJsonCount(1, 'section_ids')
+            ->json('section_ids.0');
+
+        $section = Section::with('sectionSubjects.schedules')->findOrFail($saved);
+        foreach ($plan['assignments'] as $plannedAssignment) {
+            $savedAssignment = $section->sectionSubjects->firstWhere('subject_id', $plannedAssignment['subject_id']);
+            $this->assertNotNull($savedAssignment);
+            $this->assertSame(
+                $plannedAssignment['meetings'],
+                $savedAssignment->schedules->map(fn ($schedule) => [
+                    'type' => $plannedAssignment['meetings'][0]['type'],
+                    'day' => $schedule->day,
+                    'time_start' => $schedule->time_start,
+                    'time_end' => $schedule->time_end,
+                    'room' => $schedule->room,
+                ])->all(),
+            );
+        }
+    }
+
+    public function test_department_chair_course_is_selected_and_subjects_load_automatically(): void
+    {
+        $this->withoutVite()
+            ->get('/department-chair/sections/generate')
+            ->assertOk()
+            ->assertSee('value="'.$this->course->id.'"', false)
+            ->assertSee('value="BS Information Technology"', false)
+            ->assertSee('IT101')
+            ->assertViewHas('fixedCourse', fn ($course) => $course->is($this->course))
+            ->assertViewHas('subjects', fn ($subjects) => $subjects->contains('id', $this->subject->id));
+    }
+
     public function test_existing_legacy_and_additional_meetings_reserve_teacher_and_room_without_double_counting(): void
     {
         $assignment = $this->existing();
         $assignment->schedules()->create(['day' => 'Monday, Wednesday, Friday', 'time_start' => '08:00', 'time_end' => '09:00', 'room' => 'Room 101']);
         $assignment->schedules()->create(['day' => 'Monday', 'time_start' => '09:00', 'time_end' => '10:00', 'room' => 'Room 102']);
         $preview = $this->preview(['expected_students' => 1, 'max_teacher_minutes' => 600])->assertOk();
+        $this->assertTrue($preview->json('plan.schedule_validation.conflict_free'));
+        $this->assertSame(6, $preview->json('plan.schedule_validation.generated_meetings'));
+        $this->assertSame(4, $preview->json('plan.schedule_validation.existing_meetings_compared'));
+        $this->assertCount(4, $preview->json('plan.existing_schedule'));
+        $this->assertSame($assignment->section_id, $preview->json('plan.existing_schedule.0.section_id'));
+        $this->assertSame('Existing', $preview->json('plan.existing_schedule.0.section'));
+        $this->assertContains('Monday', array_column($preview->json('plan.existing_schedule'), 'day'));
         $plan = $preview->json('plan.sections.0.assignments');
         foreach ($plan as $item) {
             foreach ($item['meetings'] as $meeting) {
@@ -127,9 +208,12 @@ class SectionGenerationTest extends TestCase
     public function test_no_solution_has_no_partial_writes_and_invalid_inputs_are_rejected(): void
     {
         $this->preview(['time_end' => '08:30'])->assertUnprocessable()->assertJsonValidationErrors('schedule');
-        foreach ([['max_students' => 0], ['expected_students' => 0], ['school_year' => '2026-2028'], ['days' => []], ['time_end' => '07:00'], ['rooms' => ['Room 1', ' room 1 ']], ['subjects' => []], ['expected_students' => 2000, 'max_students' => 1], ['subjects' => [['subject_id' => $this->subject->id, 'minutes' => 17, 'meetings' => 3]]]] as $invalid) {
+        foreach ([['max_students' => 0], ['expected_students' => 0], ['school_year' => '2026-2028'], ['days' => []], ['time_end' => '07:00'], ['room_ids' => [$this->input['room_ids'][0], $this->input['room_ids'][0]]], ['subjects' => []], ['expected_students' => 2000, 'max_students' => 1], ['subjects' => [['subject_id' => $this->subject->id, 'minutes' => 17, 'meetings' => 3]]]] as $invalid) {
             $this->preview($invalid)->assertUnprocessable();
         }
+        $smallLectureRoom = Room::create(['name' => 'Small Lecture', 'room_type' => Room::TYPE_LECTURE, 'capacity' => 20, 'is_active' => true]);
+        $smallLabRoom = Room::create(['name' => 'Small Lab', 'room_type' => Room::TYPE_LAB, 'capacity' => 20, 'is_active' => true]);
+        $this->preview(['room_ids' => [$smallLectureRoom->id, $smallLabRoom->id]])->assertUnprocessable()->assertJsonValidationErrors('room_ids');
         $this->assertDatabaseCount('sections', 0);
         $this->assertDatabaseCount('section_subjects', 0);
         $this->assertDatabaseCount('section_generation_batches', 0);
@@ -179,7 +263,7 @@ class SectionGenerationTest extends TestCase
             $this->preview()->assertUnprocessable()->assertJsonValidationErrors('subjects');
             $this->subject->update(array_intersect_key($old, $change));
         }
-        $this->getJson('/api/section-generation/options?course_id='.$this->course->id.'&year_level=1&semester=1st')->assertOk()->assertJsonCount(2, 'subjects')->assertJsonCount(1, 'courses');
+        $this->getJson('/api/section-generation/options?course_id='.$this->course->id.'&year_level=1&semester=1st')->assertOk()->assertJsonCount(2, 'subjects')->assertJsonCount(1, 'courses')->assertJsonCount(3, 'rooms');
     }
 
     public function test_other_terms_and_closed_sections_do_not_reserve_resources(): void
@@ -262,10 +346,35 @@ class SectionGenerationTest extends TestCase
 
     public function test_web_generation_preview_and_confirmation_flow(): void
     {
-        $this->withoutVite()->get('/department-chair/sections/generate?course_id='.$this->course->id)->assertOk()->assertSee('MATH101')->assertSee('IT101');
-        $this->post('/department-chair/sections/generate/preview', $this->input)->assertOk()->assertSee('Generation preview')->assertSee('Save section drafts');
+        $this->withoutVite()->get('/department-chair/sections/generate?course_id='.$this->course->id)
+            ->assertOk()
+            ->assertSee('MATH101')
+            ->assertSee('IT101')
+            ->assertSee('Available rooms')
+            ->assertSee('Lab 201')
+            ->assertSee('room_ids[]', false);
+        $this->post('/department-chair/sections/generate/preview', $this->input)
+            ->assertOk()
+            ->assertSee('Generation preview')
+            ->assertSee('Save section drafts')
+            ->assertSee('Monday 8:00 AM')
+            ->assertSee('Lecture · Monday 8:00 AM')
+            ->assertSee('Lab · Friday 8:00 AM')
+            ->assertSee('9:00 AM');
         $batch = DB::table('section_generation_batches')->first();
         $this->post('/department-chair/sections/generate', ['batch_id' => $batch->id])->assertRedirect('/department-chair/sections')->assertSessionHasNoErrors();
         $this->assertDatabaseCount('sections', 3);
+    }
+
+    public function test_web_generation_preview_compares_existing_schedules_without_printing_them(): void
+    {
+        $this->withoutVite();
+        $this->existing();
+
+        $this->post('/department-chair/sections/generate/preview', array_replace($this->input, ['expected_students' => 1]))
+            ->assertOk()
+            ->assertSee('existing meeting(s) were included in the comparison')
+            ->assertDontSee('Existing section schedules')
+            ->assertDontSee('Print this section');
     }
 }

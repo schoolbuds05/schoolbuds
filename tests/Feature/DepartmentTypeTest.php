@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Course;
 use App\Models\Department;
 use App\Models\Section;
+use App\Models\SectionEditRequest;
 use App\Models\SectionSubject;
+use App\Models\SectionTransferRequest;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -62,6 +64,46 @@ class DepartmentTypeTest extends TestCase
         $this->assertDatabaseMissing('departments', ['code' => 'MATH']);
         $this->post('/admin/departments', ['name' => 'Math', 'code' => 'MATH', 'type' => 'other'])->assertSessionHasErrors('type');
         $this->assertSame($department->id, $course->fresh()->department_id);
+    }
+
+    public function test_course_subject_inherits_department_and_tracks_course_department_changes(): void
+    {
+        [$department] = $this->department('course', 'IT');
+        [$newDepartment] = $this->department('course', 'CS');
+        $course = $this->course($department);
+
+        $subject = Subject::create([
+            'code' => 'IT101',
+            'name' => 'Introduction to IT',
+            'program_type' => 'college',
+            'course' => $course->name,
+            'department_id' => $newDepartment->id,
+            'is_active' => true,
+        ]);
+
+        $this->assertSame($department->id, $subject->fresh()->department_id);
+
+        $course->update(['department_id' => $newDepartment->id]);
+
+        $this->assertSame($newDepartment->id, $subject->fresh()->department_id);
+    }
+
+    public function test_course_subject_department_cannot_be_overridden_manually(): void
+    {
+        [$department] = $this->department('course', 'IT');
+        [$otherDepartment] = $this->department('course', 'CS');
+        $course = $this->course($department);
+        $subject = Subject::create([
+            'code' => 'IT101',
+            'name' => 'Introduction to IT',
+            'program_type' => 'college',
+            'course' => $course->name,
+            'is_active' => true,
+        ]);
+
+        $subject->update(['department_id' => $otherDepartment->id]);
+
+        $this->assertSame($department->id, $subject->fresh()->department_id);
     }
 
     public function test_conversion_requires_reassigning_existing_courses_or_sections(): void
@@ -154,6 +196,97 @@ class DepartmentTypeTest extends TestCase
         $this->putJson("/api/sections/{$apiSection->id}", ['workflow_status' => 'approved', 'department_id' => null, 'is_active' => true])->assertOk()->assertJsonPath('workflow_status', 'draft')->assertJsonPath('department_id', $department->id)->assertJsonPath('is_active', false);
         $this->postJson("/api/sections/{$apiSection->id}/submit")->assertOk()->assertJsonPath('section.workflow_status', 'pending');
         $this->getJson('/api/registrar/sections')->assertOk()->assertJsonCount(2);
+    }
+
+    public function test_chair_must_get_registrar_approval_before_editing_an_approved_section(): void
+    {
+        [$department, $chair] = $this->department();
+        $course = $this->course($department);
+        $section = Section::create(array_merge($this->sectionData(), [
+            'course' => $course->name,
+            'department_id' => $department->id,
+            'workflow_status' => 'approved',
+            'is_active' => true,
+        ]));
+
+        $this->actingAs($chair)
+            ->put("/department-chair/sections/{$section->id}", array_merge($this->sectionData(), ['name' => 'Changed section']))
+            ->assertForbidden();
+        $this->withoutVite()
+            ->get('/department-chair/sections')
+            ->assertOk()
+            ->assertSee('Request edit permission');
+        $this->post("/department-chair/sections/{$section->id}/edit-requests", ['reason' => 'Correct the section name.'])
+            ->assertSessionHasNoErrors();
+        $editRequest = SectionEditRequest::firstOrFail();
+
+        $registrar = User::factory()->create(['role' => 'registrar', 'position' => null]);
+        $this->actingAs($registrar)
+            ->get('/registrar/sections')
+            ->assertOk()
+            ->assertSee('Correct the section name.')
+            ->assertSee('Approve edit request');
+        $this->post("/registrar/section-edit-requests/{$editRequest->id}/review", ['decision' => 'approve'])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($chair)
+            ->put("/department-chair/sections/{$section->id}", array_merge($this->sectionData(), ['name' => 'Changed section']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Changed section', $section->fresh()->name);
+        $this->assertSame('draft', $section->fresh()->workflow_status);
+        $this->assertFalse($section->fresh()->is_active);
+        $this->assertSame('completed', $editRequest->fresh()->status);
+
+        $this->post("/department-chair/sections/{$section->id}/submit")->assertSessionHasNoErrors();
+        $this->assertSame('pending', $section->fresh()->workflow_status);
+    }
+
+    public function test_chair_requests_student_transfer_and_registrar_approval_moves_student_between_same_department_sections(): void
+    {
+        [$department, $chair] = $this->department();
+        $course = $this->course($department);
+        $source = Section::create(array_merge($this->sectionData(), [
+            'name' => 'BSIT 1A',
+            'course' => $course->name,
+            'department_id' => $department->id,
+            'workflow_status' => 'approved',
+            'is_active' => true,
+        ]));
+        $destination = Section::create(array_merge($this->sectionData(), [
+            'name' => 'BSIT 1B',
+            'course' => $course->name,
+            'department_id' => $department->id,
+            'workflow_status' => 'approved',
+            'is_active' => true,
+        ]));
+        $student = User::factory()->create(['role' => 'student', 'position' => null]);
+        $source->students()->attach($student->id, ['status' => 'enrolled']);
+
+        $this->actingAs($chair)
+            ->withoutVite()
+            ->get('/department-chair/sections')
+            ->assertOk()
+            ->assertSee(route('department-chair.sections.transfer-requests.store', $source), false);
+        $this->actingAs($chair)
+            ->post("/department-chair/sections/{$source->id}/transfer-requests", [
+                'student_id' => $student->id,
+                'to_section_id' => $destination->id,
+                'reason' => 'Balance the class size.',
+            ])
+            ->assertSessionHasNoErrors();
+        $transferRequest = SectionTransferRequest::firstOrFail();
+        $this->actingAs($chair)
+            ->delete("/department-chair/sections/{$source->id}/students/{$student->id}")
+            ->assertForbidden();
+
+        $registrar = User::factory()->create(['role' => 'registrar', 'position' => null]);
+        $this->actingAs($registrar)
+            ->post("/registrar/section-transfer-requests/{$transferRequest->id}/review", ['decision' => 'approve'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('section_students', ['section_id' => $source->id, 'user_id' => $student->id, 'status' => 'dropped']);
+        $this->assertDatabaseHas('section_students', ['section_id' => $destination->id, 'user_id' => $student->id, 'status' => 'enrolled']);
+        $this->assertSame('approved', $transferRequest->fresh()->status);
     }
 
     public function test_course_chair_cannot_choose_other_course_or_mutate_other_department_sections(): void

@@ -37,6 +37,16 @@ class Section extends Model
         return $this->hasMany(SectionSubject::class);
     }
 
+    public function editRequests()
+    {
+        return $this->hasMany(SectionEditRequest::class);
+    }
+
+    public function transferRequests()
+    {
+        return $this->hasMany(SectionTransferRequest::class, 'from_section_id');
+    }
+
     // Students enrolled in this section
     public function students()
     {

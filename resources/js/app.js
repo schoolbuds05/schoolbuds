@@ -47,7 +47,8 @@ if (document.body.classList.contains('portal-shell')) {
         const error = document.createElement('p');
         error.id = `portal-field-error-${forms.indexOf(field.form)}-${[...field.form.elements].indexOf(field)}`;
         error.dataset.portalFieldError = '';
-        error.className = 'portal-field-error';
+        error.className = 'portal-field-error text-red-600';
+        error.style.color = '#b91c1c';
         error.setAttribute('role', 'alert');
         error.textContent = message;
         field.insertAdjacentElement('afterend', error);

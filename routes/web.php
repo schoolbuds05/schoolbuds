@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\StudentManageController;
 use App\Http\Controllers\Admin\SystemControlController;
 use App\Http\Controllers\Admin\UserManageController;
 use App\Http\Controllers\Admin\DepartmentController;
+use App\Http\Controllers\Admin\RoomController;
 use App\Http\Controllers\Registrar\GradeApprovalController;
 use App\Http\Controllers\Registrar\TuitionFeeController;
 use App\Http\Controllers\Registrar\GradeChangeRequestController as RegistrarGradeChangeRequestController;
@@ -137,6 +138,9 @@ Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')-
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
     Route::put('/departments/{department}', [DepartmentController::class, 'update'])->name('departments.update');
     Route::post('/departments/{department}/teachers/{user}/remove', [DepartmentController::class, 'removeTeacher'])->name('departments.teachers.remove');
+    Route::get('/rooms', [RoomController::class, 'index'])->name('rooms.index');
+    Route::post('/rooms', [RoomController::class, 'store'])->name('rooms.store');
+    Route::put('/rooms/{room}', [RoomController::class, 'update'])->name('rooms.update');
     Route::get('/courses', [RegistrarCourseController::class, 'index'])->name('courses.index');
     Route::post('/courses', [RegistrarCourseController::class, 'store'])->name('courses.store');
     Route::put('/courses/{course}', [RegistrarCourseController::class, 'update'])->name('courses.update');
@@ -162,6 +166,9 @@ Route::middleware(['auth', 'web.roles:registrar,head_department'])->prefix('regi
     Route::put('/students/{student}/parent', [StudentManageController::class, 'updateParent'])->name('students.parent.update');
     Route::post('/students/{student}/fees', [StudentManageController::class, 'storeFee'])->name('students.fees.store');
     Route::post('/students/{student}/fees/{fee}/pay', [StudentManageController::class, 'markFeePaid'])->name('students.fees.pay');
+    Route::get('/rooms', [RoomController::class, 'index'])->middleware('web.roles:registrar')->name('rooms.index');
+    Route::post('/rooms', [RoomController::class, 'store'])->middleware('web.roles:registrar')->name('rooms.store');
+    Route::put('/rooms/{room}', [RoomController::class, 'update'])->middleware('web.roles:registrar')->name('rooms.update');
     Route::get('/subjects', [RegistrarSubjectController::class, 'index'])->name('subjects.index');
     Route::post('/subjects', [RegistrarSubjectController::class, 'store'])->name('subjects.store');
     Route::put('/subjects/bulk', [RegistrarSubjectController::class, 'bulkUpdate'])->name('subjects.bulk-update');
@@ -179,6 +186,10 @@ Route::middleware(['auth', 'web.roles:registrar,head_department'])->prefix('regi
     Route::get('/sections', [RegistrarSectionController::class, 'index'])->name('sections.index');
     Route::post('/sections', [RegistrarSectionController::class, 'store'])->name('sections.store');
     Route::post('/sections/{section}/submit', [RegistrarSectionController::class, 'submit'])->name('sections.submit');
+    Route::post('/sections/{section}/edit-requests', [RegistrarSectionController::class, 'requestEdit'])->name('sections.edit-requests.store')->middleware('web.roles:head_department');
+    Route::post('/sections/{section}/transfer-requests', [RegistrarSectionController::class, 'requestTransfer'])->name('sections.transfer-requests.store')->middleware('web.roles:head_department');
+    Route::post('/section-transfer-requests/{transferRequest}/review', [RegistrarSectionController::class, 'reviewTransfer'])->name('section-transfer-requests.review')->middleware('web.roles:registrar,admin');
+    Route::post('/section-edit-requests/{editRequest}/review', [RegistrarSectionController::class, 'reviewEditRequest'])->name('section-edit-requests.review')->middleware('web.roles:admin,registrar');
     Route::post('/sections/{section}/review', [RegistrarSectionController::class, 'review'])->name('sections.review');
     Route::post('/sections/{section}/close', [RegistrarSectionController::class, 'close'])->name('sections.close');
     Route::post('/sections/{section}/reopen', [RegistrarSectionController::class, 'reopen'])->name('sections.reopen');
@@ -229,6 +240,8 @@ Route::middleware(['auth', 'web.roles:faculty,head_department'])->prefix('depart
     Route::get('/sections', [RegistrarSectionController::class, 'index'])->name('sections.index');
     Route::post('/sections', [RegistrarSectionController::class, 'store'])->name('sections.store');
     Route::post('/sections/{section}/submit', [RegistrarSectionController::class, 'submit'])->name('sections.submit');
+    Route::post('/sections/{section}/edit-requests', [RegistrarSectionController::class, 'requestEdit'])->name('sections.edit-requests.store');
+    Route::post('/sections/{section}/transfer-requests', [RegistrarSectionController::class, 'requestTransfer'])->name('sections.transfer-requests.store');
     Route::put('/sections/{section}', [RegistrarSectionController::class, 'update'])->name('sections.update');
     Route::delete('/sections/{section}', [RegistrarSectionController::class, 'destroy'])->name('sections.destroy');
     Route::post('/sections/{section}/subjects', [RegistrarSectionController::class, 'assignSubject'])->name('sections.subjects.store');
@@ -263,9 +276,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/teaching-eligibility/mine', [TeachingEligibilityController::class, 'mine'])->name('teaching-eligibility.mine');
     Route::post('/teaching-eligibility/requests', [TeachingEligibilityController::class, 'store'])->name('teaching-eligibility.store');
     Route::get('/teaching-eligibility/department', [TeachingEligibilityController::class, 'chairIndex'])->name('teaching-eligibility.chair');
+    Route::get('/registrar/teaching-eligibility', [TeachingEligibilityController::class, 'registrarIndex'])
+        ->middleware('web.roles:registrar')->name('registrar.teaching-eligibility.index');
+    Route::post('/registrar/teaching-eligibility/{eligibility}/review', [TeachingEligibilityController::class, 'reviewChairRequest'])
+        ->middleware('web.roles:registrar')->name('registrar.teaching-eligibility.review');
     Route::post('/teaching-eligibility/grants', [TeachingEligibilityController::class, 'grant'])->name('teaching-eligibility.grant');
     Route::post('/teaching-eligibility/{eligibility}/review', [TeachingEligibilityController::class, 'review'])->name('teaching-eligibility.review');
     Route::post('/teaching-eligibility/{eligibility}/revoke', [TeachingEligibilityController::class, 'revoke'])->name('teaching-eligibility.revoke');
     Route::get('/teaching-eligibility/subject-departments', [TeachingEligibilityController::class, 'owners'])->name('teaching-eligibility.owners');
+    Route::put('/teaching-eligibility/subject-departments/bulk', [TeachingEligibilityController::class, 'updateOwners'])->name('teaching-eligibility.update-owners');
     Route::put('/teaching-eligibility/subject-departments/{subject}', [TeachingEligibilityController::class, 'assignOwner'])->name('teaching-eligibility.assign-owner');
 });

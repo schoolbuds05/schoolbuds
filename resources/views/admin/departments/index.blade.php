@@ -68,15 +68,32 @@
             </div>
 
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p class="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Available teachers</p>
-                <select name="teacher_ids[]" class="w-full rounded-lg border-slate-300 bg-white text-sm">
-                    <option value="" @selected(empty(old('teacher_ids'))) selected>Select teacher</option>
-                    @forelse($availableTeachers as $teacher)
-                        <option value="{{ $teacher->id }}" @selected(in_array($teacher->id, old('teacher_ids', [])))>{{ $teacher->name }} — {{ $teacher->email }}</option>
-                    @empty
-                        <option disabled>No unassigned teacher available</option>
-                    @endforelse
-                </select>
+                <div class="mb-2 flex items-center justify-between gap-3">
+                    <p class="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Available teachers</p>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-slate-500" data-teacher-selection-count>0 selected</span>
+                        <button type="button" data-select-all-teachers class="text-xs font-bold text-violet-700 hover:text-violet-900">Select all</button>
+                    </div>
+                </div>
+                <details class="rounded-lg border border-slate-200 bg-white">
+                    <summary class="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
+                        Choose teachers <span class="ml-1 text-xs font-normal text-slate-500">({{ $availableTeachers->count() }} available)</span>
+                    </summary>
+                    <div class="max-h-52 space-y-1 overflow-y-auto border-t border-slate-100 p-2" data-teacher-options>
+                        @forelse($availableTeachers as $teacher)
+                            <label class="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition hover:bg-violet-50">
+                                <input type="checkbox" name="teacher_ids[]" value="{{ $teacher->id }}" @checked(in_array($teacher->id, old('teacher_ids', []))) class="rounded border-slate-300 text-violet-700 focus:ring-violet-500">
+                                <span class="min-w-0">
+                                    <span class="block font-semibold text-slate-800">{{ $teacher->name }}</span>
+                                    <span class="block truncate text-xs text-slate-500">{{ $teacher->email }}</span>
+                                </span>
+                            </label>
+                        @empty
+                            <p class="px-2 py-3 text-sm text-slate-500">No unassigned teachers available.</p>
+                        @endforelse
+                    </div>
+                </details>
+                <p class="mt-2 text-xs text-slate-500">Choose one or more teachers for this department.</p>
             </div>
 
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-3" data-department-programs>
@@ -149,19 +166,38 @@
                     </div>
 
                     <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p class="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Teachers</p>
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <p class="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Add teachers</p>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500" data-teacher-selection-count>0 selected</span>
+                                <button type="button" data-select-all-teachers class="text-xs font-bold text-violet-700 hover:text-violet-900">Select all</button>
+                            </div>
+                        </div>
                         @php
                             $assignedTeachers = $department->teachers;
                             $assignedTeacherIds = $assignedTeachers->pluck('id')->all();
                             $teacherOptions = collect($availableTeachers)->sortBy('name');
                         @endphp
 
-                        <select name="teacher_ids[]" class="w-full rounded-lg border-slate-300 bg-white text-sm">
-                            <option value="" selected>Select teacher</option>
-                            @foreach($teacherOptions as $teacher)
-                                <option value="{{ $teacher->id }}">{{ $teacher->name }} — {{ $teacher->email }}</option>
-                            @endforeach
-                        </select>
+                        <details class="rounded-lg border border-slate-200 bg-white">
+                            <summary class="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
+                                Choose teachers <span class="ml-1 text-xs font-normal text-slate-500">({{ $teacherOptions->count() }} available)</span>
+                            </summary>
+                            <div class="max-h-52 space-y-1 overflow-y-auto border-t border-slate-100 p-2" data-teacher-options>
+                                @forelse($teacherOptions as $teacher)
+                                    <label class="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition hover:bg-violet-50">
+                                        <input type="checkbox" name="teacher_ids[]" value="{{ $teacher->id }}" class="rounded border-slate-300 text-violet-700 focus:ring-violet-500">
+                                        <span class="min-w-0">
+                                            <span class="block font-semibold text-slate-800">{{ $teacher->name }}</span>
+                                            <span class="block truncate text-xs text-slate-500">{{ $teacher->email }}</span>
+                                        </span>
+                                    </label>
+                                @empty
+                                    <p class="px-2 py-3 text-sm text-slate-500">No unassigned teachers available.</p>
+                                @endforelse
+                            </div>
+                        </details>
+                        <p class="mt-2 text-xs text-slate-500">Choose the teachers to add to this department.</p>
                     </div>
 
                     <div class="rounded-xl border border-slate-200 bg-slate-50 p-3" data-department-programs>
@@ -206,6 +242,31 @@
     </section>
 
 <script>
+    document.querySelectorAll('[data-select-all-teachers]').forEach((button) => {
+        const options = button.closest('.rounded-xl')?.querySelector('[data-teacher-options]');
+        const checkboxes = Array.from(options?.querySelectorAll('input[type="checkbox"]:not(:disabled)') ?? []);
+        const selectionCount = button.parentElement.querySelector('[data-teacher-selection-count]');
+        const updateSelectionState = () => {
+            const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+            if (selectionCount) {
+                selectionCount.textContent = `${selectedCount} selected`;
+            }
+            button.textContent = checkboxes.length > 0 && selectedCount === checkboxes.length
+                ? 'Clear selection'
+                : 'Select all';
+        };
+
+        checkboxes.forEach((checkbox) => checkbox.addEventListener('change', updateSelectionState));
+        button.addEventListener('click', () => {
+            const selectAll = checkboxes.some((checkbox) => !checkbox.checked);
+            checkboxes.forEach((checkbox) => {
+                checkbox.checked = selectAll;
+            });
+            updateSelectionState();
+        });
+        updateSelectionState();
+    });
+
     document.querySelectorAll('[data-department-form]').forEach((form) => {
         const type = form.querySelector('[data-department-type]');
         const programs = form.querySelector('[data-department-programs]');

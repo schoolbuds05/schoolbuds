@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AcademicTerm;
+use Illuminate\Support\Carbon;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -57,5 +58,28 @@ class EnrollmentSettingsTest extends TestCase
             ->assertOk()
             ->assertJsonPath('term.id', $activeTermId)
             ->assertJsonPath('enrollment_open', true);
+    }
+
+    public function test_enrollment_window_uses_the_configured_local_timezone(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-26 07:00:00', 'UTC'));
+
+        try {
+            $term = new AcademicTerm([
+                'school_year' => '2026-2027',
+                'semester' => '1st',
+                'enrollment_opens_at' => '2026-10-26 14:00:00',
+                'enrollment_closes_at' => '2026-10-27 14:00:00',
+                'is_active' => true,
+            ]);
+
+            $this->assertTrue($term->isEnrollmentOpen());
+
+            Carbon::setTestNow(Carbon::parse('2026-10-27 06:00:01', 'UTC'));
+
+            $this->assertFalse($term->isEnrollmentOpen());
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

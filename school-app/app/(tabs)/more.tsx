@@ -91,7 +91,13 @@ export default function More() {
   };
 
   const renderItem = (item, isLast) => (
-    <TouchableOpacity key={item.name} style={[styles.menuItem, !isLast && { borderBottomColor: theme.border, borderBottomWidth: StyleSheet.hairlineWidth }]} onPress={() => router.push(`/(tabs)/${item.name}`)} activeOpacity={0.7}>
+    <TouchableOpacity key={item.name} style={[styles.menuItem, !isLast && { borderBottomColor: theme.border, borderBottomWidth: StyleSheet.hairlineWidth }]} onPress={() => {
+      if (item.name === 'schedule') {
+        router.push('/student-schedule');
+        return;
+      }
+      router.push(`/(tabs)/${item.name}`);
+    }} activeOpacity={0.7}>
       <View style={[styles.iconWrap, { backgroundColor: theme.primaryLight }]}><Ionicons name={item.icon} size={18} color={theme.primary} /></View>
       <Text style={[styles.itemLabel, { color: theme.text }]}>{item.label}</Text>
       {!!metaByRoute[item.name] && <Text style={[styles.itemMeta, { color: theme.textSub }]}>{metaByRoute[item.name]}</Text>}

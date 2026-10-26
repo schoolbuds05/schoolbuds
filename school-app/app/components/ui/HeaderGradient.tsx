@@ -1,7 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter, useSegments } from 'expo-router';
+import { useFocusEffect, useRouter, useSegments, type Href } from 'expo-router';
 import { Image, Platform, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../../src/theme-context';
 
@@ -29,7 +29,7 @@ export default function HeaderGradient({ title, subtitle, stats, children, compa
   const router = useRouter();
   const segments = useSegments();
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
-  const [profileRoute, setProfileRoute] = useState(routeForSegments(segments));
+  const [profileRoute, setProfileRoute] = useState<Href>(routeForSegments(segments));
 
   useFocusEffect(
     useCallback(() => {

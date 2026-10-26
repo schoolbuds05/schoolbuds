@@ -4,7 +4,7 @@ import { ThemeProvider } from '../src/theme-context';
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack id="root-stack" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
@@ -15,6 +15,7 @@ export default function RootLayout() {
         <Stack.Screen name="(parent)" />
         <Stack.Screen name="(staff)" />
         <Stack.Screen name="(registrar)" />
+        <Stack.Screen name="student-schedule" />
         <Stack.Screen name="forgot-password" />
         <Stack.Screen name="reset-password" />
 

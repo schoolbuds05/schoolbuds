@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useCallback, useMemo, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../src/api';
@@ -53,6 +53,7 @@ function formatTime12(value) {
 function timeFor(subject) { return subject.time_start || subject.time_end ? `${formatTime12(subject.time_start) || 'Time TBA'}${subject.time_end ? `–${formatTime12(subject.time_end)}` : ''}` : 'Time TBA'; }
 
 export default function StudentSchedule() {
+  const router = useRouter();
   const { theme } = useTheme();
   const [subjects, setSubjects] = useState([]);
   const [activeTerm, setActiveTerm] = useState(null);
@@ -89,7 +90,18 @@ export default function StudentSchedule() {
 
   return <View style={[styles.container, { backgroundColor: theme.bg }]}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadSchedule(); }} tintColor={theme.primary} />}>
-      <View style={styles.header}><View><Text style={[styles.term, { color: theme.textSub }]}>{termLabel}</Text><Text style={[styles.title, { color: theme.text }]}>Class Schedule</Text></View><View style={[styles.logoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={styles.logo} resizeMode="contain" /></View></View>
+      <View style={styles.header}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => router.back()}
+          style={[styles.backButton, { backgroundColor: theme.card }]}
+        >
+          <Ionicons name="arrow-back" size={20} color={theme.text} />
+        </TouchableOpacity>
+        <View style={styles.headerTitle}><Text style={[styles.term, { color: theme.textSub }]}>{termLabel}</Text><Text style={[styles.title, { color: theme.text }]}>Class Schedule</Text></View>
+        <View style={[styles.logoWrap, { backgroundColor: theme.card }]}><Image source={require('../../assets/images/schoolbuds-favicon.png')} style={styles.logo} resizeMode="contain" /></View>
+      </View>
       <View style={styles.dayTabs}>{DAYS.map(day => <TouchableOpacity key={day} style={[styles.dayTab, { backgroundColor: selectedDay === day ? theme.primary : theme.card }]} onPress={() => setSelectedDay(day)}><Text style={[styles.dayName, { color: selectedDay === day ? '#fff' : theme.textSub }]}>{day.slice(0, 3)}</Text>{selectedDay === day && <View style={styles.dayDot} />}</TouchableOpacity>)}</View>
       {loading ? <View style={styles.loading}><ActivityIndicator size="large" color={theme.primary} /></View> : loadError ? <Message title="Schedule unavailable" detail={loadError} theme={theme} /> : subjects.length === 0 ? <Message title="No classes to show" detail="Your enrolled classes will appear here once class times are assigned." theme={theme} /> : <>
         <Section title={selectedDay} count={selectedClasses.length} theme={theme} />
@@ -110,7 +122,7 @@ function TbaRow({ subject, isLast, theme }) { return <View style={[styles.tbaRow
 function Message({ title, detail, theme }) { return <View style={[styles.message, { backgroundColor: theme.card }]}><Text style={[styles.messageTitle, { color: theme.text }]}>{title}</Text><Text style={[styles.messageText, { color: theme.textSub }]}>{detail}</Text></View>; }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 }, content: { padding: 16, paddingTop: 42, paddingBottom: 30 }, header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 13 }, term: { fontSize: 11, fontWeight: '600', marginBottom: 1 }, title: { fontSize: 22, fontWeight: '800' },
+  container: { flex: 1 }, content: { padding: 16, paddingTop: 42, paddingBottom: 30 }, header: { flexDirection: 'row', alignItems: 'center', marginBottom: 13 }, backButton: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, headerTitle: { flex: 1 }, term: { fontSize: 11, fontWeight: '600', marginBottom: 1 }, title: { fontSize: 22, fontWeight: '800' },
   logoWrap: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }, logo: { width: 31, height: 31, borderRadius: 8 },
   dayTabs: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }, dayTab: { width: 40, height: 37, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }, dayName: { fontSize: 10, fontWeight: '800' }, dayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFF1BF', marginTop: 3 },
   loading: { height: 300, justifyContent: 'center', alignItems: 'center' }, sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 5, marginBottom: 8 }, sectionTitle: { fontSize: 14, fontWeight: '800' }, sectionCount: { fontSize: 10, fontWeight: '700' },

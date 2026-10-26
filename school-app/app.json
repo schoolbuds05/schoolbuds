@@ -7,7 +7,6 @@
     "icon": "./assets/images/schoolbuds-icon.png",
     "scheme": "schoolbuds",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -20,7 +19,6 @@
         "backgroundImage": "./assets/images/schoolbuds-icon.png",
         "monochromeImage": "./assets/images/schoolbuds-icon.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {

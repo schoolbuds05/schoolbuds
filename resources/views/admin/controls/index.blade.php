@@ -16,36 +16,42 @@
             @csrf
             <label class="block text-xs font-bold uppercase text-slate-500">
                 School year
-                <input name="school_year" value="{{ old('school_year', $currentTerm?->school_year ?? '2026-2027') }}" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                <input name="school_year" value="{{ old('school_year', $currentTerm?->school_year ?? '2026-2027') }}" required aria-invalid="{{ $errors->has('school_year') ? 'true' : 'false' }}" class="mt-1 w-full rounded-lg text-sm normal-case text-slate-900 {{ $errors->has('school_year') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}">
+                @error('school_year')<span class="mt-1 block normal-case font-semibold text-red-600">{{ $message }}</span>@enderror
             </label>
 
             <label class="block text-xs font-bold uppercase text-slate-500">
                 Semester
-                <select name="semester" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                <select name="semester" required aria-invalid="{{ $errors->has('semester') ? 'true' : 'false' }}" class="mt-1 w-full rounded-lg text-sm normal-case text-slate-900 {{ $errors->has('semester') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}">
                     <option value="1st" @selected($selectedSemester === '1st')>1st semester</option>
                     <option value="2nd" @selected($selectedSemester === '2nd')>2nd semester</option>
                     <option value="summer" @selected($selectedSemester === 'summer')>Summer</option>
                 </select>
+                @error('semester')<span class="mt-1 block normal-case font-semibold text-red-600">{{ $message }}</span>@enderror
             </label>
 
             <label class="block text-xs font-bold uppercase text-slate-500">
                 Exam date
-                <input name="exam_date" value="{{ old('exam_date', $currentTerm?->exam_date?->format('Y-m-d\TH:i')) }}" type="datetime-local" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                <input name="exam_date" value="{{ old('exam_date', $currentTerm?->exam_date?->format('Y-m-d\TH:i')) }}" type="datetime-local" aria-invalid="{{ $errors->has('exam_date') ? 'true' : 'false' }}" class="mt-1 w-full rounded-lg text-sm normal-case text-slate-900 {{ $errors->has('exam_date') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}">
+                @error('exam_date')<span class="mt-1 block normal-case font-semibold text-red-600">{{ $message }}</span>@enderror
             </label>
 
             <label class="block text-xs font-bold uppercase text-slate-500">
                 Grade finalization deadline
-                <input name="grade_finalization_deadline" value="{{ old('grade_finalization_deadline', $currentTerm?->grade_finalization_deadline?->format('Y-m-d\TH:i')) }}" type="datetime-local" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                <input name="grade_finalization_deadline" value="{{ old('grade_finalization_deadline', $currentTerm?->grade_finalization_deadline?->format('Y-m-d\TH:i')) }}" type="datetime-local" aria-invalid="{{ $errors->has('grade_finalization_deadline') ? 'true' : 'false' }}" class="mt-1 w-full rounded-lg text-sm normal-case text-slate-900 {{ $errors->has('grade_finalization_deadline') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}">
+                @error('grade_finalization_deadline')<span class="mt-1 block normal-case font-semibold text-red-600">{{ $message }}</span>@enderror
             </label>
 
             <label class="block text-xs font-bold uppercase text-slate-500">
                 Enrollment opens
-                <input name="enrollment_opens_at" value="{{ old('enrollment_opens_at', $currentTerm?->enrollment_opens_at?->format('Y-m-d\TH:i')) }}" type="datetime-local" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                <input name="enrollment_opens_at" value="{{ old('enrollment_opens_at', $currentTerm?->enrollment_opens_at?->format('Y-m-d\TH:i')) }}" type="datetime-local" aria-invalid="{{ $errors->has('enrollment_opens_at') ? 'true' : 'false' }}" class="mt-1 w-full rounded-lg text-sm normal-case text-slate-900 {{ $errors->has('enrollment_opens_at') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}">
+                @error('enrollment_opens_at')<span class="mt-1 block normal-case font-semibold text-red-600">{{ $message }}</span>@enderror
             </label>
 
             <label class="block text-xs font-bold uppercase text-slate-500">
                 Enrollment closes
-                <input name="enrollment_closes_at" value="{{ old('enrollment_closes_at', $currentTerm?->enrollment_closes_at?->format('Y-m-d\TH:i')) }}" type="datetime-local" class="mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                <input name="enrollment_closes_at" value="{{ old('enrollment_closes_at', $currentTerm?->enrollment_closes_at?->format('Y-m-d\TH:i')) }}" type="datetime-local" aria-invalid="{{ $errors->has('enrollment_closes_at') ? 'true' : 'false' }}" class="mt-1 w-full rounded-lg text-sm normal-case text-slate-900 {{ $errors->has('enrollment_closes_at') ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}">
+                @error('enrollment_closes_at')<span class="mt-1 block normal-case font-semibold text-red-600">{{ $message }}</span>@enderror
             </label>
 
             <label class="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">
@@ -163,7 +169,8 @@
                                 step="{{ in_array($key, $decimalFields, true) ? '0.01' : '1' }}"
                                 value="{{ old($key, $pointsSettings[$key]) }}"
                                 required
-                                class="mt-1 w-full rounded-lg border-slate-300 text-sm font-semibold text-slate-900"
+                                aria-invalid="{{ $errors->has($key) ? 'true' : 'false' }}"
+                                class="mt-1 w-full rounded-lg text-sm font-semibold text-slate-900 {{ $errors->has($key) ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-slate-300' }}"
                             >
                             @error($key)<span class="mt-1 block font-medium text-red-600">{{ $message }}</span>@enderror
                         </label>

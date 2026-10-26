@@ -72,6 +72,36 @@ class RegistrarSectionSubjectAssignmentTest extends TestCase
                 ->value('teacher_id')
         );
         $this->assertSame(2, SectionSubject::where('section_id', $section->id)->count());
+
+        $mathAssignment = SectionSubject::query()
+            ->where('section_id', $section->id)
+            ->where('subject_id', $math->id)
+            ->firstOrFail();
+        $mathAssignment->update([
+            'day' => 'Monday',
+            'time_start' => '08:00',
+            'time_end' => '09:00',
+            'room' => 'Room 101',
+        ]);
+        $mathAssignment->schedules()->create([
+            'day' => 'Monday',
+            'time_start' => '08:00',
+            'time_end' => '09:00',
+            'room' => 'Room 101',
+        ]);
+        $mathAssignment->schedules()->create([
+            'day' => 'Tuesday',
+            'time_start' => '09:00',
+            'time_end' => '10:00',
+            'room' => 'Room 102',
+        ]);
+
+        $this->get(route('registrar.sections.index'))
+            ->assertOk()
+            ->assertSee('Print schedule')
+            ->assertSee('BSIT 1A schedule')
+            ->assertSee('Tuesday')
+            ->assertSee('Room 102');
     }
 
     private function createSubject(string $code, string $name): Subject

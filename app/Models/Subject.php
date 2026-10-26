@@ -21,6 +21,12 @@ class Subject extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (Subject $subject): void {
+            if ($course = $subject->courseRecord()) {
+                $subject->department_id = $course->department_id;
+            }
+        });
+
         static::updated(function (Subject $subject): void {
             if ($subject->wasChanged('department_id')) {
                 $subject->teachingEligibilities()->whereIn('status', ['pending', 'approved'])->get()
@@ -30,6 +36,22 @@ class Subject extends Model
                     ]));
             }
         });
+    }
+
+    public function courseRecord(): ?Course
+    {
+        if ($this->program_type !== 'college' || ! filled($this->course)) {
+            return null;
+        }
+
+        return Course::query()
+            ->where('program_type', 'college')
+            ->where('name', $this->course)
+            ->first()
+            ?? Course::query()
+                ->where('program_type', 'college')
+                ->where('acronym', $this->course)
+                ->first();
     }
 
     public function department()

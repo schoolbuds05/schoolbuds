@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 class AcademicTerm extends Model
@@ -33,5 +34,59 @@ class AcademicTerm extends Model
             && (!$this->enrollment_opens_at || $now->greaterThanOrEqualTo($this->enrollment_opens_at))
             && (!$this->enrollment_closes_at || $now->lessThanOrEqualTo($this->enrollment_closes_at))
             && (!$this->grade_finalization_deadline || $now->greaterThanOrEqualTo($this->grade_finalization_deadline));
+    }
+
+    public function setExamDateAttribute($value): void
+    {
+        $this->attributes['exam_date'] = $this->toLocalDateTimeString($value);
+    }
+
+    public function getExamDateAttribute($value): ?Carbon
+    {
+        return $this->fromLocalDateTimeString($value);
+    }
+
+    public function setGradeFinalizationDeadlineAttribute($value): void
+    {
+        $this->attributes['grade_finalization_deadline'] = $this->toLocalDateTimeString($value);
+    }
+
+    public function getGradeFinalizationDeadlineAttribute($value): ?Carbon
+    {
+        return $this->fromLocalDateTimeString($value);
+    }
+
+    public function setEnrollmentOpensAtAttribute($value): void
+    {
+        $this->attributes['enrollment_opens_at'] = $this->toLocalDateTimeString($value);
+    }
+
+    public function getEnrollmentOpensAtAttribute($value): ?Carbon
+    {
+        return $this->fromLocalDateTimeString($value);
+    }
+
+    public function setEnrollmentClosesAtAttribute($value): void
+    {
+        $this->attributes['enrollment_closes_at'] = $this->toLocalDateTimeString($value);
+    }
+
+    public function getEnrollmentClosesAtAttribute($value): ?Carbon
+    {
+        return $this->fromLocalDateTimeString($value);
+    }
+
+    private function toLocalDateTimeString(mixed $value): ?string
+    {
+        return $value === null || $value === ''
+            ? null
+            : Carbon::parse($value, 'Asia/Manila')->setTimezone('Asia/Manila')->format('Y-m-d H:i:s');
+    }
+
+    private function fromLocalDateTimeString(?string $value): ?Carbon
+    {
+        return $value === null
+            ? null
+            : Carbon::parse($value, 'Asia/Manila');
     }
 }

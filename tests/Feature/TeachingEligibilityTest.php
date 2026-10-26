@@ -28,11 +28,11 @@ class TeachingEligibilityTest extends TestCase
         return User::factory()->create(['role' => 'faculty', 'position' => 'teacher']);
     }
 
-    private function subject(?Department $department, ?string $course = null): Subject
+    private function subject(?Department $department, ?string $course = null, string $type = 'college'): Subject
     {
         return Subject::create([
             'code' => fake()->unique()->bothify('SUB###??'), 'name' => 'College Mathematics',
-            'program_type' => 'college', 'course' => $course, 'units_lec' => 3, 'units_lab' => 0,
+            'program_type' => $type, 'course' => $course, 'units_lec' => 3, 'units_lab' => 0,
             'department_id' => $department?->id, 'is_active' => true,
         ]);
     }
@@ -63,6 +63,42 @@ class TeachingEligibilityTest extends TestCase
         $this->assertSame(0, SectionSubject::count());
         $this->assertNull($subject->fresh()->course);
         $this->assertDatabaseHas('activity_logs', ['subject_type' => TeacherSubjectEligibility::class, 'subject_id' => $eligibility->id, 'action' => 'model_updated']);
+    }
+
+    public function test_only_registrar_can_review_department_chair_requests(): void
+    {
+        [$department, $chair] = $this->department();
+        $subject = $this->subject($department);
+        $chairRequest = $this->requestSubject($chair, $subject);
+        $ordinaryTeacher = $this->teacher();
+        $ordinaryRequest = $this->requestSubject($ordinaryTeacher, $subject);
+
+        $this->actingAs($chair)->postJson("/api/teaching-eligibility/{$chairRequest->id}/review", ['decision' => 'approve'])
+            ->assertForbidden();
+
+        $registrar = User::factory()->create(['role' => 'registrar']);
+        $this->actingAs($registrar)->getJson('/api/registrar/teaching-eligibility')
+            ->assertOk()->assertJsonCount(1, 'rows.data')
+            ->assertJsonPath('rows.data.0.id', $chairRequest->id);
+        $this->postJson("/api/teaching-eligibility/{$ordinaryRequest->id}/registrar-review", ['decision' => 'approve'])
+            ->assertUnprocessable();
+        $this->postJson("/api/teaching-eligibility/{$chairRequest->id}/registrar-review", ['decision' => 'approve'])
+            ->assertOk()->assertJsonPath('data.status', 'approved')->assertJsonPath('data.reviewed_by', $registrar->id);
+        $this->assertSame(1, TeacherSubjectEligibility::eligible()->count());
+
+        $otherRegistrar = User::factory()->create(['role' => 'registrar']);
+        $secondChair = User::factory()->create(['role' => 'faculty', 'position' => 'head_department']);
+        $secondDepartment = Department::create([
+            'name' => 'SCIENCE', 'code' => 'SCIENCE', 'chair_user_id' => $secondChair->id, 'is_active' => true,
+        ]);
+        $secondChair->update(['department_id' => $secondDepartment->id]);
+        $secondChairRequest = $this->requestSubject($secondChair, $this->subject($secondDepartment));
+        $this->actingAs($otherRegistrar)->postJson("/api/teaching-eligibility/{$secondChairRequest->id}/registrar-review", [
+            'decision' => 'reject',
+        ])->assertUnprocessable();
+        $this->postJson("/api/teaching-eligibility/{$secondChairRequest->id}/registrar-review", [
+            'decision' => 'reject', 'remarks' => 'Please provide updated qualifications.',
+        ])->assertOk()->assertJsonPath('data.status', 'rejected');
     }
 
     public function test_duplicate_requests_and_repeated_decisions_are_rejected(): void
@@ -137,6 +173,24 @@ class TeachingEligibilityTest extends TestCase
         $this->getJson('/api/teaching-eligibility/mine')->assertOk()->assertJsonCount(0, 'subjects');
     }
 
+    public function test_department_chair_only_sees_and_can_request_subjects_owned_by_their_department(): void
+    {
+        [$department, $chair] = $this->department();
+        [$otherDepartment] = $this->department('IT');
+        $departmentSubject = $this->subject($department);
+        $otherDepartmentSubject = $this->subject($otherDepartment);
+
+        $this->actingAs($chair)->getJson('/api/teaching-eligibility/mine')
+            ->assertOk()
+            ->assertJsonCount(1, 'subjects')
+            ->assertJsonPath('subjects.0.id', $departmentSubject->id);
+
+        $this->postJson('/api/teaching-eligibility/requests', [
+            'subject_id' => $otherDepartmentSubject->id,
+            'qualification' => 'Qualified for this subject.',
+        ])->assertForbidden();
+    }
+
     public function test_ownership_changes_invalidate_approvals_and_preserve_course_applicability(): void
     {
         [$department, $chair] = $this->department();
@@ -187,6 +241,57 @@ class TeachingEligibilityTest extends TestCase
         }
     }
 
+    public function test_admin_can_filter_subject_departments_by_department_or_unassigned(): void
+    {
+        [$department] = $this->department();
+        [$otherDepartment] = $this->department('IT');
+        $matchingSubject = $this->subject($department);
+        $this->subject($otherDepartment);
+        $unassignedSubject = $this->subject(null);
+        $courseSubject = $this->subject($department, 'BSIT');
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->get('/teaching-eligibility/subject-departments?department_id='.$department->id)
+            ->assertOk()
+            ->assertViewHas('rows', fn ($rows) => $rows->pluck('id')->all() === [$matchingSubject->id]);
+
+        $this->get('/teaching-eligibility/subject-departments?department_id=unassigned')
+            ->assertOk()
+            ->assertViewHas('rows', fn ($rows) => $rows->pluck('id')->all() === [$unassignedSubject->id]);
+
+        $this->get('/teaching-eligibility/subject-departments?subject_type=general&department_id='.$department->id)
+            ->assertOk()
+            ->assertViewHas('rows', fn ($rows) => $rows->pluck('id')->all() === [$matchingSubject->id]);
+
+        $this->get('/teaching-eligibility/subject-departments?subject_type=course&department_id='.$department->id)
+            ->assertOk()
+            ->assertViewHas('rows', fn ($rows) => $rows->pluck('id')->all() === [$courseSubject->id]);
+
+        $this->withHeader('referer', route('teaching-eligibility.owners', [
+            'subject_type' => 'general',
+            'department_id' => $department->id,
+        ]))->put(route('teaching-eligibility.update-owners'), [
+            'assignments' => [
+                ['subject_id' => $matchingSubject->id, 'department_id' => $otherDepartment->id],
+                ['subject_id' => $unassignedSubject->id, 'department_id' => $department->id],
+            ],
+            'scroll_y' => 847,
+        ])->assertRedirectContains('subject_type=general')
+            ->assertSessionHas('scroll_y', 847);
+        $this->assertSame($otherDepartment->id, $matchingSubject->fresh()->department_id);
+        $this->assertSame($department->id, $unassignedSubject->fresh()->department_id);
+
+        $this->put(route('teaching-eligibility.update-owners'), [
+            'assignments' => [
+                ['subject_id' => $matchingSubject->id, 'department_id' => $department->id],
+            ],
+            'scroll_y' => 847,
+        ])->assertRedirect()
+            ->assertSessionHas('scroll_y', 847);
+        $this->assertSame($department->id, $matchingSubject->fresh()->department_id);
+    }
+
     public function test_eligible_scope_excludes_inactive_department_subject_and_nonfaculty(): void
     {
         [$department, $chair] = $this->department();
@@ -207,12 +312,31 @@ class TeachingEligibilityTest extends TestCase
     {
         [$department, $chair] = $this->department();
         $teacher = $this->teacher();
+        $teacher->update(['department_id' => $department->id]);
+        $outsideTeacher = $this->teacher();
         $subject = $this->subject($department);
+        $subject->update(['semester' => '2nd']);
         $this->withoutVite();
         $this->actingAs($teacher)->get('/teaching-eligibility/mine')->assertOk()->assertSee('Qualifications and teaching experience');
         $this->post('/teaching-eligibility/requests', ['subject_id' => $subject->id, 'qualification' => 'Teaching degree.'])->assertRedirect()->assertSessionHasNoErrors();
-        $this->actingAs($chair)->get('/teaching-eligibility/department')->assertOk()->assertSee('Teaching degree.')->assertSee('Approve a teacher directly');
+        $this->actingAs($chair)->get('/teaching-eligibility/department')->assertOk()
+            ->assertSee('Teaching degree.')
+            ->assertSee('Approve a teacher directly')
+            ->assertSee('2nd semester')
+            ->assertSee('<details class="group"', false)
+            ->assertSee($teacher->email)
+            ->assertDontSee($outsideTeacher->email);
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs($admin)->get('/teaching-eligibility/subject-departments')->assertOk()->assertSee('Subject Departments');
+
+        $this->actingAs($chair)->post('/teaching-eligibility/requests', [
+            'subject_id' => $subject->id, 'qualification' => 'Chair teaching credentials.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $registrar = User::factory()->create(['role' => 'registrar']);
+        $this->actingAs($registrar)->get('/registrar/teaching-eligibility')->assertOk()
+            ->assertSee('Chair Teaching Requests')
+            ->assertSee('Chair teaching credentials.')
+            ->assertSee('Approve')
+            ->assertSee('Reject');
     }
 }

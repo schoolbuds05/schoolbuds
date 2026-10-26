@@ -1,6 +1,19 @@
 @extends('layouts.portal', ['title' => 'Sections'])
 
 @section('content')
+@php
+    $formatTime = static function ($time) {
+        return $time ? \Illuminate\Support\Carbon::parse($time)->format('g:i A') : '';
+    };
+@endphp
+@if(session('status'))
+    <div class="portal-card mb-4 border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{{ session('status') }}</div>
+@endif
+@if($errors->any())
+    <div class="portal-card mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <ul class="list-inside list-disc">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+    </div>
+@endif
 <div class="mb-6">
     <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
@@ -152,9 +165,38 @@
 </div>
 
 <div class="grid grid-cols-1 gap-4">
+    @if(!\App\Services\SectionDepartmentAccess::isChair(auth()->user()) && $pendingTransferRequests->isNotEmpty())
+        <section class="portal-card p-5">
+            <h2 class="text-lg font-black text-slate-900">Student transfer requests</h2>
+            <p class="mt-1 text-sm text-slate-500">Review department chair requests before moving students between sections.</p>
+            <div class="mt-4 space-y-3">
+                @foreach($pendingTransferRequests as $transferRequest)
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                            <span class="font-black text-slate-900">{{ $transferRequest->student?->name }}</span>
+                            <span class="text-slate-500">{{ $transferRequest->sourceSection?->name }} → {{ $transferRequest->destinationSection?->name }}</span>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-500">Requested by {{ $transferRequest->requester?->name ?? 'Department Chair' }} · {{ $transferRequest->reason }}</p>
+                        <form method="POST" action="{{ route('registrar.section-transfer-requests.review', $transferRequest) }}" class="mt-3 flex flex-wrap items-center gap-2">
+                            @csrf
+                            <input name="remarks" placeholder="Remarks (required when rejecting)" class="min-w-[240px] flex-1 rounded-lg border-slate-300 text-xs">
+                            <button name="decision" value="approve" class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white">Approve transfer</button>
+                            <button name="decision" value="reject" class="rounded-lg bg-red-600 px-4 py-2 text-xs font-black text-white">Reject request</button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
     @foreach($sections as $section)
 @php
     $sectionRoutePrefix = request()->routeIs('department-chair.*') ? 'department-chair.sections' : 'registrar.sections';
+    $isDepartmentChair = \App\Services\SectionDepartmentAccess::isChair(auth()->user());
+    $chairCanManageStudents = ! $isDepartmentChair || in_array($section->workflow_status, ['draft', 'rejected'], true);
+    $editRequest = $section->editRequests->sortByDesc('id')->first();
+    $chairCanEdit = ! $isDepartmentChair
+        || in_array($section->workflow_status, ['draft', 'rejected'], true)
+        || $editRequest?->status === 'approved';
             $enrolledIds = $section->students->pluck('id');
             $assignedSubjectIds = $section->sectionSubjects->pluck('subject_id');
             $eligibleStudents = $students
@@ -235,7 +277,11 @@
                 {{-- Edit form --}}
                 <div class="bg-slate-50 px-4 py-3">
                     <p class="text-xs font-black uppercase tracking-wide text-slate-400 mb-3">Section details</p>
-                    <form method="POST" action="{{ route('registrar.sections.update', $section) }}" class="section-form grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
+                    @if($isDepartmentChair && $editRequest?->status === 'approved')
+                        <p class="mb-3 rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">Registrar approved your edit request. After the first change, the section returns to draft and must be submitted for Registrar review again.</p>
+                    @endif
+                    @if($chairCanEdit)
+                    <form method="POST" action="{{ route($sectionRoutePrefix.'.update', $section) }}" class="section-form grid grid-cols-1 gap-3 md:grid-cols-4 md:items-end">
                         @csrf
                         @method('PUT')
                         <label class="text-xs font-bold uppercase text-slate-500">
@@ -293,11 +339,30 @@
                             Remove
                         </button>
                     </form>
-                    <form id="delete-section-{{ $section->id }}" method="POST" action="{{ route('registrar.sections.destroy', $section) }}" class="hidden">
+                    <form id="delete-section-{{ $section->id }}" method="POST" action="{{ route($sectionRoutePrefix.'.destroy', $section) }}" class="hidden">
                         @csrf
                         @method('DELETE')
                     </form>
-                    @if(auth()->user()?->position === 'head_department' && in_array($section->workflow_status, ['draft', 'rejected']))
+                    @elseif($isDepartmentChair)
+                        @if(in_array($section->workflow_status, ['approved', 'closed'], true))
+                            <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">This section has been approved and is locked for editing. Request permission from the Registrar to make changes.</p>
+                            @if($editRequest?->status === 'pending')
+                                <p class="mt-3 text-xs font-bold text-amber-700">Edit request pending Registrar review. Reason: {{ $editRequest->reason }}</p>
+                            @elseif($editRequest?->status === 'rejected')
+                                <p class="mt-3 rounded-lg bg-red-50 p-3 text-xs font-semibold text-red-700">Edit request rejected. {{ $editRequest->registrar_remarks }}</p>
+                            @endif
+                            @if(! $editRequest || in_array($editRequest->status, ['rejected', 'completed'], true))
+                                <form method="POST" action="{{ route('department-chair.sections.edit-requests.store', $section) }}" class="mt-3 flex flex-col gap-2 sm:flex-row">
+                                    @csrf
+                                    <input name="reason" required maxlength="2000" placeholder="Explain why this section needs to be edited" class="min-w-0 flex-1 rounded-lg border-slate-300 text-sm">
+                                    <button class="rounded-lg bg-amber-600 px-4 py-2 text-xs font-black text-white">Request edit permission</button>
+                                </form>
+                            @endif
+                        @else
+                            <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">This section is awaiting Registrar review and cannot be edited right now.</p>
+                        @endif
+                    @endif
+                    @if($isDepartmentChair && in_array($section->workflow_status, ['draft', 'rejected']))
                         @if($section->workflow_remarks)
                             <p class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">Registrar remarks: {{ $section->workflow_remarks }}</p>
                         @endif
@@ -306,6 +371,19 @@
                             <button class="rounded-lg bg-amber-500 px-4 py-2 text-xs font-black text-white">Submit for Registrar review</button>
                         </form>
                     @elseif(auth()->user()?->role === 'registrar' || auth()->user()?->role === 'admin')
+                        @if($editRequest?->status === 'pending')
+                            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                <p class="text-xs font-black uppercase text-amber-800">Section edit request</p>
+                                <p class="mt-1 text-sm text-slate-700">{{ $editRequest->reason }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Requested by {{ $editRequest->requester?->name ?? 'Department Chair' }}</p>
+                                <form method="POST" action="{{ route('registrar.section-edit-requests.review', $editRequest) }}" class="mt-3 flex flex-wrap items-center gap-2">
+                                    @csrf
+                                    <input name="remarks" placeholder="Remarks (required when rejecting)" class="min-w-[260px] flex-1 rounded-lg border-slate-300 text-xs">
+                                    <button name="decision" value="approve" class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black text-white">Approve edit request</button>
+                                    <button name="decision" value="reject" class="rounded-lg bg-red-600 px-4 py-2 text-xs font-black text-white">Reject request</button>
+                                </form>
+                            </div>
+                        @endif
                         @if($section->workflow_status === 'pending')
                             <form method="POST" action="{{ route('registrar.sections.review', $section) }}" class="mt-3 flex flex-wrap items-center gap-2">
                                 @csrf
@@ -328,10 +406,92 @@
                             <p class="text-xs font-black uppercase text-slate-400">Assigned subjects</p>
                             <p class="mt-1 text-sm font-bold text-slate-700">{{ $subjectCount }} subject(s)</p>
                         </div>
-                        <button type="button" data-modal-open="subjects-modal-{{ $section->id }}" class="rounded-lg bg-portal-accent px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-portal-accent-hover">
-                            Manage subjects
-                        </button>
+                        @if($chairCanEdit)
+                            <button type="button" data-modal-open="subjects-modal-{{ $section->id }}" class="rounded-lg bg-portal-accent px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-portal-accent-hover">
+                                Manage subjects
+                            </button>
+                        @endif
                     </div>
+                    @php
+                        $printScheduleId = 'section-schedule-'.$section->id;
+                    @endphp
+                    <article id="{{ $printScheduleId }}" class="section-schedule-print mt-4 overflow-x-auto rounded-lg border border-slate-200 p-4">
+                        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold">{{ $section->name }} schedule</h3>
+                                <p class="text-sm text-slate-600">
+                                    {{ $section->course ?: $section->strand }} · {{ $levelLabel }} · {{ $semesterLabel }} · {{ $section->school_year }}
+                                </p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" data-schedule-toggle="{{ $printScheduleId }}-content" aria-expanded="false" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700">
+                                    Show schedule
+                                </button>
+                                <button type="button" onclick="printSectionSchedule('{{ $printScheduleId }}')" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 print:hidden">
+                                    Print schedule
+                                </button>
+                            </div>
+                        </div>
+                        <div id="{{ $printScheduleId }}-content" data-schedule-content class="hidden overflow-x-auto">
+                        <table class="w-full min-w-[700px] border-collapse text-left text-sm">
+                                <thead>
+                                    <tr class="border-b border-slate-200 text-slate-500">
+                                        <th class="p-2">Subject</th>
+                                        <th class="p-2">Teacher</th>
+                                        <th class="p-2">Day</th>
+                                        <th class="p-2">Time</th>
+                                        <th class="p-2">Room</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($section->sectionSubjects as $assignment)
+                                        @php
+                                            $printMeetings = collect();
+                                            $legacyMeeting = [
+                                                'day' => $assignment->day,
+                                                'time_start' => $assignment->time_start,
+                                                'time_end' => $assignment->time_end,
+                                                'room' => $assignment->room,
+                                            ];
+                                            if (collect($legacyMeeting)->contains(fn ($value) => filled($value))) {
+                                                $printMeetings->push($legacyMeeting);
+                                            }
+                                            foreach ($assignment->schedules as $schedule) {
+                                                $meeting = [
+                                                    'day' => $schedule->day,
+                                                    'time_start' => $schedule->time_start,
+                                                    'time_end' => $schedule->time_end,
+                                                    'room' => $schedule->room,
+                                                ];
+                                                $isDuplicate = $printMeetings->contains(fn ($existing) =>
+                                                    collect(['day', 'time_start', 'time_end', 'room'])->every(fn ($field) =>
+                                                        strtolower(trim((string) $existing[$field])) === strtolower(trim((string) $meeting[$field]))
+                                                    )
+                                                );
+                                                if (! $isDuplicate) {
+                                                    $printMeetings->push($meeting);
+                                                }
+                                            }
+                                            if ($printMeetings->isEmpty()) {
+                                                $printMeetings->push(['day' => null, 'time_start' => null, 'time_end' => null, 'room' => null]);
+                                            }
+                                        @endphp
+                                        @foreach($printMeetings as $meeting)
+                                            <tr class="border-b border-slate-100">
+                                                <td class="p-2">{{ $assignment->subject?->code }} — {{ $assignment->subject?->name }}</td>
+                                                <td class="p-2">{{ $assignment->teacher?->name ?? 'No teacher' }}</td>
+                                                <td class="p-2">{{ $meeting['day'] ?: 'Day TBA' }}</td>
+                                                <td class="p-2">{{ $formatTime($meeting['time_start']) ?: 'Time TBA' }}–{{ $formatTime($meeting['time_end']) ?: 'Time TBA' }}</td>
+                                                <td class="p-2">{{ $meeting['room'] ?: 'Room TBA' }}</td>
+                                            </tr>
+                                        @endforeach
+                                    @empty
+                                        <tr><td colspan="5" class="p-3 text-slate-500">No subjects or schedules assigned to this section.</td></tr>
+                                    @endforelse
+                                </tbody>
+                        </table>
+                        </div>
+                    </article>
                     <div class="mt-2 divide-y divide-slate-200">
                         @forelse($section->sectionSubjects as $assignment)
                             <div class="grid grid-cols-1 gap-3 py-3 md:grid-cols-[1fr_auto] md:items-center">
@@ -340,15 +500,17 @@
                                     <p class="mt-1 text-xs font-semibold text-slate-500">
                                         {{ $assignment->teacher?->name ?? 'No teacher' }}
                                         @if($assignment->day) · {{ $assignment->day }} @endif
-                                        @if($assignment->time_start || $assignment->time_end) · {{ $assignment->time_start }}-{{ $assignment->time_end }} @endif
+                                        @if($assignment->time_start || $assignment->time_end) · {{ $formatTime($assignment->time_start) }}-{{ $formatTime($assignment->time_end) }} @endif
                                         @if($assignment->room) · {{ $assignment->room }} @endif
                                     </p>
                                 </div>
-                                <form method="POST" action="{{ route('registrar.sections.subjects.destroy', [$section, $assignment]) }}">
+                                @if($chairCanEdit)
+                                <form method="POST" action="{{ route($sectionRoutePrefix.'.subjects.destroy', [$section, $assignment]) }}">
                                     @csrf
                                     @method('DELETE')
                                     <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Remove</button>
                                 </form>
+                                @endif
                             </div>
                         @empty
                             <p class="py-3 text-sm text-slate-500">No subjects assigned yet.</p>
@@ -384,7 +546,7 @@
                     <div class="grid max-h-[calc(90vh-90px)] gap-5 overflow-y-auto p-5 xl:grid-cols-[1fr_1.15fr]">
                         <div>
                             <h3 class="text-sm font-black text-slate-900">Add subjects</h3>
-                            <form method="POST" action="{{ route('registrar.sections.subjects.store', $section) }}" class="mt-3 space-y-3">
+                            <form method="POST" action="{{ route($sectionRoutePrefix.'.subjects.store', $section) }}" class="mt-3 space-y-3">
                                 @csrf
                                 <input type="search" placeholder="Search subjects..." class="w-full rounded-lg border-slate-300 text-sm">
                                 <fieldset>
@@ -453,14 +615,14 @@
                                                 <p class="truncate text-xs font-semibold text-slate-500">
                                                     {{ $assignment->teacher?->name ?? 'No teacher' }}
                                                     @foreach(($assignment->schedules ?? collect())->reject(fn ($schedule) => $schedule->day === $assignment->day && $schedule->time_start === $assignment->time_start && $schedule->time_end === $assignment->time_end && $schedule->room === $assignment->room) as $schedule)
-                                                        <span class="block">· {{ $schedule->day }} {{ $schedule->time_start && $schedule->time_end ? $schedule->time_start.'-'.$schedule->time_end : 'Time TBA' }}{{ $schedule->room ? ' · '.$schedule->room : '' }}</span>
+                                                        <span class="block">· {{ $schedule->day }} {{ $schedule->time_start && $schedule->time_end ? $formatTime($schedule->time_start).'-'.$formatTime($schedule->time_end) : 'Time TBA' }}{{ $schedule->room ? ' · '.$schedule->room : '' }}</span>
                                                     @endforeach
                                                     @if($assignment->day) · {{ $assignment->day }} @endif
-                                                    @if($assignment->time_start || $assignment->time_end) · {{ $assignment->time_start }}-{{ $assignment->time_end }} @endif
+                                                    @if($assignment->time_start || $assignment->time_end) · {{ $formatTime($assignment->time_start) }}-{{ $formatTime($assignment->time_end) }} @endif
                                                     @if($assignment->room) · {{ $assignment->room }} @endif
                                                 </p>
                                             </div>
-                                            <form method="POST" action="{{ route('registrar.sections.subjects.destroy', [$section, $assignment]) }}">
+                                            <form method="POST" action="{{ route($sectionRoutePrefix.'.subjects.destroy', [$section, $assignment]) }}">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Remove</button>
@@ -497,7 +659,7 @@
                                                 <div data-meeting-list class="space-y-2">
                                                     @foreach($assignment->schedules ?? [] as $schedule)
                                                         <div class="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4" data-meeting-row data-day="{{ $schedule->day }}" data-start="{{ $schedule->time_start }}" data-end="{{ $schedule->time_end }}" data-room="{{ $schedule->room }}">
-                                                            <div class="text-sm font-semibold text-slate-700"><span data-meeting-label>{{ $schedule->day }} · {{ $schedule->time_start }}-{{ $schedule->time_end }}{{ $schedule->room ? ' · '.$schedule->room : '' }}</span><input type="hidden" name="schedules[{{ $loop->index }}][day]" value="{{ $schedule->day }}"><input type="hidden" name="schedules[{{ $loop->index }}][time_start]" value="{{ $schedule->time_start }}"><input type="hidden" name="schedules[{{ $loop->index }}][time_end]" value="{{ $schedule->time_end }}"><input type="hidden" name="schedules[{{ $loop->index }}][room]" value="{{ $schedule->room }}"></div>
+                                                            <div class="text-sm font-semibold text-slate-700"><span data-meeting-label>{{ $schedule->day }} · {{ $formatTime($schedule->time_start) }}-{{ $formatTime($schedule->time_end) }}{{ $schedule->room ? ' · '.$schedule->room : '' }}</span><input type="hidden" name="schedules[{{ $loop->index }}][day]" value="{{ $schedule->day }}"><input type="hidden" name="schedules[{{ $loop->index }}][time_start]" value="{{ $schedule->time_start }}"><input type="hidden" name="schedules[{{ $loop->index }}][time_end]" value="{{ $schedule->time_end }}"><input type="hidden" name="schedules[{{ $loop->index }}][room]" value="{{ $schedule->room }}"></div>
                                                             <div class="flex gap-2"><button type="button" data-edit-meeting class="rounded-lg bg-violet-50 px-2 py-1 text-xs font-black text-violet-700">Edit</button><button type="button" data-remove-meeting class="rounded-lg bg-red-50 px-2 py-1 text-xs font-black text-red-700">Delete</button></div>
                                                         </div>
                                                     @endforeach
@@ -539,7 +701,8 @@
                     <div class="grid max-h-[calc(90vh-90px)] gap-5 overflow-y-auto p-5 lg:grid-cols-2">
                         <div>
                             <h3 class="text-sm font-black text-slate-900">Add student</h3>
-                            <form method="POST" action="{{ route('registrar.sections.students.store', $section) }}" class="mt-3 space-y-3">
+                            @if($chairCanManageStudents)
+                            <form method="POST" action="{{ route($sectionRoutePrefix.'.students.store', $section) }}" class="mt-3 space-y-3">
                                 @csrf
                                 <select name="user_id" required class="w-full rounded-lg border-slate-300 text-sm">
                                     <option value="">Select student</option>
@@ -557,21 +720,53 @@
                                     Add to section
                                 </button>
                             </form>
+                            @elseif($isDepartmentChair && $section->workflow_status === 'approved')
+                                <p class="mt-3 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-800">To move a student out of this approved section, submit a transfer request for Registrar approval.</p>
+                            @endif
                         </div>
                         <div>
                             <h3 class="text-sm font-black text-slate-900">Currently enrolled</h3>
                             <div class="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100">
                                 @forelse($section->students as $student)
+                                    @php($studentTransferRequest = $section->transferRequests->firstWhere('student_id', $student->id))
                                     <div class="flex items-center justify-between gap-3 p-3">
                                         <div class="min-w-0">
                                             <p class="truncate text-sm font-black text-slate-800">{{ $student->name }}</p>
                                             <p class="truncate text-xs font-semibold text-slate-500">{{ $student->email }}</p>
                                         </div>
-                                        <form method="POST" action="{{ route('registrar.sections.students.destroy', [$section, $student]) }}">
+                                        @if($isDepartmentChair && $section->workflow_status === 'approved')
+                                            <div class="w-full max-w-md">
+                                                @if($studentTransferRequest?->status === 'pending')
+                                                    <p class="text-xs font-bold text-amber-700">Transfer request pending Registrar approval.</p>
+                                                @else
+                                                    @if($studentTransferRequest?->status === 'rejected')
+                                                        <p class="mb-2 text-xs font-semibold text-red-700">Previous request rejected: {{ $studentTransferRequest->registrar_remarks }}</p>
+                                                    @endif
+                                                    @php($eligibleTransferTargets = $transferTargets->filter(fn ($target) => $target->id !== $section->id && $target->department_id === $section->department_id && $target->program_type === $section->program_type && $target->course === $section->course && $target->strand === $section->strand && $target->year_level === $section->year_level && $target->school_year === $section->school_year && $target->semester === $section->semester))
+                                                    <form method="POST" action="{{ route('department-chair.sections.transfer-requests.store', $section) }}" class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                                        @csrf
+                                                        <input type="hidden" name="student_id" value="{{ $student->id }}">
+                                                        <select name="to_section_id" required class="min-w-40 flex-1 rounded-lg border-slate-300 text-xs">
+                                                            <option value="">Select destination section</option>
+                                                            @foreach($eligibleTransferTargets as $target)
+                                                                <option value="{{ $target->id }}">{{ $target->name }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                        <input name="reason" required maxlength="2000" placeholder="Reason for transfer" class="min-w-40 flex-1 rounded-lg border-slate-300 text-xs">
+                                                        <button @disabled($eligibleTransferTargets->isEmpty()) class="rounded-lg bg-amber-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Request transfer</button>
+                                                    </form>
+                                                    @if($eligibleTransferTargets->isEmpty())
+                                                        <p class="mt-1 text-xs text-slate-500">No other approved section in this course and academic term is available.</p>
+                                                    @endif
+                                                @endif
+                                            </div>
+                                        @elseif($chairCanManageStudents)
+                                        <form method="POST" action="{{ route($sectionRoutePrefix.'.students.destroy', [$section, $student]) }}">
                                             @csrf
                                             @method('DELETE')
                                             <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700">Remove</button>
                                         </form>
+                                        @endif
                                     </div>
                                 @empty
                                     <p class="p-4 text-sm font-semibold text-slate-500">No students enrolled yet.</p>
@@ -586,7 +781,44 @@
     {{ $sections->links() }}
 </div>
 
+<style>
+@media print {
+    body.printing-section > * { visibility: hidden !important; }
+    body.printing-section .is-print-target,
+    body.printing-section .is-print-target * { visibility: visible !important; }
+    body.printing-section .is-print-target { position: absolute; inset: 0; width: 100%; overflow: visible; background: white; }
+    body.printing-section .is-print-target button { display: none !important; }
+    body.printing-section .is-print-target [data-schedule-content] { display: block !important; }
+    body.printing-section .is-print-target table { min-width: 0; font-size: 10pt; }
+    .portal-frame, .portal-frame-wrap, .portal-content-panel, .portal-content-scroll { height: auto !important; max-height: none !important; overflow: visible !important; }
+}
+</style>
 <script>
+    document.querySelectorAll('[data-schedule-toggle]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const content = document.getElementById(button.dataset.scheduleToggle);
+            if (!content) return;
+
+            const isExpanded = button.getAttribute('aria-expanded') === 'true';
+            content.classList.toggle('hidden', isExpanded);
+            button.setAttribute('aria-expanded', String(!isExpanded));
+            button.textContent = isExpanded ? 'Show schedule' : 'Hide schedule';
+        });
+    });
+
+    function printSectionSchedule(sectionId) {
+        const section = document.getElementById(sectionId);
+        if (!section) return;
+
+        section.classList.add('is-print-target');
+        document.body.classList.add('printing-section');
+        window.addEventListener('afterprint', () => {
+            section.classList.remove('is-print-target');
+            document.body.classList.remove('printing-section');
+        }, { once: true });
+        window.print();
+    }
+
     document.querySelectorAll('.section-form').forEach((form) => {
         const programType = form.querySelector('select.program-type');
         const courseWrap = form.querySelector('label.course-field');
@@ -715,10 +947,16 @@
         if (button) button.closest('[data-meeting-row]')?.remove();
     });
     const meetingDays = [['Monday','Mon'],['Tuesday','Tue'],['Wednesday','Wed'],['Thursday','Thu'],['Friday','Fri'],['Saturday','Sat'],['Sunday','Sun']];
+    const formatTime = (value) => {
+        const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value || '');
+        if (!match) return value || '—';
+        const hour = Number(match[1]);
+        return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+    };
     const renderMeetingCard = (row, index) => {
         const day = row.dataset.day || '', start = row.dataset.start || '', end = row.dataset.end || '', room = row.dataset.room || '';
         row.className = 'grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4';
-        row.innerHTML = `<div class="flex items-center justify-between"><span class="text-sm font-black text-slate-700">Meeting ${index + 1}</span><div class="flex gap-3"><button type="button" data-edit-meeting class="text-xs font-black text-violet-700">Edit</button><button type="button" data-remove-meeting class="text-xs font-black text-red-700">Remove</button></div></div><div class="flex flex-wrap gap-2">${meetingDays.map(([full, short]) => `<span class="rounded-full border px-3 py-1 text-xs font-bold ${day.includes(full) ? 'border-red-500 bg-red-600 text-white' : 'border-slate-200 bg-white text-slate-500'}">${short}</span>`).join('')}</div><div class="grid grid-cols-1 gap-2 sm:grid-cols-3"><div><p class="mb-1 text-xs font-semibold text-slate-500">Start</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${start || '—'}</p></div><div><p class="mb-1 text-xs font-semibold text-slate-500">End</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${end || '—'}</p></div><div><p class="mb-1 text-xs font-semibold text-slate-500">Room</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${room || 'Room TBA'}</p></div></div><div class="hidden"><input type="hidden" name="schedules[${index}][day]" value="${day}"><input type="hidden" name="schedules[${index}][time_start]" value="${start}"><input type="hidden" name="schedules[${index}][time_end]" value="${end}"><input type="hidden" name="schedules[${index}][room]" value="${room}"></div>`;
+        row.innerHTML = `<div class="flex items-center justify-between"><span class="text-sm font-black text-slate-700">Meeting ${index + 1}</span><div class="flex gap-3"><button type="button" data-edit-meeting class="text-xs font-black text-violet-700">Edit</button><button type="button" data-remove-meeting class="text-xs font-black text-red-700">Remove</button></div></div><div class="flex flex-wrap gap-2">${meetingDays.map(([full, short]) => `<span class="rounded-full border px-3 py-1 text-xs font-bold ${day.includes(full) ? 'border-red-500 bg-red-600 text-white' : 'border-slate-200 bg-white text-slate-500'}">${short}</span>`).join('')}</div><div class="grid grid-cols-1 gap-2 sm:grid-cols-3"><div><p class="mb-1 text-xs font-semibold text-slate-500">Start</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${formatTime(start)}</p></div><div><p class="mb-1 text-xs font-semibold text-slate-500">End</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${formatTime(end)}</p></div><div><p class="mb-1 text-xs font-semibold text-slate-500">Room</p><p class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">${room || 'Room TBA'}</p></div></div><div class="hidden"><input type="hidden" name="schedules[${index}][day]" value="${day}"><input type="hidden" name="schedules[${index}][time_start]" value="${start}"><input type="hidden" name="schedules[${index}][time_end]" value="${end}"><input type="hidden" name="schedules[${index}][room]" value="${room}"></div>`;
     };
     document.querySelectorAll('[data-meeting-row]').forEach((row, index) => renderMeetingCard(row, index));
     document.querySelectorAll('.teacher-editor').forEach((editor) => {
