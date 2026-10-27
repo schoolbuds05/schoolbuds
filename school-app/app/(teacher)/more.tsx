@@ -61,7 +61,7 @@ export default function TeacherMore() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.title, { color: theme.text }]}>More</Text>
-      <TouchableOpacity style={[styles.profileCard, { backgroundColor: theme.card }]} onPress={() => router.navigate('/(teacher)/profile')} activeOpacity={0.75}>
+      <TouchableOpacity style={[styles.profileCard, { backgroundColor: theme.card }]} onPress={() => router.push('/(teacher)/profile')} activeOpacity={0.75}>
         <View style={[styles.avatar, { backgroundColor: theme.primary }]}><Text style={styles.avatarText}>{`${user?.first_name?.[0] || user?.name?.[0] || 'T'}`.toUpperCase()}</Text></View>
         <View style={styles.profileCopy}><Text style={[styles.profileName, { color: theme.text }]}>{user?.name || 'Teacher'}</Text><Text style={[styles.profileMeta, { color: theme.textSub }]}>{accountLabel}</Text></View>
         <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
@@ -69,11 +69,11 @@ export default function TeacherMore() {
 
       <Text style={[styles.sectionLabel, { color: theme.textSub }]}>Teaching</Text>
       <View style={[styles.group, { backgroundColor: theme.card }]}>
-        {TEACHING_ITEMS.map((item, index) => <MenuItem key={item.name} item={item} last={index === TEACHING_ITEMS.length - 1} theme={theme} onPress={() => router.navigate(`/(teacher)/${item.name}`)} />)}
+        {TEACHING_ITEMS.map((item, index) => <MenuItem key={item.name} item={item} last={index === TEACHING_ITEMS.length - 1} theme={theme} onPress={() => router.push(`/(teacher)/${item.name}`)} />)}
       </View>
       <Text style={[styles.sectionLabel, { color: theme.textSub }]}>Campus</Text>
       <View style={[styles.group, { backgroundColor: theme.card }]}>
-        {CAMPUS_ITEMS.map((item, index) => <MenuItem key={item.name} item={item} last={index === CAMPUS_ITEMS.length - 1} theme={theme} onPress={() => router.navigate(`/(teacher)/${item.name}`)} />)}
+        {CAMPUS_ITEMS.map((item, index) => <MenuItem key={item.name} item={item} last={index === CAMPUS_ITEMS.length - 1} theme={theme} onPress={() => router.push(`/(teacher)/${item.name}`)} />)}
       </View>
 
       <TouchableOpacity

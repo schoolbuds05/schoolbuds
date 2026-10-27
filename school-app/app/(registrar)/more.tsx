@@ -10,7 +10,7 @@ import { useTheme } from '../../src/theme-context';
 
 const MORE_ROUTES = [
   { section: 'Registrar tools', items: [
-  { name: 'teaching-eligibility', label: 'Subject departments', icon: 'book-outline' },
+    { name: 'teaching-eligibility', label: 'Subject departments', icon: 'book-outline' },
     { name: 'grades', label: 'Grades', icon: 'school-outline' },
     { name: 'tuition', label: 'Post tuition', icon: 'wallet-outline' },
     { name: 'course-shift-requests', label: 'Course-shift requests', icon: 'swap-horizontal-outline' },
@@ -66,7 +66,7 @@ export default function RegistrarMore() {
 
       <TouchableOpacity
         style={[styles.profileCard, { backgroundColor: theme.card }]}
-        onPress={() => router.navigate('/(registrar)/profile')}
+        onPress={() => router.push('/(registrar)/profile')}
         activeOpacity={0.75}
       >
         <View style={[styles.profileAvatar, { backgroundColor: theme.primaryLight }]}>
@@ -87,7 +87,7 @@ export default function RegistrarMore() {
               <TouchableOpacity
                 key={item.name}
                 style={[styles.menuRow, index < group.items.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}
-                onPress={() => router.navigate(`/(registrar)/${item.name}`)}
+                onPress={() => router.push(`/(registrar)/${item.name}`)}
                 activeOpacity={0.75}
               >
                 <View style={[styles.iconWrap, { backgroundColor: theme.primaryLight }]}>

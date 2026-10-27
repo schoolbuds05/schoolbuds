@@ -11,7 +11,13 @@ class CourseController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Course::query()->where('is_active', true);
+        $isAdmin = $request->user() && (
+            $request->user()->role === 'admin' || $request->user()->hasRole('admin')
+        );
+        $includeInactive = $isAdmin && $request->boolean('include_inactive');
+        $query = Course::query()
+            ->when(!$includeInactive, fn ($builder) => $builder->where('is_active', true))
+            ->when($isAdmin, fn ($builder) => $builder->with('department:id,name'));
 
         if ($request->filled('program_type')) {
             $query->where('program_type', $request->program_type);

@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme-context';
@@ -45,7 +47,14 @@ function TabLabel({ label, color }) {
 export default function StaffLayout() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const [isCustodian, setIsCustodian] = useState(false);
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
+
+  useEffect(() => {
+    AsyncStorage.getItem('user').then(value => {
+      if (value) setIsCustodian(JSON.parse(value)?.position === 'property_custodian');
+    }).catch(() => {});
+  }, []);
 
   return (
     <Tabs
@@ -91,11 +100,33 @@ export default function StaffLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'Updates',
-          tabBarLabel: ({ color }) => <TabLabel label="Updates" color={color} />,
+          title: isCustodian ? 'Dashboard' : 'Updates',
+          tabBarLabel: ({ color }) => <TabLabel label={isCustodian ? 'Dashboard' : 'Updates'} color={color} />,
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name={focused ? 'notifications' : 'notifications-outline'} focused={focused} color={color} />
+            <TabIcon name={focused ? (isCustodian ? 'home' : 'notifications') : (isCustodian ? 'home-outline' : 'notifications-outline')} focused={focused} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="assets"
+        options={{
+          title: 'Assets',
+          tabBarLabel: ({ color }) => <TabLabel label="Assets" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'cube' : 'cube-outline'} focused={focused} color={color} />
+          ),
+          tabBarItemStyle: isCustodian ? undefined : { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="marketplace"
+        options={{
+          title: 'Marketplace',
+          tabBarLabel: ({ color }) => <TabLabel label="Marketplace" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'storefront' : 'storefront-outline'} focused={focused} color={color} />
+          ),
+          tabBarItemStyle: isCustodian ? undefined : { display: 'none' },
         }}
       />
       <Tabs.Screen
@@ -106,14 +137,6 @@ export default function StaffLayout() {
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'person' : 'person-outline'} focused={focused} color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="more"
-        options={{
-          title: 'More',
-          tabBarLabel: ({ color }) => <TabLabel label="More" color={color} />,
-          tabBarIcon: ({ focused, color }) => <TabIcon name={focused ? 'grid' : 'grid-outline'} focused={focused} color={color} />,
         }}
       />
     </Tabs>

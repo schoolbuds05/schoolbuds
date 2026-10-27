@@ -49,7 +49,8 @@ export default function StudentManagement({ role }) {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState(role === 'registrar' ? 'active' : 'all');
+  const [statusFilter, setStatusFilter] = useState(role === 'registrar' || role === 'admin' ? 'active' : 'all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({ yearLevel: '', schoolYear: '', course: '' });
   const [draftFilters, setDraftFilters] = useState({ yearLevel: '', schoolYear: '', course: '' });
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -75,9 +76,6 @@ export default function StudentManagement({ role }) {
   const load = useCallback(async () => {
     try {
       const params = {};
-      if (role === 'admin' && statusFilter !== 'all') params.status = statusFilter;
-      if (role === 'admin' && search.trim()) params.search = search.trim();
-
       const res = await api.get(`/${role}/students`, { params });
       setStudents(res.data || []);
     } catch (e) {
@@ -87,9 +85,10 @@ export default function StudentManagement({ role }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, statusFilter, role]);
+  }, [role]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setCurrentPage(1); }, [search, statusFilter]);
 
   const filterOptions = useMemo(() => ({
     yearLevels: [...new Set(students.map(student => String(student.grade_level ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
@@ -107,7 +106,25 @@ export default function StudentManagement({ role }) {
           && (!filters.course || [student.course, student.strand].some(value => String(value ?? '') === filters.course));
         return matchesSearch && matchesAcademicFilters && (statusFilter === 'all' || student.status === statusFilter);
       })
-    : students;
+    : role === 'admin'
+      ? students.filter(student => {
+          const term = search.trim().toLowerCase();
+          const matchesSearch = !term || [student.student_id, student.first_name, student.last_name, student.email, student.grade_level, student.section]
+            .some(value => value?.toString().toLowerCase().includes(term));
+          return matchesSearch && (statusFilter === 'all' || student.status === statusFilter);
+        })
+      : students;
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / 15));
+  const page = Math.min(currentPage, totalPages);
+  const visibleStudents = filteredStudents.slice((page - 1) * 15, page * 15);
+  const pageNumbers = totalPages <= 5
+    ? Array.from({ length: totalPages }, (_, index) => index + 1)
+    : page <= 3
+      ? [1, 2, 3, 'start-gap', totalPages]
+      : page >= totalPages - 2
+        ? [1, 'end-gap', totalPages - 2, totalPages - 1, totalPages]
+        : [1, 'start-gap', page - 1, page, page + 1, 'end-gap', totalPages];
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
@@ -209,7 +226,6 @@ export default function StudentManagement({ role }) {
       Alert.alert('Missing details', 'Student ID, first name, last name, and email are required.');
       return;
     }
-
     setSaving(true);
     try {
       await api.put(`/${role}/students/${selected.id}`, {
@@ -277,6 +293,13 @@ export default function StudentManagement({ role }) {
     setStudents(current => current.map(item => item.id === student.id ? student : item));
   };
 
+  const adminTermStudent = students.find(student => student.school_year || student.enrollment?.semester);
+  const adminSchoolYear = adminTermStudent?.school_year;
+  const adminSemester = adminTermStudent?.enrollment?.semester;
+  const adminTermLabel = adminSchoolYear
+    ? `Term ${adminSchoolYear}${adminSemester ? ` · ${adminSemester.replace(/^./, value => value.toUpperCase())} semester` : ''}`
+    : 'Current academic term';
+
   const changeSubjectStatus = async (subject, action) => {
     if (!selected || !subject?.id) return;
     const verb = action === 'drop' ? 'Drop' : 'Restore';
@@ -310,8 +333,14 @@ export default function StudentManagement({ role }) {
   };
 
   return (
-    <View style={[s.container, role === 'registrar' && { backgroundColor: theme?.bg }]}>
-      {role === 'registrar' ? (
+    <View style={[s.container, (role === 'registrar' || role === 'admin') && { backgroundColor: theme?.bg }]}>
+      {role === 'admin' ? (
+        <View style={[s.adminContent, { paddingTop: Math.max(insets.top, 10) + 10 }]}>
+          <Text style={s.adminEyebrow}>MANAGE</Text>
+          <Text style={s.adminTitle}>Students</Text>
+          <Text style={s.adminSubtitle}>{adminTermLabel}</Text>
+        </View>
+      ) : role === 'registrar' ? (
         <View style={[s.registrarHeader, { paddingTop: 12 + insets.top }]}>
           <Text style={s.registrarTitle}>Students</Text>
           <Text style={s.registrarSubtitle}>
@@ -331,12 +360,31 @@ export default function StudentManagement({ role }) {
         />
       )}
 
-      <View style={[s.searchRow, role === 'registrar' && s.registrarSearchRow]}>
-        <View style={[s.searchCard, role === 'registrar' && s.registrarSearchCard]}>
-          <Feather name="search" size={18} color="#9CA3AF" style={s.searchIcon} />
+      {role === 'admin' && (
+        <View style={s.adminStatusRow}>
+          {STATUS.map(status => {
+            const active = statusFilter === status.value;
+            return (
+              <TouchableOpacity
+                key={status.value}
+                style={[s.adminStatusTile, active && s.adminStatusTileActive]}
+                onPress={() => setStatusFilter(status.value)}
+                activeOpacity={0.82}
+              >
+                <Text style={[s.adminStatusCount, active && s.adminStatusCountActive]}>{totals[status.value]}</Text>
+                <Text style={[s.adminStatusLabel, active && s.adminStatusLabelActive]}>{status.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      <View style={[s.searchRow, role === 'registrar' && s.registrarSearchRow, role === 'admin' && s.adminSearchRow]}>
+        <View style={[s.searchCard, role === 'registrar' && s.registrarSearchCard, role === 'admin' && s.adminSearchCard]}>
+          {role !== 'admin' && <Feather name="search" size={18} color="#9CA3AF" style={s.searchIcon} />}
           <TextInput
-            style={s.searchInput}
-            placeholder={role === 'registrar' ? 'Search ID, name, email or section' : 'Search student ID, name, email, section'}
+            style={[s.searchInput, role === 'admin' && s.adminSearchInput]}
+            placeholder={role === 'registrar' ? 'Search ID, name, email or section' : 'Search ID, name, email, section'}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
@@ -379,7 +427,7 @@ export default function StudentManagement({ role }) {
             );
           })}
         </ScrollView>
-      ) : (
+      ) : role !== 'admin' ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={s.filtersScroll}>
           <TouchableOpacity
             style={[s.filterChip, statusFilter === 'all' && s.filterChipActive]}
@@ -397,7 +445,7 @@ export default function StudentManagement({ role }) {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      )}
+      ) : null}
 
       {role === 'registrar' && (
         <Modal
@@ -480,8 +528,8 @@ export default function StudentManagement({ role }) {
         </View>
       ) : (
         <ScrollView
-          style={[s.list, role === 'registrar' && { paddingHorizontal: 16, paddingTop: 4 }]}
-          contentContainerStyle={{ paddingBottom: 110 }}
+          style={[s.list, role === 'registrar' && { paddingHorizontal: 16, paddingTop: 4 }, role === 'admin' && s.adminList]}
+          contentContainerStyle={{ paddingBottom: role === 'admin' ? 104 : 110 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         >
           {filteredStudents.length === 0 ? (
@@ -489,17 +537,32 @@ export default function StudentManagement({ role }) {
               <Text style={s.emptyTitle}>No students found</Text>
               <Text style={s.emptySub}>Try a different search or status filter.</Text>
             </View>
-          ) : filteredStudents.map(student => {
+          ) : visibleStudents.map(student => {
             const status = STATUS.find(item => item.value === student.status) || STATUS[0];
             return (
-              <TouchableOpacity key={student.id} style={[s.card, role === 'registrar' && s.registrarCard]} onPress={() => openStudent(student)} activeOpacity={0.82}>
+              <TouchableOpacity key={student.id} style={[s.card, role === 'registrar' && s.registrarCard, role === 'admin' && s.adminCard]} onPress={() => openStudent(student)} activeOpacity={0.82}>
                 <View style={s.cardTop}>
-                  <View style={[s.avatar, role === 'registrar' && s.registrarAvatar]}>
+                  <View style={[s.avatar, role === 'registrar' && s.registrarAvatar, role === 'admin' && s.adminAvatar]}>
                     <Text style={[s.avatarText, role === 'registrar' && s.registrarAvatarText]}>{initials(student)}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[s.name, role === 'registrar' && s.registrarName]}>{student.first_name} {student.last_name}</Text>
-                    <Text style={[s.meta, role === 'registrar' && s.registrarMeta]} numberOfLines={1}>{student.email}</Text>
+                    {role === 'admin' && (
+                      <View style={s.adminNameIdRow}>
+                        <Text style={[s.name, s.adminName]} numberOfLines={1}>{student.first_name} {student.last_name}</Text>
+                        <Text style={s.adminYearSection} numberOfLines={1}>
+                          {student.grade_level ? (/^year\s/i.test(String(student.grade_level)) ? student.grade_level : `Year ${student.grade_level}`) : 'Year not set'}
+                          {student.section ? ` · ${student.section}` : ''}
+                        </Text>
+                      </View>
+                    )}
+                    {role !== 'admin' && <Text style={[s.name, role === 'registrar' && s.registrarName]}>{student.first_name} {student.last_name}</Text>}
+                    <Text style={[s.meta, role === 'registrar' && s.registrarMeta, role === 'admin' && s.adminMeta]} numberOfLines={1}>{student.email}</Text>
+                    {role === 'admin' && <Text style={s.adminStudentId} numberOfLines={1}>{student.student_id || 'No ID'}</Text>}
+                    {role === 'admin' && (
+                      <Text style={s.adminCreatedAt} numberOfLines={1}>
+                        Created {student.created_at ? new Date(student.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'date unavailable'}
+                      </Text>
+                    )}
                     {role === 'registrar' ? (
                       <View style={s.registrarStudentDetails}>
                         <Text style={s.registrarStudentId}>{student.student_id || 'No student ID'}</Text>
@@ -507,23 +570,61 @@ export default function StudentManagement({ role }) {
                           {student.section || 'No section'}{student.grade_level ? ` · ${student.grade_level}` : ''}
                         </Text>
                       </View>
-                    ) : (
+                    ) : role !== 'admin' ? (
                       <Text style={s.program}>{student.grade_level} · {student.section} · {student.school_year}</Text>
-                    )}
-                    {role === 'admin' && (
-                      <Text style={s.program}>{student.subjects?.length || 0} subject{student.subjects?.length === 1 ? '' : 's'}</Text>
-                    )}
+                    ) : null}
                   </View>
-                  <View style={[s.statusBadge, role === 'registrar' && s.registrarStatusBadge, { backgroundColor: role === 'registrar' ? (status.value === 'active' ? '#DDF1E8' : status.value === 'inactive' ? '#F8F0F2' : '#E8F1FF') : status.bg }]}>
+                  {role === 'admin' ? (
+                    <View style={s.adminSubjectCount}>
+                      <Text style={s.adminSubjectNumber}>{student.subjects?.length || 0}</Text>
+                      <Text style={s.adminSubjectLabel}>subjects</Text>
+                    </View>
+                  ) : <View style={[s.statusBadge, role === 'registrar' && s.registrarStatusBadge, { backgroundColor: role === 'registrar' ? (status.value === 'active' ? '#DDF1E8' : status.value === 'inactive' ? '#F8F0F2' : '#E8F1FF') : status.bg }]}>
                     <Text style={[s.statusText, role === 'registrar' && s.registrarStatusText, { color: role === 'registrar' ? (status.value === 'active' ? '#1D8062' : status.value === 'inactive' ? '#D85A30' : '#378ADD') : status.color }]}>
                       {status.label}
                     </Text>
-                  </View>
+                  </View>}
                 </View>
               </TouchableOpacity>
             );
           })}
+          {role === 'admin' && filteredStudents.length > 0 && (
+            <View style={s.adminPagination}>
+              <Text style={s.adminPaginationCount}>
+                Showing {(page - 1) * 15 + 1}-{Math.min(page * 15, filteredStudents.length)} of {filteredStudents.length}
+              </Text>
+              {totalPages > 1 && (
+                <View style={s.adminPageControls}>
+                  <TouchableOpacity accessibilityLabel="Previous page" disabled={page === 1} onPress={() => setCurrentPage(page - 1)} style={s.adminPageControl}>
+                    <Feather name="chevron-left" size={16} color={page === 1 ? '#C8B9BC' : '#B01236'} />
+                  </TouchableOpacity>
+                  {pageNumbers.map((pageItem, index) => pageItem === 'start-gap' || pageItem === 'end-gap' ? (
+                    <Text key={`${pageItem}-${index}`} style={s.adminPageEllipsis}>...</Text>
+                  ) : (
+                    <TouchableOpacity key={pageItem} accessibilityLabel={`Page ${pageItem}`} onPress={() => setCurrentPage(pageItem)} style={[s.adminPageNumber, pageItem === page && s.adminPageNumberActive]}>
+                      <Text style={[s.adminPageNumberText, pageItem === page && s.adminPageNumberTextActive]}>{pageItem}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity accessibilityLabel="Next page" disabled={page === totalPages} onPress={() => setCurrentPage(page + 1)} style={s.adminPageControl}>
+                    <Feather name="chevron-right" size={16} color={page === totalPages ? '#C8B9BC' : '#B01236'} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
+      )}
+
+      {role === 'admin' && !loading && (
+        <TouchableOpacity
+          style={[s.adminFab, { bottom: 18 }]}
+          onPress={() => Alert.alert('Add a student', 'New student profiles are created through the enrollment process.')}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Add student"
+        >
+          <Feather name="plus" size={25} color="#FFFFFF" />
+        </TouchableOpacity>
       )}
 
       <Modal visible={!!selected} animationType="slide" transparent>
@@ -723,7 +824,7 @@ export default function StudentManagement({ role }) {
                 </TouchableOpacity>
               </View>
 
-              {role === 'admin' && (
+              {role === 'admin' && selected && (
                 <TouchableOpacity style={s.deleteBtn} onPress={deleteStudent}>
                   <Text style={s.deleteText}>Delete student account</Text>
                 </TouchableOpacity>
@@ -775,6 +876,10 @@ function flattenErrors(errors) {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
+  adminContent: { paddingHorizontal: 20, paddingBottom: 10 },
+  adminEyebrow: { color: '#B01236', fontSize: 11, fontWeight: '800', letterSpacing: 1.1 },
+  adminTitle: { color: '#29191D', fontSize: 28, fontWeight: '800', marginTop: 2, lineHeight: 34 },
+  adminSubtitle: { color: '#806D71', fontSize: 12, marginTop: 3 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   registrarHeader: { paddingHorizontal: 20, paddingBottom: 10 },
   registrarTitle: { color: '#2A171B', fontSize: 23, fontWeight: '700', fontFamily: 'serif' },
@@ -782,7 +887,17 @@ const s = StyleSheet.create({
   searchRow: { paddingHorizontal: 16, marginBottom: 16 },
   searchCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, height: 52, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
   registrarSearchRow: { marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  adminSearchRow: { paddingHorizontal: 20, marginTop: 2, marginBottom: 14 },
+  adminSearchCard: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#F0DDE1', paddingHorizontal: 13, elevation: 0, shadowOpacity: 0 },
+  adminSearchInput: { fontSize: 14, height: 46 },
   registrarSearchCard: { flex: 1, borderRadius: 13, height: 40, borderWidth: 1, borderColor: '#F0E8E3', elevation: 0, shadowOpacity: 0 },
+  adminStatusRow: { flexDirection: 'row', gap: 9, paddingHorizontal: 20, marginBottom: 12 },
+  adminStatusTile: { flex: 1, minHeight: 66, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F0DDE1' },
+  adminStatusTileActive: { backgroundColor: '#B01236', borderColor: '#B01236' },
+  adminStatusCount: { color: '#29191D', fontSize: 23, lineHeight: 26, fontWeight: '800' },
+  adminStatusCountActive: { color: '#FFFFFF' },
+  adminStatusLabel: { color: '#59484C', fontSize: 11, marginTop: 1 },
+  adminStatusLabelActive: { color: '#FFFFFF', fontWeight: '700' },
   filterButton: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0E8E3' },
   filterButtonActive: { backgroundColor: '#B51F3B', borderColor: '#B51F3B' },
   filterButtonText: { color: '#B51F3B', fontSize: 10, fontWeight: '800' },
@@ -799,11 +914,33 @@ const s = StyleSheet.create({
   filterText: { color: '#334155', fontSize: 12, fontWeight: '700' },
   filterTextActive: { color: '#fff' },
   list: { flex: 1, paddingHorizontal: 12 },
+  adminList: { paddingHorizontal: 20, paddingTop: 1 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  adminCard: { borderRadius: 15, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 8, borderColor: '#F0DDE1', elevation: 0, shadowOpacity: 0 },
   registrarCard: { borderRadius: 14, padding: 12, marginBottom: 10, borderColor: '#F0E8E3' },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
   registrarAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FBE5E9' },
+  adminAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F7DDE2' },
+  adminNameIdRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  adminName: { flex: 1, minWidth: 0, color: '#301D22', fontSize: 13, fontWeight: '700' },
+  adminYearSection: { maxWidth: 125, color: '#806D71', fontSize: 9, fontWeight: '600', textAlign: 'right' },
+  adminStudentId: { color: '#806D71', fontSize: 10, marginTop: 1 },
+  adminCreatedAt: { color: '#806D71', fontSize: 9, marginTop: 1 },
+  adminMeta: { color: '#806D71', fontSize: 11, marginTop: 1 },
+  adminSubjectCount: { minWidth: 40, alignItems: 'flex-end', marginLeft: 4 },
+  adminSubjectNumber: { color: '#806D71', fontSize: 12 },
+  adminSubjectLabel: { color: '#806D71', fontSize: 11 },
+  adminPagination: { alignItems: 'center', gap: 7, paddingVertical: 12 },
+  adminPaginationCount: { color: '#806D71', fontSize: 11 },
+  adminPageControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  adminPageControl: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  adminPageEllipsis: { width: 18, textAlign: 'center', color: '#806D71', fontSize: 13 },
+  adminPageNumber: { minWidth: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 },
+  adminPageNumberActive: { backgroundColor: '#B01236' },
+  adminPageNumberText: { color: '#806D71', fontSize: 11, fontWeight: '700' },
+  adminPageNumberTextActive: { color: '#FFFFFF' },
+  adminFab: { position: 'absolute', right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#B01236', alignItems: 'center', justifyContent: 'center', elevation: 7, shadowColor: '#6E0920', shadowOpacity: 0.22, shadowRadius: 9, shadowOffset: { width: 0, height: 4 } },
   registrarAvatarText: { color: '#B51F3B' },
   avatarText: { color: '#334155', fontWeight: '900', fontSize: 13 },
   name: { color: '#111827', fontSize: 15, fontWeight: '800' },

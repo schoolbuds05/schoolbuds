@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ArchiveController;
+use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\TeachingEligibilityController;
 use App\Http\Controllers\SectionGenerationController;
 use App\Http\Controllers\Api\AuthController;
@@ -26,7 +28,9 @@ use App\Http\Controllers\Api\PropertyCustodianController;
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AcademicTermController;
 use App\Http\Controllers\Api\AcademicLeadershipController;
+use App\Http\Controllers\Api\DepartmentChairGradeController;
 use App\Http\Controllers\Api\CourseShiftRequestController;
+use App\Http\Controllers\Api\AdminPointsConfigurationController;
 use App\Http\Controllers\Registrar\TuitionFeeController;
 use App\Http\Controllers\Api\RegistrarGradeController;
 use App\Http\Controllers\Registrar\GradeApprovalController;
@@ -200,6 +204,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dean & head teacher — school-wide academic oversight (read-only)
     Route::middleware('role:faculty')->group(function () {
         Route::get('/academic-leadership/dashboard', [AcademicLeadershipController::class, 'dashboard']);
+        Route::get('/academic-leadership/grades', [DepartmentChairGradeController::class, 'index']);
+        Route::post('/academic-leadership/grades/{submission}/review', [DepartmentChairGradeController::class, 'reviewSubmission']);
+        Route::post('/academic-leadership/grade-change-requests/{changeRequest}/review', [DepartmentChairGradeController::class, 'reviewChangeRequest']);
     });
 
     // Shared teacher/student
@@ -246,6 +253,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Admin
     Route::middleware('role:admin')->group(function () {
+        Route::get('/admin/departments', [DepartmentController::class, 'apiIndex']);
+        Route::get('/admin/archive', [ArchiveController::class, 'apiIndex']);
+        Route::post('/admin/archive/{archive}/restore', [ArchiveController::class, 'apiRestore']);
         Route::get('/admin/dashboard',      [AdminUserController::class, 'dashboard']);
         Route::get('/admin/activity-logs',  [ActivityLogController::class, 'index']);
         Route::get('/admin/users',          [AdminUserController::class, 'index']);
@@ -258,5 +268,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/admin/students/{student}', [AdminStudentController::class, 'destroy']);
         Route::get('/admin/academic-terms',             [AcademicTermController::class, 'index']);
         Route::post('/admin/academic-terms',            [AcademicTermController::class, 'upsert']);
+        Route::get('/admin/points-configuration', [AdminPointsConfigurationController::class, 'show']);
+        Route::put('/admin/points-configuration', [AdminPointsConfigurationController::class, 'update']);
     });
 });

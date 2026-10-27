@@ -14,6 +14,7 @@ class ActivityLogController extends Controller
 
         $search = trim((string) $request->query('search', ''));
         $action = trim((string) $request->query('action', ''));
+        $limit = max(1, min((int) $request->query('limit', 100), 100));
 
         $logs = ActivityLog::query()
             ->when($action !== '', fn ($query) => $query->where('action', $action))
@@ -31,7 +32,7 @@ class ActivityLogController extends Controller
                 });
             })
             ->latest()
-            ->limit(100)
+            ->limit($limit)
             ->get();
 
         return response()->json([

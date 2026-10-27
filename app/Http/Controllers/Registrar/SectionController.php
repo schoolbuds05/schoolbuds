@@ -330,7 +330,12 @@ class SectionController extends Controller
         $this->requireAnyRole($request, ['head_department']);
         SectionDepartmentAccess::authorize($request->user(), $section);
         abort_unless($this->ownsSection($request, $section), 403);
-        abort_unless(in_array($section->workflow_status, ['draft', 'rejected']), 422, 'Only draft or rejected sections can be submitted.');
+        if ($section->workflow_status === 'pending') {
+            return back()->with('status', 'This section has already been submitted for Registrar review.');
+        }
+        if (! in_array($section->workflow_status, ['draft', 'rejected'], true)) {
+            return back()->withErrors(['section' => 'Only draft or rejected sections can be submitted.']);
+        }
         $section->update(['workflow_status' => 'pending', 'workflow_remarks' => null, 'submitted_at' => now(), 'is_active' => false]);
         ActivityLog::record($request, 'section_submitted', 'Submitted section '.$section->name.' for Registrar review.', ['subject_type' => Section::class, 'subject_id' => $section->id]);
         return back()->with('status', 'Section submitted for Registrar review.');

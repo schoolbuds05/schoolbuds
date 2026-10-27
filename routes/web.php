@@ -225,6 +225,7 @@ Route::middleware(['auth', 'web.roles:admin,faculty,teacher,head_department,head
     Route::get('/chat',                         [TeacherDashboard::class, 'chat'])->name('chat');
     Route::post('/chat',                        [TeacherDashboard::class, 'sendChat'])->name('chat.send');
     Route::get('/profile',                      [TeacherDashboard::class, 'profile'])->name('profile');
+    Route::post('/profile/photo', [RegistrarProfileController::class, 'updatePhoto'])->name('profile.photo.update');
     Route::get('/class/{class}',                [TeacherDashboard::class, 'myClass'])->name('class');
     Route::get('/class/{class}/grades',         [GradeEntryController::class, 'index'])->name('grades');
     Route::post('/class/{class}/grades',        [GradeEntryController::class, 'store'])->name('grades.store');

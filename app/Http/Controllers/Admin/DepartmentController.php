@@ -16,6 +16,25 @@ class DepartmentController extends Controller
 {
     use AuthorizesPortal;
 
+    public function apiIndex(Request $request)
+    {
+        $this->requireAnyRole($request, ['admin']);
+
+        $search = trim((string) $request->query('search', ''));
+        $departments = Department::query()
+            ->with(['chair:id,name', 'courses:id,department_id,name,acronym'])
+            ->withCount(['courses', 'teachers as faculty_count', 'subjects'])
+            ->when($request->filled('type'), fn ($query) => $query->where('type', $request->type))
+            ->when($search !== '', fn ($query) => $query->where(fn ($inner) => $inner
+                ->where('name', 'like', "%{$search}%")
+                ->orWhere('code', 'like', "%{$search}%")
+                ->orWhereHas('chair', fn ($chairQuery) => $chairQuery->where('name', 'like', "%{$search}%"))))
+            ->orderBy('name')
+            ->get();
+
+        return response()->json(['departments' => $departments]);
+    }
+
     public function index(Request $request)
     {
         $this->requireAnyRole($request, ['admin']);

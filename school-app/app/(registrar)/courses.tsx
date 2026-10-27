@@ -2,6 +2,9 @@
 // app/(registrar)/courses.tsx — Registrar course management
 
 import { useState, useEffect, useCallback } from 'react';
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View, Text, ScrollView, StyleSheet, TextInput,
   TouchableOpacity, ActivityIndicator, Alert, Modal,
@@ -65,7 +68,9 @@ function ChipGroup({ options, value, onSelect }) {
   );
 }
 
-export default function RegistrarCourses() {
+export default function RegistrarCourses({ admin = false }) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const [courses, setCourses]             = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -75,12 +80,14 @@ export default function RegistrarCourses() {
   const [editing, setEditing]             = useState(null);
   const [form, setForm]                   = useState(EMPTY_FORM);
   const [saving, setSaving]               = useState(false);
+  const [statusFilter, setStatusFilter]   = useState('all');
+  const [currentPage, setCurrentPage]     = useState(1);
 
   const set = useCallback((key, value) => setForm(prev => ({ ...prev, [key]: value })), []);
 
   const fetchCourses = useCallback(async () => {
     try {
-      const res = await api.get('/courses', { params: { search: search.trim() || undefined } });
+      const res = await api.get('/courses', { params: { search: search.trim() || undefined, include_inactive: admin ? 1 : undefined } });
       setCourses(res.data || []);
     } catch (e) {
       console.log('Could not fetch courses', e.message);
@@ -88,7 +95,7 @@ export default function RegistrarCourses() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search]);
+  }, [search, admin]);
 
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
@@ -153,8 +160,125 @@ export default function RegistrarCourses() {
     ]);
   };
 
+  const filteredAdminCourses = courses.filter(course => statusFilter === 'all' || (statusFilter === 'active' ? course.is_active : !course.is_active));
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredAdminCourses.length / pageSize));
+  const shownAdminCourses = filteredAdminCourses.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1)
+    .filter(page => page === 1 || page === pageCount || Math.abs(page - currentPage) <= 1);
+  const activeCount = courses.filter(course => course.is_active).length;
+  const updateSearch = value => { setSearch(value); setCurrentPage(1); };
+  useEffect(() => {
+    if (currentPage > pageCount) setCurrentPage(pageCount);
+  }, [currentPage, pageCount]);
+  const showCourseActions = course => Alert.alert(course.name, 'Choose an action', [
+    { text: 'Edit', onPress: () => openEdit(course) },
+    { text: 'Delete', style: 'destructive', onPress: () => handleDelete(course) },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}> 
+      {admin ? (
+        <>
+          <View style={[s.adminHeader, { paddingTop: Math.max(insets.top, 14) + 8 }]}>
+            <View style={s.adminTitleRow}>
+              <View style={s.adminTitleBlock}>
+                <Text style={s.adminEyebrow}>ACADEMICS</Text>
+                <Text style={s.adminTitle}>Courses</Text>
+                <Text style={s.adminSubtitle}>{courses.length} courses · {activeCount === courses.length ? 'all active' : `${activeCount} active`}</Text>
+              </View>
+              <TouchableOpacity style={s.profileButton} onPress={() => router.push('/(admin)/profile')} accessibilityLabel="Open profile">
+                <Feather name="user" size={19} color="#AE1234" />
+              </TouchableOpacity>
+            </View>
+            <View style={s.adminSearchRow}>
+              <TextInput
+                style={s.adminSearchInput}
+                value={search}
+                onChangeText={updateSearch}
+                placeholder="Search courses"
+                placeholderTextColor="#89767A"
+                returnKeyType="search"
+                onSubmitEditing={fetchCourses}
+              />
+              <TouchableOpacity style={s.adminAddButton} onPress={openAdd}>
+                <Text style={s.adminAddText}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={s.adminFilterRow}>
+              {[['all', 'All'], ['active', 'Active'], ['inactive', 'Inactive']].map(([key, label]) => (
+                <TouchableOpacity key={key} onPress={() => { setStatusFilter(key); setCurrentPage(1); }} style={[s.adminFilterChip, statusFilter === key && s.adminFilterChipActive]}>
+                  <Text style={[s.adminFilterText, statusFilter === key && s.adminFilterTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          {loading ? (
+            <View style={s.center}><ActivityIndicator size="large" color="#AE1234" /></View>
+          ) : (
+            <ScrollView
+              style={s.adminList}
+              contentContainerStyle={s.adminListContent}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchCourses(); }} tintColor="#AE1234" />}
+            >
+              {shownAdminCourses.length === 0 ? (
+                <View style={s.adminEmpty}>
+                  <Text style={s.adminEmptyTitle}>No courses found</Text>
+                  <Text style={s.adminEmptyText}>Try another search or status filter.</Text>
+                </View>
+              ) : shownAdminCourses.map(course => (
+                <View key={course.id} style={s.adminCourseCard}>
+                  <TouchableOpacity style={s.adminCourseInfo} onPress={() => openEdit(course)} activeOpacity={0.8}>
+                    <Text style={s.adminCourseName}>{course.name}</Text>
+                    <View style={s.adminCourseMetaRow}>
+                      {course.acronym ? <Text style={s.adminAcronym}>{course.acronym}</Text> : null}
+                      <Text style={s.adminCourseMeta}>{course.program_type === 'shs' ? 'SHS' : 'College'}{course.department?.name ? ` · ${course.department.name}` : ''}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.adminMoreButton} onPress={() => showCourseActions(course)} accessibilityLabel={`Actions for ${course.name}`}>
+                    <Feather name="more-vertical" size={19} color="#78666A" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {filteredAdminCourses.length > 0 ? (
+                <View style={s.adminPagination}>
+                  <Text style={s.adminPaginationSummary}>
+                    Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredAdminCourses.length)} of {filteredAdminCourses.length}
+                  </Text>
+                  <View style={s.adminPageControls}>
+                    <TouchableOpacity
+                      disabled={currentPage === 1}
+                      onPress={() => setCurrentPage(page => Math.max(1, page - 1))}
+                      style={[s.adminPageButton, currentPage === 1 && s.adminPageButtonDisabled]}
+                      accessibilityLabel="Previous page"
+                    >
+                      <Feather name="chevron-left" size={17} color={currentPage === 1 ? '#B9A8AC' : '#AE1234'} />
+                    </TouchableOpacity>
+                    {pageNumbers.map((page, index) => (
+                      <View key={page} style={s.adminPageSlot}>
+                        {index > 0 && pageNumbers[index - 1] < page - 1 ? <Text style={s.adminPageEllipsis}>…</Text> : null}
+                        <TouchableOpacity onPress={() => setCurrentPage(page)} style={[s.adminPageButton, currentPage === page && s.adminPageButtonActive]}>
+                          <Text style={[s.adminPageText, currentPage === page && s.adminPageTextActive]}>{page}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    <TouchableOpacity
+                      disabled={currentPage === pageCount}
+                      onPress={() => setCurrentPage(page => Math.min(pageCount, page + 1))}
+                      style={[s.adminPageButton, currentPage === pageCount && s.adminPageButtonDisabled]}
+                      accessibilityLabel="Next page"
+                    >
+                      <Feather name="chevron-right" size={17} color={currentPage === pageCount ? '#B9A8AC' : '#AE1234'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+              <View style={{ height: 24 }} />
+            </ScrollView>
+          )}
+        </>
+      ) : <>
       <HeaderGradient
         title="Courses"
         subtitle={`${courses.length} available courses`}
@@ -215,6 +339,7 @@ export default function RegistrarCourses() {
           ))}
         </ScrollView>
       )}
+      </>}
 
       <Modal visible={showModal} animationType="slide" presentationStyle="formSheet">
         <View style={s.modalContainer}>
@@ -269,6 +394,44 @@ export default function RegistrarCourses() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  adminHeader: { paddingHorizontal: 20, paddingBottom: 12, backgroundColor: '#FBF3F4' },
+  adminTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  adminTitleBlock: { flex: 1 },
+  adminEyebrow: { color: '#AE1234', fontSize: 11, fontWeight: '800', letterSpacing: 1.1 },
+  adminTitle: { color: '#301A20', fontSize: 27, lineHeight: 32, fontWeight: '800', marginTop: 2 },
+  adminSubtitle: { color: '#806D72', fontSize: 13, marginTop: 3 },
+  profileButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F5DFE3', alignItems: 'center', justifyContent: 'center' },
+  adminSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  adminSearchInput: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#F0D9DE', backgroundColor: '#fff', paddingHorizontal: 14, color: '#301A20', fontSize: 14 },
+  adminAddButton: { height: 48, minWidth: 80, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#AE1234', paddingHorizontal: 14 },
+  adminAddText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  adminFilterRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  adminFilterChip: { minHeight: 42, borderRadius: 22, paddingHorizontal: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#F0D9DE', backgroundColor: '#fff' },
+  adminFilterChipActive: { borderColor: '#AE1234', backgroundColor: '#AE1234' },
+  adminFilterText: { color: '#806D72', fontSize: 13, fontWeight: '700' },
+  adminFilterTextActive: { color: '#fff' },
+  adminList: { flex: 1 },
+  adminListContent: { paddingHorizontal: 20, paddingTop: 2, paddingBottom: 18 },
+  adminCourseCard: { minHeight: 98, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0D9DE', borderRadius: 16, paddingVertical: 13, paddingLeft: 16, paddingRight: 8, marginBottom: 10 },
+  adminCourseInfo: { flex: 1, justifyContent: 'center' },
+  adminCourseName: { color: '#301A20', fontSize: 15, lineHeight: 19, fontWeight: '700', paddingRight: 5 },
+  adminCourseMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 7 },
+  adminAcronym: { overflow: 'hidden', color: '#AE1234', backgroundColor: '#F7DFE4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3, fontSize: 11, fontWeight: '800' },
+  adminCourseMeta: { color: '#806D72', fontSize: 12, flexShrink: 1 },
+  adminMoreButton: { width: 36, height: 42, alignItems: 'center', justifyContent: 'center' },
+  adminPagination: { alignItems: 'center', paddingTop: 8, paddingBottom: 10 },
+  adminPaginationSummary: { color: '#806D72', fontSize: 12, marginBottom: 10 },
+  adminPageControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  adminPageSlot: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  adminPageButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#F0D9DE', backgroundColor: '#fff', borderRadius: 10 },
+  adminPageButtonActive: { borderColor: '#AE1234', backgroundColor: '#AE1234' },
+  adminPageButtonDisabled: { backgroundColor: '#F7EFF1', borderColor: '#F0D9DE' },
+  adminPageText: { color: '#806D72', fontSize: 13, fontWeight: '700' },
+  adminPageTextActive: { color: '#fff' },
+  adminPageEllipsis: { width: 14, color: '#806D72', textAlign: 'center' },
+  adminEmpty: { alignItems: 'center', paddingVertical: 38 },
+  adminEmptyTitle: { color: '#301A20', fontSize: 16, fontWeight: '800' },
+  adminEmptyText: { color: '#806D72', fontSize: 13, marginTop: 6 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 14, backgroundColor: C.blue },
   title: { color: '#fff', fontSize: 22, fontWeight: '700' },
   subtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 4 },

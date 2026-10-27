@@ -112,20 +112,20 @@ export default function AdminLayout() {
       <Tabs.Screen
         name="users"
         options={{
-          title: 'Users',
-          tabBarLabel: ({ color }) => <TabLabel label="Users" color={color} />,
+          title: 'Staff',
+          tabBarLabel: ({ color }) => <TabLabel label="Staff" color={color} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="reports"
+        name="departments"
         options={{
-          title: 'Reports',
-          tabBarLabel: ({ color }) => <TabLabel label="Reports" color={color} />,
+          title: 'Departments',
+          tabBarLabel: ({ color }) => <TabLabel label="Departments" color={color} />,
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name={focused ? 'bar-chart' : 'bar-chart-outline'} focused={focused} color={color} />
+            <TabIcon name={focused ? 'business' : 'business-outline'} focused={focused} color={color} />
           ),
         }}
       />
@@ -141,18 +141,22 @@ export default function AdminLayout() {
       />
       <Tabs.Screen
         name="market"
-        options={{ href: null }}
+        options={{ tabBarItemStyle: { display: 'none' } }}
       />
       <Tabs.Screen
-        name="controls"
-        options={{ href: null }}
+        name="archived"
+        options={{ tabBarItemStyle: { display: 'none' } }}
       />
+      <Tabs.Screen name="controls" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="courses" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="reports" options={{ tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen
         name="profile"
-        options={{ href: null }}
+        options={{ tabBarItemStyle: { display: 'none' } }}
       />
-      <Tabs.Screen name="activity" options={{ href: null }} />
-      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
+      <Tabs.Screen name="activity" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="teaching-eligibility" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="subject-departments" options={{ tabBarItemStyle: { display: 'none' } }} />
     </Tabs>
   );
 }

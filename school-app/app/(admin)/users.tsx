@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,7 +8,6 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -16,21 +15,20 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import HeaderGradient from '../components/ui/HeaderGradient';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 const HEADER_TOP = Platform.OS === 'android'
-  ? (StatusBar.currentHeight ?? 24) + 10 : 52;
+  ? 5 : 44;
 
 const ROLES = [
   { value: 'admin', label: 'Admin', bg: '#EEF2FF', color: '#4338CA' },
   { value: 'registrar', label: 'Registrar', bg: '#E0F2FE', color: '#0369A1' },
   { value: 'faculty', label: 'Faculty', bg: '#DCFCE7', color: '#15803D' },
-  { value: 'parent', label: 'Parent', bg: '#FFE4E6', color: '#BE123C' },
   { value: 'staff', label: 'Staff', bg: '#E2E8F0', color: '#334155' },
-  { value: 'student', label: 'Student', bg: '#FEF3C7', color: '#92400E' },
 ];
+
+const STAFF_ROLE_VALUES = ['admin', 'registrar', 'faculty', 'staff'];
 
 const POSITION_OPTIONS = {
   faculty: [
@@ -49,13 +47,15 @@ const emptyForm = { name: '', email: '', password: '', role: 'faculty', position
 export default function AdminUsers() {
   const { theme } = useTheme();
   const [users, setUsers] = useState([]);
+  const [dashboardCounts, setDashboardCounts] = useState({});
   const [roles, setRoles] = useState(ROLES);
   const [positions, setPositions] = useState(POSITION_OPTIONS);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [roleFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -63,14 +63,18 @@ export default function AdminUsers() {
   const load = useCallback(async () => {
     try {
       const params = {};
-      if (roleFilter !== 'all') params.role = roleFilter;
       if (search.trim()) params.search = search.trim();
 
-      const res = await api.get('/admin/users', { params });
+      const [res, dashboardRes] = await Promise.all([
+        api.get('/admin/users', { params }),
+        api.get('/admin/dashboard'),
+      ]);
+      setDashboardCounts(dashboardRes.data?.counts || {});
       const payload = res.data || [];
-      setUsers(Array.isArray(payload) ? payload : (payload.users || []));
+      const userRows = Array.isArray(payload) ? payload : (payload.users || []);
+      setUsers(userRows.filter(user => STAFF_ROLE_VALUES.includes(normalizedRole(user.role))));
       if (!Array.isArray(payload) && payload.roles?.length) {
-        setRoles(payload.roles.map(option => ({
+        setRoles(payload.roles.filter(option => STAFF_ROLE_VALUES.includes(option.value)).map(option => ({
           ...option,
           ...(ROLES.find(role => role.value === option.value) || { bg: '#E2E8F0', color: '#334155' }),
         })));
@@ -86,21 +90,39 @@ export default function AdminUsers() {
       }
     } catch (e) {
       console.log('Admin users error:', e.message);
-      Alert.alert('Could not load users', e.response?.data?.message || 'Please try again.');
+      Alert.alert('Could not load staff', e.response?.data?.message || 'Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [roleFilter, search]);
+  }, [search]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setCurrentPage(1); }, [roleFilter, search]);
 
-  const totals = useMemo(() => {
-    return roles.reduce((acc, role) => {
-      acc[role.value] = users.filter(user => normalizedRole(user.role) === role.value).length;
-      return acc;
-    }, {});
-  }, [users, roles]);
+  const totals = {
+    admin: dashboardCounts.admins ?? 0,
+    registrar: dashboardCounts.registrars ?? 0,
+    faculty: (dashboardCounts.faculty ?? 0) + (dashboardCounts.head_teachers ?? 0) + (dashboardCounts.deans ?? 0),
+    staff: (dashboardCounts.staff ?? 0) + (dashboardCounts.librarians ?? 0) + (dashboardCounts.property_custodians ?? 0),
+  };
+  const filteredUsers = roleFilter === 'all'
+    ? users
+    : users.filter(user => normalizedRole(user.role) === roleFilter);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / 15));
+  const page = Math.min(currentPage, totalPages);
+  const visibleUsers = filteredUsers.slice((page - 1) * 15, page * 15);
+  const pageNumbers = totalPages <= 5
+    ? Array.from({ length: totalPages }, (_, index) => index + 1)
+    : page <= 3
+      ? [1, 2, 3, 'start-gap', totalPages]
+      : page >= totalPages - 2
+        ? [1, 'end-gap', totalPages - 2, totalPages - 1, totalPages]
+        : [1, 'start-gap', page - 1, page, page + 1, 'end-gap', totalPages];
+  const totalStaff = totals.admin + totals.registrar + totals.faculty + totals.staff;
+  const totalForCurrentFilter = search.trim()
+    ? filteredUsers.length
+    : roleFilter === 'all' ? totalStaff : (totals[roleFilter] ?? filteredUsers.length);
 
   const openCreate = () => {
     setEditing(null);
@@ -129,7 +151,7 @@ export default function AdminUsers() {
 
   const saveUser = async () => {
     if (!form.name.trim() || !form.email.trim() || (!editing && !form.password.trim())) {
-      Alert.alert('Missing details', 'Name, email, role, and password are required for new users.');
+      Alert.alert('Missing details', 'Name, email, role, and password are required for new staff accounts.');
       return;
     }
 
@@ -155,15 +177,15 @@ export default function AdminUsers() {
       setForm(emptyForm);
       await load();
     } catch (e) {
-      const message = e.response?.data?.message || flattenErrors(e.response?.data?.errors) || 'Please check the user details.';
-      Alert.alert('Could not save user', message);
+      const message = e.response?.data?.message || flattenErrors(e.response?.data?.errors) || 'Please check the staff account details.';
+      Alert.alert('Could not save staff account', message);
     } finally {
       setSaving(false);
     }
   };
 
   const deleteUser = (user) => {
-    Alert.alert('Delete user', `Delete ${user.name}? This cannot be undone.`, [
+    Alert.alert('Delete staff account', `Delete ${user.name}? This cannot be undone.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -173,100 +195,144 @@ export default function AdminUsers() {
             await api.delete(`/admin/users/${user.id}`);
             await load();
           } catch (e) {
-            Alert.alert('Could not delete user', e.response?.data?.message || 'Please try again.');
+            Alert.alert('Could not delete staff account', e.response?.data?.message || 'Please try again.');
           }
         },
       },
     ]);
   };
 
+  const showUserActions = (user) => Alert.alert(user.name, 'Choose an account action.', [
+    { text: 'Edit', onPress: () => openEdit(user) },
+    { text: 'Delete', style: 'destructive', onPress: () => deleteUser(user) },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+
   return (
-    <View style={s.container}>
+    <View style={[s.container, { backgroundColor: theme.bg }]}>
       <View style={s.header}>
-        <HeaderGradient
-          title="Manage staff accounts"
-          subtitle="Quickly review and update school user profiles."
-          initials="AD"
-          stats={[
-            { label: 'Admins', value: totals.admin || 0, accent: '#4338CA' },
-            { label: 'Registrars', value: totals.registrar || 0, accent: '#0369A1' },
-            { label: 'Faculty', value: totals.faculty || 0, accent: '#15803D' },
-            { label: 'Staff', value: totals.staff || 0, accent: '#334155' },
-          ]}
-        />
+        <Text style={[s.kicker, { color: theme.primary }]}>Manage</Text>
+        <Text style={[s.title, { color: theme.text }]}>Manage Staff Users</Text>
+
+        <View style={s.roleTotals}>
+          {roles.map(role => (
+            <View key={role.value} style={[s.roleTotal, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[s.roleTotalValue, { color: theme.text }]}>{totals[role.value] || 0}</Text>
+              <Text style={[s.roleTotalLabel, { color: theme.textSub }]}>{role.value === 'faculty' || role.value === 'staff' ? role.label : `${role.label}s`}</Text>
+            </View>
+          ))}
+        </View>
 
         <View style={s.searchRow}>
-          <View style={s.searchCard}>
-            <Feather name="search" size={18} color="#9CA3AF" style={s.searchIcon} />
+          <View style={[s.searchCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Feather name="search" size={16} color={theme.textMuted} style={s.searchIcon} />
             <TextInput
-              style={s.searchInputCard}
-              placeholder="Search by name or email"
-              placeholderTextColor="#9CA3AF"
+              style={[s.searchInputCard, { color: theme.text }]}
+              placeholder="Search name or email"
+              placeholderTextColor={theme.textMuted}
               value={search}
               onChangeText={setSearch}
               returnKeyType="search"
             />
           </View>
           <TouchableOpacity
-            style={[s.addButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
+            accessibilityLabel="Add staff account"
+            style={[s.addButton, { backgroundColor: theme.primary }]}
             onPress={openCreate}
           >
-            <Text style={s.addButtonText}>+ Add staff</Text>
+            <Text style={s.addButtonText}>+ Add</Text>
           </TouchableOpacity>
         </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterRow}>
+          {[
+            { value: 'all', label: 'All' },
+            { value: 'admin', label: 'Admins' },
+            { value: 'registrar', label: 'Registrar' },
+            { value: 'faculty', label: 'Faculty' },
+            { value: 'staff', label: 'Staff' },
+          ].map(filter => {
+            const active = roleFilter === filter.value;
+            return (
+              <TouchableOpacity
+                key={filter.value}
+                style={[s.filterChip, { borderColor: theme.border, backgroundColor: theme.card }, active && { borderColor: theme.primary, backgroundColor: theme.primary }]}
+                onPress={() => setRoleFilter(filter.value)}
+              >
+                <Text style={[s.filterChipText, { color: theme.textSub }, active && { color: '#fff' }]}>{filter.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {loading ? (
         <View style={s.center}>
-          <ActivityIndicator size="large" color="#334155" />
+          <ActivityIndicator size="large" color={theme.primary} />
         </View>
       ) : (
         <ScrollView
           style={s.list}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={s.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         >
-          {users.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <View style={s.empty}>
-              <Text style={s.emptyTitle}>No users found</Text>
-              <Text style={s.emptySub}>Try another filter or add a new staff account.</Text>
+              <Text style={s.emptyTitle}>No staff accounts found</Text>
+              <Text style={s.emptySub}>Try another filter or add a staff account.</Text>
             </View>
-          ) : users.map(user => {
+          ) : visibleUsers.map(user => {
             const normalized = normalizedRole(user.role);
             const role = roles.find(item => item.value === normalized) || roles[0];
-            const position = positionMeta(normalized, user.position || legacyPositionFromRole(user.role), positions);
+            const rawPosition = user.position || legacyPositionFromRole(user.role);
+            const position = positionMeta(normalized, rawPosition, positions);
+            const showPosition = !!position && !(normalized === 'faculty' && (!rawPosition || rawPosition === 'teacher'));
             return (
-              <View key={user.id} style={s.userCard}>
+              <View key={user.id} style={[s.userCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <View style={s.userTop}>
-                  <View style={s.avatar}>
-                    <Text style={s.avatarText}>{initials(user.name)}</Text>
+                  <View style={[s.avatar, { borderColor: theme.primary, backgroundColor: theme.card }]}>
+                    <Text style={[s.avatarText, { color: theme.primary }]}>{initials(user.name)}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.userName}>{user.name}</Text>
-                    <Text style={s.userEmail}>{user.email}</Text>
-                    <Text style={s.userDate}>Created {user.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}</Text>
+                  <View style={s.userDetails}>
+                    <View style={s.nameRow}>
+                      <Text style={[s.userName, { color: theme.text }]} numberOfLines={2}>{user.name}</Text>
+                      <View style={[s.roleBadge, { backgroundColor: theme.primaryLight }]}>
+                        <Text style={[s.roleText, { color: theme.primary }]}>{role.label}</Text>
+                      </View>
+                    </View>
+                    <Text style={[s.userEmail, { color: theme.textSub }]} numberOfLines={1}>{user.email}</Text>
+                    {showPosition && <Text style={[s.positionText, { color: theme.textSub }]}>{normalized === 'faculty' ? 'Faculty account' : `${position.label} account`}</Text>}
+                    <Text style={[s.userDate, { color: theme.textSub }]}>Created {user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</Text>
                   </View>
-                  <View style={[s.roleBadge, { backgroundColor: role.bg }]}>
-                    <Text style={[s.roleText, { color: role.color }]}>{role.label}</Text>
-                  </View>
-                </View>
-                {!!position && (
-                  <View style={[s.positionBadge, { backgroundColor: position.bg }]}>
-                    <Text style={[s.positionText, { color: position.color }]}>{position.label}</Text>
-                  </View>
-                )}
-                {!!user.department && <Text style={s.departmentText}>Program: {user.department}</Text>}
-                <View style={s.cardActions}>
-                  <TouchableOpacity style={s.editBtn} onPress={() => openEdit(user)}>
-                    <Text style={s.editText}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.deleteBtn} onPress={() => deleteUser(user)}>
-                    <Text style={s.deleteText}>Delete</Text>
+                  <TouchableOpacity accessibilityLabel={`Actions for ${user.name}`} style={s.moreButton} onPress={() => showUserActions(user)}>
+                    <Feather name="more-vertical" size={19} color={theme.textSub} />
                   </TouchableOpacity>
                 </View>
               </View>
             );
           })}
+          {filteredUsers.length > 0 && (
+            <View style={s.loadMoreRow}>
+              <Text style={[s.loadMoreText, { color: theme.textSub }]}>Showing {(page - 1) * 15 + 1}–{Math.min(page * 15, filteredUsers.length)} of {totalForCurrentFilter}</Text>
+              {totalPages > 1 && (
+                <View style={s.pagination}>
+                  <TouchableOpacity accessibilityLabel="Previous page" disabled={page === 1} onPress={() => setCurrentPage(page - 1)} style={s.pageControl}>
+                    <Feather name="chevron-left" size={16} color={page === 1 ? theme.textMuted : theme.primary} />
+                  </TouchableOpacity>
+                  {pageNumbers.map((pageItem, index) => pageItem === 'start-gap' || pageItem === 'end-gap' ? (
+                    <Text key={`${pageItem}-${index}`} style={[s.pageEllipsis, { color: theme.textSub }]}>…</Text>
+                  ) : (
+                    <TouchableOpacity key={pageItem} accessibilityLabel={`Page ${pageItem}`} onPress={() => setCurrentPage(pageItem)} style={[s.pageNumber, pageItem === page && { backgroundColor: theme.primary }]}>
+                      <Text style={[s.pageNumberText, { color: pageItem === page ? '#fff' : theme.textSub }]}>{pageItem}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity accessibilityLabel="Next page" disabled={page === totalPages} onPress={() => setCurrentPage(page + 1)} style={s.pageControl}>
+                    <Feather name="chevron-right" size={16} color={page === totalPages ? theme.textMuted : theme.primary} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
       )}
 
@@ -278,8 +344,8 @@ export default function AdminUsers() {
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
               <View>
-                <Text style={s.modalTitle}>{editing ? 'Edit user' : 'New user'}</Text>
-                <Text style={s.modalSub}>{editing ? 'Update account details and role.' : 'Create a school user account.'}</Text>
+                <Text style={s.modalTitle}>{editing ? 'Edit staff account' : 'New staff account'}</Text>
+                <Text style={s.modalSub}>{editing ? 'Update account details and role.' : 'Create a school staff account.'}</Text>
               </View>
               <TouchableOpacity style={s.closeBtn} onPress={() => setModalOpen(false)}>
                 <Text style={s.closeText}>X</Text>
@@ -400,7 +466,7 @@ export default function AdminUsers() {
                 onPress={saveUser}
                 disabled={saving}
               >
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveText}>{editing ? 'Save changes' : 'Create user'}</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveText}>{editing ? 'Save changes' : 'Create staff account'}</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -455,33 +521,47 @@ function flattenErrors(errors) {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { paddingTop: HEADER_TOP, paddingHorizontal: 16, paddingBottom: 8, backgroundColor: 'transparent' },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  searchCard: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 14, height: 50, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  searchIcon: { marginRight: 10 },
-  searchInputCard: { flex: 1, color: '#0F172A', height: 50, fontSize: 14 },
-  addButton: { minWidth: 110, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.18, shadowRadius: 14, elevation: 3 },
-  addButtonText: { color: '#fff', fontWeight: '900', fontSize: 13 },
-  list: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
-  userCard: { backgroundColor: '#fff', borderRadius: 18, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  userTop: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 56, height: 56, borderRadius: 18, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#4338CA', fontWeight: '900', fontSize: 16 },
-  userName: { color: '#0F172A', fontSize: 16, fontWeight: '900' },
-  userEmail: { color: '#64748B', fontSize: 12, marginTop: 2 },
-  userDate: { color: '#94A3B8', fontSize: 11, marginTop: 4 },
-  roleBadge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, alignSelf: 'flex-start' },
-  roleText: { fontSize: 11, fontWeight: '900' },
-  positionBadge: { marginTop: 12, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, alignSelf: 'flex-start' },
-  positionText: { fontSize: 11, fontWeight: '900' },
+  header: { paddingTop: HEADER_TOP, paddingHorizontal: 20, paddingBottom: 0, backgroundColor: 'transparent' },
+  kicker: { fontSize: 9, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
+  title: { fontSize: 20, fontWeight: '700', marginTop: 1, marginBottom: 8 },
+  roleTotals: { flexDirection: 'row', gap: 7, marginBottom: 10 },
+  roleTotal: { minWidth: 0, flex: 1, minHeight: 54, justifyContent: 'center', paddingHorizontal: 8, paddingVertical: 7, borderRadius: 12, borderWidth: 1 },
+  roleTotalValue: { fontSize: 18, fontWeight: '700', lineHeight: 21 },
+  roleTotalLabel: { fontSize: 8, marginTop: 1 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 10 },
+  searchCard: { flex: 1, flexDirection: 'row', alignItems: 'center', borderRadius: 11, borderWidth: 1, paddingHorizontal: 12, height: 43 },
+  searchIcon: { marginRight: 7 },
+  searchInputCard: { flex: 1, height: 43, fontSize: 12 },
+  addButton: { minWidth: 78, height: 43, borderRadius: 11, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  addButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  filterRow: { gap: 7, paddingBottom: 10 },
+  filterChip: { minHeight: 34, borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  filterChipText: { fontSize: 11, fontWeight: '600' },
+  list: { flex: 1, paddingHorizontal: 20, paddingTop: 0 },
+  listContent: { paddingBottom: 20 },
+  userCard: { borderWidth: 1, borderRadius: 15, paddingHorizontal: 11, paddingVertical: 10, marginBottom: 9 },
+  userTop: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  avatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 0, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontWeight: '700', fontSize: 10 },
+  userDetails: { flex: 1, minWidth: 0 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5 },
+  userName: { flexShrink: 1, fontSize: 11, fontWeight: '700' },
+  userEmail: { fontSize: 10, marginTop: 1 },
+  userDate: { fontSize: 9, marginTop: 0 },
+  roleBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'center' },
+  roleText: { fontSize: 8, fontWeight: '600' },
+  positionText: { fontSize: 9, marginTop: 1 },
+  moreButton: { width: 22, height: 32, alignItems: 'center', justifyContent: 'center' },
   departmentText: { marginTop: 9, fontSize: 12, color: '#64748B', fontWeight: '700' },
-  cardActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  editBtn: { flex: 1, backgroundColor: '#EEF2FF', borderRadius: 14, paddingVertical: 12, alignItems: 'center' },
-  editText: { color: '#3730A3', fontWeight: '800', fontSize: 13 },
-  deleteBtn: { flex: 1, backgroundColor: '#FEF3F2', borderRadius: 14, paddingVertical: 12, alignItems: 'center' },
-  deleteText: { color: '#B91C1C', fontWeight: '800', fontSize: 13 },
+  loadMoreRow: { flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 5, paddingVertical: 8 },
+  loadMoreText: { fontSize: 10 },
+  pagination: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pageControl: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center' },
+  pageEllipsis: { width: 18, textAlign: 'center', fontSize: 13 },
+  pageNumber: { minWidth: 27, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  pageNumberText: { fontSize: 10, fontWeight: '700' },
   empty: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 30 },
   emptyTitle: { color: '#0F172A', fontSize: 16, fontWeight: '800' },
   emptySub: { color: '#64748B', fontSize: 13, textAlign: 'center', marginTop: 6 },

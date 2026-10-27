@@ -23,6 +23,56 @@ class ArchiveController extends Controller
 {
     use AuthorizesPortal;
 
+    public function apiIndex(Request $request)
+    {
+        $this->requireAnyRole($request, ['admin']);
+
+        $archives = ArchivedRecord::query()
+            ->with(['deletedBy:id,name', 'restoredBy:id,name'])
+            ->when($request->record_type, fn ($query) => $query->where('record_type', $request->record_type))
+            ->when($request->search, fn ($query) => $query->where(fn ($inner) => $inner
+                ->where('label', 'like', '%' . $request->search . '%')
+                ->orWhere('record_type', 'like', '%' . $request->search . '%')
+                ->orWhere('source', 'like', '%' . $request->search . '%')))
+            ->latest('deleted_at')
+            ->paginate(20)
+            ->through(fn (ArchivedRecord $archive) => [
+                'id' => $archive->id,
+                'record_type' => $archive->record_type,
+                'record_id' => $archive->record_id,
+                'label' => $archive->label,
+                'source' => $archive->source,
+                'deleted_at' => $archive->deleted_at,
+                'deleted_by' => $archive->deletedBy ? ['name' => $archive->deletedBy->name] : null,
+                'restored_at' => $archive->restored_at,
+            ]);
+
+        return response()->json($archives);
+    }
+
+    public function apiRestore(Request $request, ArchivedRecord $archive)
+    {
+        $this->requireAnyRole($request, ['admin']);
+
+        if ($archive->restored_at) {
+            return response()->json(['message' => 'This archive item has already been restored.'], 422);
+        }
+
+        try {
+            DB::transaction(function () use ($archive, $request) {
+                $this->restoreRecord($archive, $request);
+                $archive->update([
+                    'restored_by' => $request->user()->id,
+                    'restored_at' => now(),
+                ]);
+            });
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json(['message' => "{$archive->record_type} restored."]);
+    }
+
     public function index(Request $request)
     {
         $this->requireAnyRole($request, ['admin']);

@@ -67,12 +67,14 @@ class TeachingEligibilityController extends Controller
         $departments = Department::query()->orderBy('name')->get(['id', 'name', 'is_active']);
         $request->validate([
             'subject_type' => ['nullable', Rule::in(['general', 'course'])],
+            'search' => ['nullable', 'string', 'max:120'],
             'department_id' => [
                 'nullable',
                 'string',
                 Rule::in([...$departments->pluck('id')->map(fn ($id) => (string) $id)->all(), 'unassigned']),
             ],
         ]);
+        $search = trim((string) $request->query('search', ''));
         $rows = Subject::query()->with('department:id,name')
             ->when($request->filled('subject_type'), function ($query) use ($request) {
                 $query->where(function ($scopeQuery) use ($request) {
@@ -100,7 +102,16 @@ class TeachingEligibilityController extends Controller
                     $query->where('department_id', $request->query('department_id'));
                 }
             })
-            ->orderBy('code')->paginate(25)->withQueryString();
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhere('course', 'like', "%{$search}%")
+                        ->orWhere('strand', 'like', "%{$search}%")
+                        ->orWhereHas('department', fn ($departmentQuery) => $departmentQuery->where('name', 'like', "%{$search}%"));
+                });
+            })
+            ->orderBy('code')->paginate(15)->withQueryString();
         $courseScopes = $rows->getCollection()
             ->where('program_type', 'college')
             ->pluck('course')

@@ -18,7 +18,7 @@ import ChangePasswordCard from '../components/ChangePasswordCard';
 
 export default function Profile() {
   const router = useRouter();
-  const { theme, themeName, setThemeName, themes } = useTheme();
+  const { theme } = useTheme();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -184,7 +184,6 @@ export default function Profile() {
       <View style={styles.compactTop}><TouchableOpacity style={[styles.compactBack, { backgroundColor: theme.card }]} onPress={() => router.back()}><Ionicons name="chevron-back" size={16} color={theme.text} /></TouchableOpacity><Text style={[styles.compactTopLabel, { color: theme.textSub }]}>Profile</Text></View>
       <TouchableOpacity style={styles.compactIdentity} onPress={handleChangePhoto} disabled={uploadingPhoto}><View style={[styles.compactAvatar, { backgroundColor: theme.primary }]}>{profilePhotoUrl ? <Image source={{ uri: profilePhotoUrl }} style={styles.compactAvatarImage} /> : <Text style={styles.compactInitials}>{initials[0]}</Text>}</View><Text style={[styles.compactName, { color: theme.text }]}>{s?.first_name} {s?.last_name}</Text><Text style={[styles.compactId, { color: theme.textSub }]}>{s?.student_id}</Text></TouchableOpacity>
       <View style={[styles.compactStats, { backgroundColor: theme.card }]}><CompactStat value={gwa} label="GWA" theme={theme} /><CompactStat value={`${data?.attendance_pct ?? 0}%`} label="Attendance" theme={theme} /><CompactStat value={data?.pending_fees?.length ?? 0} label="Fees due" theme={theme} /></View>
-      <Text style={[styles.compactSection, { color: theme.textSub }]}>Color theme</Text><View style={[styles.compactThemeCard, { backgroundColor: theme.card }]}>{Object.values(themes).map(palette => <TouchableOpacity key={palette.name} style={[styles.compactThemeDot, { backgroundColor: palette.primary }, themeName === palette.name && styles.compactThemeSelected]} onPress={() => setThemeName(palette.name)} />)}</View>
       <Text style={[styles.compactSection, { color: theme.textSub }]}>Student information</Text><View style={[styles.compactInfo, { backgroundColor: theme.card }]}><CompactInfo label="School year" value={s?.school_year} theme={theme} /><CompactInfo label="Year and section" value={gradeSection} theme={theme} /><CompactInfo label="Program" value={enrollment?.program_type === 'college' ? enrollment?.course : enrollment?.strand} theme={theme} /><CompactInfo label="Status" value={s?.status || 'Active'} theme={theme} last /></View>
       <TouchableOpacity style={[styles.compactAction, { backgroundColor: theme.card }]} onPress={() => setNotificationsExpanded(value => !value)}><View style={styles.compactActionLabel}><Ionicons name="notifications-outline" size={17} color={theme.primary} /><Text style={[styles.compactPrefText, { color: theme.text }]}>Notifications</Text></View><Ionicons name={notificationsExpanded ? 'chevron-up' : 'chevron-forward'} size={17} color={theme.textSub} /></TouchableOpacity>
       {notificationsExpanded && <View style={[styles.compactInfo, { backgroundColor: theme.card }]}>{notificationPrefs.map((pref, index) => <View key={pref.category} style={[styles.compactPref, index < notificationPrefs.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border }]}><Text style={[styles.compactPrefText, { color: theme.text }]}>{pref.category.replace('_', ' ')}</Text><Switch value={!!pref.in_app} onValueChange={() => togglePreference(pref.category, 'in_app')} trackColor={{ false: theme.border, true: theme.primaryLight }} thumbColor={pref.in_app ? theme.primary : '#f4f3f4'} /></View>)}</View>}
@@ -237,31 +236,6 @@ export default function Profile() {
       </View>
 
       {/* ── Info ── */}
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Color Theme</Text>
-        <View style={styles.paletteRow}>
-          {Object.values(themes).map((palette) => (
-            <TouchableOpacity
-              key={palette.name}
-              style={[
-                styles.paletteOption,
-                { backgroundColor: theme.bg, borderColor: theme.border },
-                themeName === palette.name && { borderColor: theme.primary },
-              ]}
-              onPress={() => setThemeName(palette.name)}
-            >
-              <View style={[styles.paletteDot, { backgroundColor: palette.primary }]} />
-              <Text style={[
-                styles.paletteLabel,
-                { color: themeName === palette.name ? theme.primary : theme.textSub },
-              ]}>
-                {palette.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
       <View style={[styles.card, { backgroundColor: theme.card }]}> 
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Student Information</Text>
         {[

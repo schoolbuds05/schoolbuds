@@ -22,7 +22,11 @@ class SubjectController extends Controller
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
-        $tab = $request->query('tab') === 'requests' ? 'requests' : 'catalog';
+        if ($request->query('tab') === 'requests') {
+            return redirect()->route('registrar.subject-requests.index', $request->only(['status', 'action']));
+        }
+
+        $tab = 'catalog';
         $subjects = Subject::query()
             ->with('prerequisites:id,code,name')
             ->when($request->program_type, fn ($query) => $query->where('program_type', $request->program_type))

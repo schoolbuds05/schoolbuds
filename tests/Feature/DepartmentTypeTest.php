@@ -191,6 +191,11 @@ class DepartmentTypeTest extends TestCase
         $this->assertSame('draft', $section->workflow_status);
         $this->assertFalse($section->is_active);
         $this->post("/department-chair/sections/{$section->id}/submit")->assertSessionHasNoErrors();
+        $this->post("/department-chair/sections/{$section->id}/submit")
+            ->assertRedirect()
+            ->assertSessionHas('status', 'This section has already been submitted for Registrar review.')
+            ->assertSessionHasNoErrors();
+        $this->assertSame('pending', $section->fresh()->workflow_status);
         $this->postJson('/api/sections', array_merge($this->sectionData(), ['name' => 'BSIT 1B', 'is_active' => true]))->assertCreated()->assertJsonPath('workflow_status', 'draft')->assertJsonPath('is_active', false);
         $apiSection = Section::latest('id')->first();
         $this->putJson("/api/sections/{$apiSection->id}", ['workflow_status' => 'approved', 'department_id' => null, 'is_active' => true])->assertOk()->assertJsonPath('workflow_status', 'draft')->assertJsonPath('department_id', $department->id)->assertJsonPath('is_active', false);

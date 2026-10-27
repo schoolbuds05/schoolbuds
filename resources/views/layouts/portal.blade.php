@@ -10,11 +10,12 @@
 
     $navGroups = [
         'Admin' => [
-            ['label' => 'Subject Departments', 'route' => 'teaching-eligibility.owners', 'match' => 'teaching-eligibility/subject-departments', 'roles' => ['admin']],
             ['label' => 'Dashboard', 'route' => 'admin.dashboard', 'match' => 'admin/dashboard', 'roles' => ['admin']],
             ['label' => 'Student', 'route' => 'admin.students.index', 'match' => 'admin/students*', 'roles' => ['admin']],
             ['label' => 'User', 'route' => 'admin.users.index', 'match' => 'admin/users*', 'roles' => ['admin']],
-            ['label' => 'Department', 'route' => 'admin.departments.index', 'match' => 'admin/departments*', 'roles' => ['admin']],
+            ['label' => 'Department', 'route' => 'admin.departments.index', 'match' => 'admin/departments*', 'roles' => ['admin'], 'children' => [
+                ['label' => 'Subject Departments', 'route' => 'teaching-eligibility.owners', 'match' => 'teaching-eligibility/subject-departments'],
+            ]],
             ['label' => 'Course', 'route' => 'admin.courses.index', 'match' => 'admin/courses*', 'roles' => ['admin']],
             ['label' => 'Rooms', 'route' => 'admin.rooms.index', 'match' => 'admin/rooms*', 'roles' => ['admin']],
             ['label' => 'Control', 'route' => 'admin.controls.index', 'match' => 'admin/controls*', 'roles' => ['admin']],
@@ -23,24 +24,29 @@
             ['label' => 'Archive', 'route' => 'admin.archive.index', 'match' => 'admin/archive*', 'roles' => ['admin']],
         ],
         'Registrar' => [
-            ['label' => 'Subject Departments', 'route' => 'teaching-eligibility.owners', 'match' => 'teaching-eligibility/subject-departments', 'roles' => ['registrar']],
-            ['label' => 'Chair Teaching Requests', 'route' => 'registrar.teaching-eligibility.index', 'match' => 'registrar/teaching-eligibility*', 'roles' => ['registrar']],
             ['label' => 'Dashboard', 'route' => 'registrar.dashboard', 'match' => 'registrar/dashboard', 'roles' => ['registrar']],
             ['label' => 'Enrollment', 'route' => 'registrar.enrollments.index', 'match' => 'registrar/enrollments*', 'roles' => ['registrar']],
             ['label' => 'Post Tuition', 'route' => 'registrar.tuition.index', 'match' => 'registrar/tuition*', 'roles' => ['registrar']],
             ['label' => 'Student', 'route' => 'registrar.students.index', 'match' => 'registrar/students*', 'roles' => ['registrar']],
-            ['label' => 'Subject', 'route' => 'registrar.subjects.index', 'match' => 'registrar/subjects*', 'roles' => ['registrar']],
+            ['label' => 'Subject', 'route' => 'registrar.subjects.index', 'match' => 'registrar/subjects*', 'roles' => ['registrar'], 'children' => [
+                ['label' => 'Requests', 'route' => 'registrar.subject-requests.index', 'match' => 'registrar/subject-requests*'],
+                ['label' => 'Subject Departments', 'route' => 'teaching-eligibility.owners', 'match' => 'teaching-eligibility/subject-departments'],
+                ['label' => 'Chair Teaching Requests', 'route' => 'registrar.teaching-eligibility.index', 'match' => 'registrar/teaching-eligibility*'],
+            ]],
             ['label' => 'Course Shifts', 'route' => 'registrar.course-shift-requests.index', 'match' => 'registrar/course-shift-requests*', 'roles' => ['registrar']],
             ['label' => 'Section', 'route' => 'registrar.sections.index', 'match' => 'registrar/sections*', 'roles' => ['registrar']],
             ['label' => 'Rooms', 'route' => 'registrar.rooms.index', 'match' => 'registrar/rooms*', 'roles' => ['registrar']],
-            ['label' => 'Grade', 'route' => 'registrar.grades.index', 'match' => 'registrar/grades*', 'roles' => ['registrar']],
+            ['label' => 'Grades', 'route' => 'registrar.grades.index', 'params' => ['view' => 'students'], 'match' => 'registrar/grades*', 'roles' => ['registrar'], 'children' => [
+                ['label' => 'Requests', 'route' => 'registrar.grades.index', 'match' => 'registrar/grades*', 'active_query' => null],
+                ['label' => 'History', 'route' => 'registrar.grades.index', 'params' => ['view' => 'approved'], 'match' => 'registrar/grades*', 'active_query' => 'approved'],
+            ]],
             ['label' => 'Points', 'route' => 'registrar.points.index', 'match' => 'registrar/points*', 'roles' => ['registrar']],
             ['label' => 'Report', 'route' => 'registrar.reports.index', 'match' => 'registrar/reports*', 'roles' => ['registrar']],
             ['label' => 'Profile', 'route' => 'registrar.profile.show', 'match' => 'registrar/profile*', 'roles' => ['registrar']],
         ],
         'Teacher' => [
-            ['label' => 'Teaching Subjects', 'route' => 'teaching-eligibility.mine', 'match' => 'teaching-eligibility/mine', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Dashboard', 'route' => 'teacher.dashboard', 'match' => 'teacher/dashboard', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
+            ['label' => 'Teaching Subjects', 'route' => 'teaching-eligibility.mine', 'match' => 'teaching-eligibility/mine', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Classes', 'route' => 'teacher.classes', 'match' => 'teacher/classes', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Work', 'route' => 'teacher.assignments', 'match' => 'teacher/assignments*', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
             ['label' => 'Market', 'route' => 'teacher.market', 'match' => 'teacher/market', 'roles' => ['faculty', 'teacher', 'head_department', 'head_teacher', 'dean']],
@@ -121,16 +127,19 @@
 <body class="portal-shell min-h-screen bg-portal-page text-portal-text antialiased lg:h-screen lg:overflow-hidden">
     <div id="portal-loading-bar" class="portal-loading-bar pointer-events-none fixed left-0 top-0 z-50 h-1 w-0 bg-portal-accent opacity-0 transition-all duration-300"></div>
     <div class="portal-frame-wrap min-h-screen p-4 lg:h-screen lg:min-h-0 lg:py-5">
-        <div class="portal-frame min-h-[calc(100vh-2rem)] overflow-hidden rounded-[22px] border border-portal-border bg-portal-shell backdrop-blur lg:grid lg:h-[calc(100vh-2.5rem)] lg:min-h-0 lg:grid-cols-[330px_1fr]">
-            <aside class="hidden border-r border-portal-border bg-portal-sidebar lg:flex lg:h-full lg:min-h-0 lg:flex-col">
-            <div class="px-5 pb-5 pt-8">
-                <div class="-ml-3 flex w-fit max-w-full items-center gap-3">
+        <div id="portal-frame" class="portal-frame min-h-[calc(100vh-2rem)] overflow-hidden rounded-[22px] border border-portal-border bg-portal-shell backdrop-blur lg:grid lg:h-[calc(100vh-2.5rem)] lg:min-h-0 lg:grid-cols-[330px_1fr]">
+            <aside id="portal-sidebar" class="relative z-30 hidden min-w-0 border-r border-portal-border bg-portal-sidebar lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+            <div class="portal-sidebar-brand relative px-5 pb-5 pt-8">
+                <div class="portal-sidebar-brand-content -ml-3 flex w-fit max-w-full items-center gap-3">
                     <img src="{{ asset('images/schoolbuds-logo.png') }}" alt="SchoolBuds logo" class="portal-sidebar-logo h-16 w-16 shrink-0 object-contain">
-                    <div class="min-w-0">
+                    <div class="portal-sidebar-brand-copy min-w-0">
                         <p class="text-sm font-black leading-tight text-portal-text">St. Cecelia's College - Cebu, Inc.</p>
                         <p class="mt-1 text-xs font-bold leading-tight text-portal-sidebar-text">SchoolBuds Portal</p>
                     </div>
                 </div>
+                <button id="portal-sidebar-toggle" type="button" class="portal-sidebar-toggle absolute -right-3 top-1/2 z-20 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-portal-border bg-white text-portal-sidebar-text shadow-sm transition hover:text-portal-accent lg:flex" aria-label="Collapse sidebar" aria-expanded="true">
+                    <svg class="h-4 w-4 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/></svg>
+                </button>
             </div>
 
             <nav id="portal-sidebar-nav" class="portal-sidebar-scroll min-h-0 flex-1 space-y-6 overflow-y-auto px-3 pb-6">
@@ -139,19 +148,49 @@
                         <p @class([
                             'px-3 text-[10px] font-black uppercase tracking-[0.18em] text-portal-sidebar-heading',
                             'pointer-events-none sticky top-0 z-10 bg-portal-sidebar py-2' => $group === 'Registrar',
-                        ])>{{ $group }}</p>
+                        ]) data-sidebar-group-label>{{ $group }}</p>
                         <div class="mt-2 space-y-1.5">
                             @foreach($items as $item)
                                 @php($active = request()->is($item['match']))
-                                <a href="{{ route($item['route']) }}"
+                                @if(!empty($item['children']))
+                                    @php($childActive = collect($item['children'])->contains(fn ($child) => request()->is($child['match']) && (!array_key_exists('active_query', $child) || request()->query('view') === $child['active_query'])))
+                                    <div id="portal-subnav-owner-{{ \Illuminate\Support\Str::slug($item['label']) }}" class="group/subject-nav relative" data-subnav-owner data-subnav-menu="portal-subnav-menu-{{ \Illuminate\Support\Str::slug($item['label']) }}" data-pinned="{{ $childActive ? 'true' : 'false' }}">
+                                        <div class="flex items-center gap-1">
+                                            <a href="{{ route($item['route'], $item['params'] ?? []) }}" data-sidebar-tooltip="{{ $item['label'] }}" data-has-submenu aria-label="{{ $item['label'] }}"
+                                                class="portal-nav-link group relative flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold {{ $active || $childActive ? 'is-active bg-portal-accent-soft text-portal-accent shadow-sm ring-1 ring-portal-accent-border' : 'text-portal-sidebar-text hover:bg-portal-hover hover:text-portal-accent' }}">
+                                                <span class="portal-nav-icon flex h-7 w-7 items-center justify-center rounded-lg {{ $active || $childActive ? 'bg-portal-accent text-white shadow-sm' : 'bg-portal-sidebar-icon text-portal-sidebar-icon-text group-hover:bg-portal-accent-soft group-hover:text-portal-accent' }}">
+                                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                                        {!! $navIcons[$item['label']] ?? '<circle cx="12" cy="12" r="8" />' !!}
+                                                    </svg>
+                                                </span>
+                                                <span class="portal-nav-label min-w-0 flex-1 truncate">{{ $item['label'] }}</span>
+                                            </a>
+                                            <button type="button" data-subnav-toggle aria-expanded="{{ $active || $childActive ? 'true' : 'false' }}" aria-label="Toggle {{ $item['label'] }} submenu" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-portal-sidebar-text transition hover:bg-portal-hover hover:text-portal-accent">
+                                                <svg class="h-4 w-4 transition-transform {{ $active || $childActive ? 'rotate-90' : '' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
+                                            </button>
+                                        </div>
+                                        <span data-subnav-placeholder class="hidden"></span>
+                                        <div id="portal-subnav-menu-{{ \Illuminate\Support\Str::slug($item['label']) }}" data-subnav-list data-subnav-owner-id="portal-subnav-owner-{{ \Illuminate\Support\Str::slug($item['label']) }}" class="portal-subnav-list ml-5 mt-1 border-l border-portal-sidebar-icon-text/50 pl-4 {{ $active || $childActive ? '' : 'hidden' }}">
+                                            @foreach($item['children'] as $child)
+                                                @php($childIsActive = request()->is($child['match']) && (!array_key_exists('active_query', $child) || request()->query('view') === $child['active_query']))
+                                                <a href="{{ route($child['route'], $child['params'] ?? []) }}" class="portal-subnav-link -ml-[1px] flex items-center gap-3 rounded-full px-3 py-2 text-sm font-bold transition {{ $childIsActive ? 'bg-white text-portal-text shadow-sm' : 'text-portal-sidebar-text hover:bg-white/80 hover:text-portal-text' }}">
+                                                    <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H10l2 2h7.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/><path d="M3 9h18"/></svg>
+                                                    <span class="truncate">{{ $child['label'] }}</span>
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @else
+                                <a href="{{ route($item['route'], $item['params'] ?? []) }}" data-sidebar-tooltip="{{ $item['label'] }}" aria-label="{{ $item['label'] }}"
                                     class="portal-nav-link group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold {{ $active ? 'is-active bg-portal-accent-soft text-portal-accent shadow-sm ring-1 ring-portal-accent-border' : 'text-portal-sidebar-text hover:bg-portal-hover hover:text-portal-accent' }}">
                                     <span class="portal-nav-icon flex h-7 w-7 items-center justify-center rounded-lg {{ $active ? 'bg-portal-accent text-white shadow-sm' : 'bg-portal-sidebar-icon text-portal-sidebar-icon-text group-hover:bg-portal-accent-soft group-hover:text-portal-accent' }}">
                                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                                             {!! $navIcons[$item['label']] ?? '<circle cx="12" cy="12" r="8" />' !!}
                                         </svg>
                                     </span>
-                                    <span class="min-w-0 flex-1 truncate">{{ $item['label'] }}</span>
+                                    <span class="portal-nav-label min-w-0 flex-1 truncate">{{ $item['label'] }}</span>
                                 </a>
+                                @endif
                             @endforeach
                         </div>
                     </div>
@@ -161,16 +200,18 @@
             <div class="mt-auto border-t border-portal-border px-4 py-4">
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
-                    <button type="submit" class="portal-sidebar-logout flex w-full items-center justify-center gap-2 rounded-lg border border-portal-border bg-portal-card px-3 py-2.5 text-sm font-bold text-portal-sidebar-text transition hover:bg-portal-hover hover:text-portal-accent" aria-label="Logout">
+                    <button type="submit" class="portal-sidebar-logout flex w-full items-center justify-center gap-2 rounded-lg border border-portal-border bg-portal-card px-3 py-2.5 text-sm font-bold text-portal-sidebar-text transition hover:bg-portal-hover hover:text-portal-accent" aria-label="Logout" data-sidebar-tooltip="Logout">
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M10 17l5-5-5-5m5 5H3m9-9h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6" />
                         </svg>
-                        <span>Logout</span>
+                        <span class="portal-nav-label">Logout</span>
                     </button>
                 </form>
             </div>
 
             </aside>
+
+            <div id="portal-sidebar-flyout-layer" class="portal-sidebar-flyout-layer" aria-hidden="true"></div>
 
         <div class="portal-content-panel min-w-0 bg-portal-content">
             <header class="sticky top-0 z-20 border-b border-portal-border bg-portal-header backdrop-blur lg:flex-none">
@@ -205,16 +246,49 @@
                     </div>
                 </div>
 
-                <nav class="flex gap-2 overflow-x-auto border-t border-portal-border px-4 py-2 sm:px-6 lg:hidden">
-                    @foreach($visibleGroups as $items)
-                        @foreach($items as $item)
-                            @php($active = request()->is($item['match']))
-                            <a href="{{ route($item['route']) }}"
-                                class="whitespace-nowrap rounded-xl px-3 py-2 text-xs font-bold transition {{ $active ? 'bg-portal-accent text-white' : 'bg-portal-card text-portal-text-soft shadow-sm' }}">
-                                {{ $item['label'] }}
-                            </a>
+                <nav class="relative border-t border-portal-border px-3 py-2 sm:px-6 lg:hidden">
+                    <button id="portal-mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="portal-mobile-nav-panel" class="inline-flex items-center gap-3 rounded-xl bg-portal-card px-3 py-2.5 text-sm font-bold text-portal-text shadow-sm">
+                        <span class="flex items-center gap-2"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>Menu</span>
+                        <svg class="h-4 w-4 transition-transform" data-mobile-nav-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div id="portal-mobile-nav-panel" class="absolute left-3 top-full z-30 hidden w-80 max-w-[calc(100vw-1.5rem)] max-h-[65vh] overflow-y-auto rounded-2xl border border-portal-border bg-portal-card p-3 shadow-xl">
+                        @foreach($visibleGroups as $group => $items)
+                            <section class="mb-4 last:mb-0">
+                                <p class="px-2 pb-2 text-[10px] font-black uppercase tracking-[0.16em] text-portal-sidebar-heading">{{ $group }}</p>
+                                <div class="space-y-1">
+                                    @foreach($items as $item)
+                                        @php($active = request()->is($item['match']))
+                                        @if(!empty($item['children']))
+                                            @php($mobileChildActive = collect($item['children'])->contains(fn ($child) => request()->is($child['match']) && (!array_key_exists('active_query', $child) || request()->query('view') === $child['active_query'])))
+                                            @php($mobileSubnavId = 'portal-mobile-subnav-' . \Illuminate\Support\Str::slug($item['label']))
+                                            <div class="rounded-xl {{ $active || $mobileChildActive ? 'bg-portal-accent-soft' : '' }}">
+                                                <div class="flex items-center gap-1">
+                                                    <a href="{{ route($item['route'], $item['params'] ?? []) }}" class="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold {{ $active || $mobileChildActive ? 'text-portal-accent' : 'text-portal-text-soft' }}">
+                                                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {{ $active || $mobileChildActive ? 'bg-portal-accent text-white' : 'bg-portal-sidebar-icon text-portal-sidebar-icon-text' }}"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $navIcons[$item['label']] ?? '<circle cx="12" cy="12" r="8" />' !!}</svg></span>
+                                                        <span class="truncate">{{ $item['label'] }}</span>
+                                                    </a>
+                                                    <button type="button" data-mobile-subnav-toggle aria-expanded="{{ $mobileChildActive ? 'true' : 'false' }}" aria-controls="{{ $mobileSubnavId }}" aria-label="Toggle {{ $item['label'] }} submenu" class="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-portal-sidebar-text hover:bg-white/70">
+                                                        <svg class="h-4 w-4 transition-transform {{ $mobileChildActive ? 'rotate-180' : '' }}" data-mobile-subnav-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                                                    </button>
+                                                </div>
+                                                <div id="{{ $mobileSubnavId }}" class="{{ $mobileChildActive ? '' : 'hidden' }} border-l border-portal-border pb-2 pl-4 ml-7">
+                                                    @foreach($item['children'] as $child)
+                                                        @php($childIsActive = request()->is($child['match']) && (!array_key_exists('active_query', $child) || request()->query('view') === $child['active_query']))
+                                                        <a href="{{ route($child['route'], $child['params'] ?? []) }}" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold {{ $childIsActive ? 'bg-white text-portal-accent shadow-sm' : 'text-portal-sidebar-text hover:bg-white/70' }}"><span class="h-1.5 w-1.5 rounded-full {{ $childIsActive ? 'bg-portal-accent' : 'bg-current opacity-50' }}"></span>{{ $child['label'] }}</a>
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                        @else
+                                            <a href="{{ route($item['route'], $item['params'] ?? []) }}" class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold {{ $active ? 'bg-portal-accent text-white' : 'text-portal-text-soft hover:bg-portal-hover' }}">
+                                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {{ $active ? 'bg-white/20 text-white' : 'bg-portal-sidebar-icon text-portal-sidebar-icon-text' }}"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $navIcons[$item['label']] ?? '<circle cx="12" cy="12" r="8" />' !!}</svg></span>
+                                                <span>{{ $item['label'] }}</span>
+                                            </a>
+                                        @endif
+                                    @endforeach
+                                </div>
+                            </section>
                         @endforeach
-                    @endforeach
+                    </div>
                 </nav>
             </header>
 

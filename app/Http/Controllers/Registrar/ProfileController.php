@@ -22,7 +22,7 @@ class ProfileController extends Controller
 
     public function updatePhoto(Request $request): RedirectResponse
     {
-        $this->requireAnyRole($request, ['admin', 'registrar']);
+        $this->requireAnyRole($request, ['admin', 'registrar', 'faculty', 'teacher', 'head_department', 'head_teacher', 'dean']);
 
         $request->validate([
             'profile_photo' => ['required', 'image', 'max:4096'],

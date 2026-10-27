@@ -13,8 +13,7 @@
     </div>
 </div>
 
-<form method="GET" action="{{ route('registrar.subjects.index') }}" class="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
-    <input type="hidden" name="tab" value="requests">
+<form method="GET" action="{{ route('registrar.subject-requests.index') }}" class="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
     <label>
         <span class="text-xs font-bold uppercase text-slate-500">Status</span>
         <select name="status" class="mt-1 w-full rounded-lg border-slate-300 text-sm text-slate-900">
@@ -34,7 +33,7 @@
     </label>
     <button class="rounded-lg bg-portal-accent px-5 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">Filter</button>
     @if(request('status') || request('action'))
-        <a href="{{ route('registrar.subjects.index', ['tab' => 'requests']) }}" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Clear</a>
+        <a href="{{ route('registrar.subject-requests.index') }}" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Clear</a>
     @endif
 </form>
 

@@ -1,8 +1,6 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import api from '../../src/api';
+import { Tabs } from 'expo-router';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/theme-context';
@@ -46,14 +44,6 @@ function TabLabel({ label, color }) {
 
 export default function LeadershipLayout() {
   const insets = useSafeAreaInsets();
-  const [canManageSections, setCanManageSections] = useState(false);
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    api.get('/academic-leadership/dashboard').then(response => {
-      if (active) setCanManageSections(!!response.data.can_manage_sections);
-    }).catch(() => { if (active) setCanManageSections(false); });
-    return () => { active = false; };
-  }, []));
   const { theme } = useTheme();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
 
@@ -109,27 +99,40 @@ export default function LeadershipLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="classes"
         options={{
-          title: 'Profile',
-          tabBarLabel: ({ color }) => <TabLabel label="Profile" color={color} />,
+          title: 'My Classes',
+          tabBarLabel: ({ color }) => <TabLabel label="My Classes" color={color} />,
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name={focused ? 'person' : 'person-outline'} focused={focused} color={color} />
+            <TabIcon name={focused ? 'school' : 'school-outline'} focused={focused} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="sections"
+        name="chat"
         options={{
-          title: 'Sections',
-          href: canManageSections ? '/(leadership)/sections' : null,
-          tabBarLabel: ({ color }) => <TabLabel label="Sections" color={color} />,
+          title: 'Chat',
+          tabBarLabel: ({ color }) => <TabLabel label="Chat" color={color} />,
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon name={focused ? 'layers' : 'layers-outline'} focused={focused} color={color} />
+            <TabIcon name={focused ? 'chatbubble' : 'chatbubble-outline'} focused={focused} color={color} />
           ),
         }}
       />
-      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
+      <Tabs.Screen
+        name="attendance"
+        options={{
+          title: 'Attendance',
+          tabBarLabel: ({ color }) => <TabLabel label="Attendance" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon name={focused ? 'calendar' : 'calendar-outline'} focused={focused} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen name="work" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="sections" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="profile" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="grades" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="teaching-eligibility" options={{ tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen
         name="more"
         options={{

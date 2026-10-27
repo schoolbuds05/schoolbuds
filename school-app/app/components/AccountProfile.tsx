@@ -23,7 +23,7 @@ const POSITION_LABELS = {
 
 export default function AccountProfile() {
   const router = useRouter();
-  const { theme, themeName, setThemeName, reloadTheme, themes } = useTheme();
+  const { theme, reloadTheme } = useTheme();
   const [user, setUser] = useState(null);
   const [notificationPrefs, setNotificationPrefs] = useState([]);
 
@@ -82,31 +82,6 @@ export default function AccountProfile() {
         <Text style={s.name}>{user?.name ?? 'Account'}</Text>
         <Text style={s.role}>{roleLabel}</Text>
         <Text style={s.email}>{user?.email ?? ''}</Text>
-      </View>
-
-      <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <Text style={[s.title, { color: theme.text }]}>Color Theme</Text>
-        <View style={s.paletteRow}>
-          {Object.values(themes).map((palette) => (
-            <TouchableOpacity
-              key={palette.name}
-              style={[
-                s.paletteOption,
-                { backgroundColor: theme.bg, borderColor: theme.border },
-                themeName === palette.name && { borderColor: theme.primary },
-              ]}
-              onPress={() => setThemeName(palette.name)}
-            >
-              <View style={[s.paletteDot, { backgroundColor: palette.primary }]} />
-              <Text style={[
-                s.paletteLabel,
-                { color: themeName === palette.name ? theme.primary : theme.textSub },
-              ]}>
-                {palette.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
       </View>
 
       <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>

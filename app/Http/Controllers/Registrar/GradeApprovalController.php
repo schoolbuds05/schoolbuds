@@ -16,7 +16,53 @@ class GradeApprovalController extends Controller
 {
     public function index(Request $request)
     {
+        $showStudentGrades = $request->query('view') === 'students';
         $showApproved = $request->query('view') === 'approved';
+
+        if ($showStudentGrades) {
+            $search = trim((string) $request->query('search', ''));
+            $searchTerms = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $publishedGrades = function ($query) {
+                $query->whereExists(function ($subquery) {
+                    $subquery->selectRaw('1')
+                        ->from('grade_submissions')
+                        ->whereColumn('grade_submissions.school_class_id', 'grades.school_class_id')
+                        ->whereColumn('grade_submissions.school_year', 'grades.school_year')
+                        ->whereColumn('grade_submissions.quarter', 'grades.quarter')
+                        ->where('grade_submissions.status', GradeSubmission::STATUS_FINALIZED);
+                });
+            };
+
+            $studentGrades = Student::query()
+                ->whereHas('grades', $publishedGrades)
+                ->when($searchTerms !== [], function ($query) use ($searchTerms) {
+                    foreach ($searchTerms as $term) {
+                        $query->where(function ($studentQuery) use ($term) {
+                            $studentQuery->where('student_id', 'like', "%{$term}%")
+                                ->orWhere('first_name', 'like', "%{$term}%")
+                                ->orWhere('last_name', 'like', "%{$term}%");
+                        });
+                    }
+                })
+                ->with(['grades' => function ($query) use ($publishedGrades) {
+                    $publishedGrades($query);
+                    $query->with('schoolClass')
+                        ->orderByDesc('school_year')
+                        ->orderBy('quarter');
+                }])
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->paginate(30)
+                ->withQueryString();
+
+            return view('registrar.grades.index', [
+                'showStudentGrades' => true,
+                'showApproved' => false,
+                'studentGrades' => $studentGrades,
+                'studentSearch' => $search,
+            ]);
+        }
+
         $submissions = GradeSubmission::query()
             ->where('status', $showApproved
                 ? GradeSubmission::STATUS_FINALIZED
@@ -25,16 +71,16 @@ class GradeApprovalController extends Controller
             ->orderByDesc($showApproved ? 'finalized_at' : 'submitted_at')
             ->paginate(25)
             ->withQueryString();
-        $changeRequests = $showApproved
-            ? null
-            : GradeChangeRequest::query()
-                ->where('status', GradeChangeRequest::STATUS_REGISTRAR_REVIEW)
-                ->with(['submission.schoolClass', 'submission.teacher', 'teacher', 'chairReviewer', 'events.actor'])
-                ->orderByDesc('created_at')
-                ->paginate(25, ['*'], 'change_page')
-                ->withQueryString();
+        $changeRequests = GradeChangeRequest::query()
+            ->whereIn('status', $showApproved
+                ? [GradeChangeRequest::STATUS_APPROVED, GradeChangeRequest::STATUS_REJECTED]
+                : [GradeChangeRequest::STATUS_REGISTRAR_REVIEW])
+            ->with(['submission.schoolClass', 'submission.teacher', 'teacher', 'chairReviewer', 'events.actor'])
+            ->orderByDesc('created_at')
+            ->paginate(25, ['*'], 'change_page')
+            ->withQueryString();
 
-        return view('registrar.grades.index', compact('submissions', 'showApproved', 'changeRequests'));
+        return view('registrar.grades.index', compact('submissions', 'showApproved', 'changeRequests', 'showStudentGrades'));
     }
 
     public function export(Request $request)

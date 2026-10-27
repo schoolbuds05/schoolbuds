@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
 import { Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resolveApiAssetUrl } from '../../../src/api';
 
 const logo = require('../../../assets/images/schoolbuds-favicon.png');
@@ -10,6 +11,7 @@ export default function StudentHomeReference({
   theme, refreshing, onRefresh, onProfile, onGrades, onNotification,
   enrollmentAction, enrollmentLabel, enrollmentMessage,
 }) {
+  const insets = useSafeAreaInsets();
   const localCurrentClass = findCurrentClass(data?.today_classes);
   const isClassNow = Boolean(localCurrentClass || data?.current_class);
   const nextClass = localCurrentClass || data?.current_class || data?.next_class;
@@ -35,12 +37,11 @@ export default function StudentHomeReference({
   return (
     <ScrollView
       style={[s.screen, { backgroundColor: theme.bg }]}
-      contentContainerStyle={s.content}
+      contentContainerStyle={[s.content, { paddingTop: Math.max(0, insets.top - 8) }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       showsVerticalScrollIndicator={false}
     >
       <View style={s.hero}>
-        <Text style={[s.pageTitle, { color: theme.primary }]}>Home</Text>
         <View style={s.brandRow}>
           <Image source={logo} style={s.logo} resizeMode="contain" />
           <View style={s.identity}>
@@ -133,7 +134,7 @@ function Stat({ value, label, color }) { return <View style={s.stat}><Text style
 
 const s = StyleSheet.create({
   screen: { flex: 1 }, content: { paddingBottom: 28 }, flex: { flex: 1 },
-  hero: { margin: 4, padding: 16, paddingTop: 12, paddingBottom: 14, borderRadius: 23, backgroundColor: '#F8CDD5' }, pageTitle: { fontSize: 12, fontWeight: '800', marginBottom: 12 },
+  hero: { margin: 4, padding: 16, paddingTop: 12, paddingBottom: 14, borderRadius: 23, backgroundColor: '#F8CDD5' },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 }, logo: { width: 42, height: 42, borderRadius: 12 }, identity: { flex: 1, minWidth: 0 },
   profileButton: { width: 37, height: 37, borderRadius: 19, borderWidth: 1, borderColor: '#E5B5C0', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }, profileImage: { width: '100%', height: '100%' },
   greeting: { fontSize: 11, fontWeight: '600' }, name: { fontSize: 18, fontWeight: '900', marginTop: 1 },

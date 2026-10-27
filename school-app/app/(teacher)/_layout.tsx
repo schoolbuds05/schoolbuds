@@ -138,14 +138,14 @@ export default function TeacherLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="attendance" options={{ href: null }} />
-      <Tabs.Screen name="market" options={{ href: null }} />
-      <Tabs.Screen name="grades" options={{ href: null }} />
+      <Tabs.Screen name="attendance" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="market" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="grades" options={{ tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen
         name="profile"
-        options={{ href: null }}
+        options={{ tabBarItemStyle: { display: 'none' } }}
       />
-      <Tabs.Screen name="teaching-eligibility" options={{ href: null }} />
+      <Tabs.Screen name="teaching-eligibility" options={{ tabBarItemStyle: { display: 'none' } }} />
     </Tabs>
   );
 }

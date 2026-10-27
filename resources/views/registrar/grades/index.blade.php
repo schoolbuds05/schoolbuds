@@ -1,16 +1,17 @@
-@extends('layouts.portal', ['title' => 'Registrar Grade Approval'])
+@extends('layouts.portal', ['title' => ($showStudentGrades ?? false) ? 'Grades' : ($showApproved ? 'History' : 'Requests')])
 
 @section('content')
 <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
     <div>
-        <h1 class="text-2xl font-black text-slate-900">{{ $showApproved ? 'Past Approved Grades' : 'Registrar Grade Approval' }}</h1>
-        <p class="mt-1 text-sm text-slate-500">{{ $showApproved ? 'Review finalized grade sheets, their student scores, and approval history.' : 'Review chair-approved grade sheets and grade-change requests before finalizing.' }}</p>
+        <h1 class="text-2xl font-black text-slate-900">{{ $showStudentGrades ? 'Grades' : ($showApproved ? 'History' : 'Requests') }}</h1>
+        <p class="mt-1 text-sm text-slate-500">{{ $showStudentGrades ? 'Look up published grades by student name or ID.' : ($showApproved ? 'Review finalized grade sheets and completed grade change requests.' : 'Review chair-approved grade sheets and grade change requests before finalizing.') }}</p>
     </div>
-    @if($showApproved)
+    @if($showStudentGrades)
         <div class="flex flex-wrap items-center gap-2">
+            <p class="w-full text-xs text-slate-500 sm:text-right">Import finalized grade records from CSV, or export published grades for College and SHS.</p>
             <form method="POST" action="{{ route('registrar.grades.import') }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
                 @csrf
-                <label class="sr-only" for="grades-file">Grade export CSV file</label>
+                <label class="sr-only" for="grades-file">Grade CSV file</label>
                 <input id="grades-file" name="grades_file" type="file" accept=".csv,text/csv" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
                 <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Import CSV</button>
             </form>
@@ -20,19 +21,57 @@
     @endif
 </div>
 
-<nav class="mb-5 flex gap-2 border-b border-slate-200" aria-label="Grade submission views">
-    <a href="{{ route('registrar.grades.index') }}" @class([
-        'border-b-2 px-3 py-2 text-sm font-bold',
-        'border-violet-600 text-violet-700' => !$showApproved,
-        'border-transparent text-slate-500 hover:text-violet-700' => $showApproved,
-    ]) @if(!$showApproved) aria-current="page" @endif>Awaiting Approval</a>
-    <a href="{{ route('registrar.grades.index', ['view' => 'approved']) }}" @class([
-        'border-b-2 px-3 py-2 text-sm font-bold',
-        'border-violet-600 text-violet-700' => $showApproved,
-        'border-transparent text-slate-500 hover:text-violet-700' => !$showApproved,
-    ]) @if($showApproved) aria-current="page" @endif>Past Approvals</a>
-</nav>
+@if($showStudentGrades)
+    <form method="GET" action="{{ route('registrar.grades.index') }}" class="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
+        <input type="hidden" name="view" value="students">
+        <label for="student-grade-search" class="sr-only">Search by student name or ID</label>
+        <input id="student-grade-search" type="search" name="search" value="{{ $studentSearch }}" placeholder="Search by student name or ID" class="min-w-0 flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm">
+        <button type="submit" class="rounded-lg bg-portal-accent px-5 py-2.5 text-sm font-bold text-white hover:bg-portal-accent-hover">Search</button>
+        @if($studentSearch !== '')
+            <a href="{{ route('registrar.grades.index', ['view' => 'students']) }}" class="rounded-lg border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-600 hover:bg-slate-50">Clear</a>
+        @endif
+    </form>
 
+    <div class="space-y-3">
+        @forelse($studentGrades as $student)
+            <details class="portal-card group overflow-hidden">
+                <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <div>
+                        <p class="font-black text-slate-900">{{ trim($student->first_name . ' ' . $student->last_name) }}</p>
+                        <p class="mt-1 text-sm text-slate-500">{{ $student->student_id ?: 'No student ID' }} · {{ $student->grades->count() }} published {{ \Illuminate\Support\Str::plural('grade', $student->grades->count()) }}</p>
+                    </div>
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 font-black text-violet-700" aria-hidden="true"><span class="group-open:hidden">+</span><span class="hidden group-open:inline">−</span></span>
+                </summary>
+                <div class="overflow-x-auto border-t border-slate-100">
+                    <table class="w-full min-w-[620px] text-left text-sm">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-5 py-3">Subject · Section</th><th class="px-4 py-3">School year · Period</th><th class="px-4 py-3">Remarks</th><th class="px-4 py-3 text-right">Score</th></tr></thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @foreach($student->grades as $grade)
+                                @php($schoolClass = $grade->schoolClass)
+                                @php($quarter = (int) $grade->quarter)
+                                @php($period = $schoolClass?->is_college ? (['Prelim', 'Midterm', 'Prefinal', 'Final'][$quarter - 1] ?? 'Quarter ' . $quarter) : 'Q' . $quarter)
+                                <tr>
+                                    <td class="px-5 py-3"><p class="font-bold text-slate-900">{{ $schoolClass?->subject ?? 'Subject' }} · {{ $schoolClass?->section ?? 'Section' }}</p><p class="text-xs text-slate-500">{{ $schoolClass?->grade_level ? 'Grade ' . $schoolClass->grade_level : '' }}</p></td>
+                                    <td class="px-4 py-3 text-slate-600">{{ $grade->school_year }} · {{ $period }}</td>
+                                    <td class="px-4 py-3 text-slate-500">{{ $grade->remarks ?: 'No remarks' }}</td>
+                                    <td class="px-4 py-3 text-right font-black text-slate-800">{{ $grade->score === null ? '—' : number_format((float) $grade->score, 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        @empty
+            <section class="portal-card px-5 py-10 text-center">
+                <h2 class="font-black text-slate-800">No published grades found</h2>
+                <p class="mt-1 text-sm text-slate-500">Search by a student’s name or ID, or check again after grades are finalized.</p>
+            </section>
+        @endforelse
+    </div>
+    @if($studentGrades->hasPages())
+        <div class="mt-5">{{ $studentGrades->links() }}</div>
+    @endif
+@else
 <div class="space-y-4">
     @forelse($submissions as $submission)
         @php($schoolClass = $submission->schoolClass)
@@ -108,14 +147,13 @@
     <div class="mt-5">{{ $submissions->links() }}</div>
 @endif
 
-@unless($showApproved)
     <section class="mt-8">
         <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
-                <h2 class="text-lg font-black text-slate-900">Grade Change Requests</h2>
-                <p class="mt-1 text-sm text-slate-500">Chair-approved corrections to already published grades.</p>
+                <h2 class="text-lg font-black text-slate-900">{{ $showApproved ? 'Grade Change Request History' : 'Grade Change Requests' }}</h2>
+                <p class="mt-1 text-sm text-slate-500">{{ $showApproved ? 'Completed corrections to published grades.' : 'Chair-approved corrections to already published grades awaiting Registrar review.' }}</p>
             </div>
-            <span class="text-xs font-bold uppercase text-slate-400">{{ $changeRequests->total() }} pending</span>
+            <span class="text-xs font-bold uppercase text-slate-400">{{ $changeRequests->total() }} {{ $showApproved ? 'completed' : 'pending' }}</span>
         </div>
         <div class="space-y-4">
             @forelse($changeRequests as $changeRequest)
@@ -128,7 +166,12 @@
                             <p class="font-black text-slate-900">{{ $schoolClass?->subject ?? 'Class' }} · {{ $schoolClass?->section ?? 'Section unavailable' }}</p>
                             <p class="mt-1 text-sm text-slate-500">{{ $changeRequest->teacher?->name ?? 'Account unavailable' }} · {{ $quarterLabel }} · {{ $submission->school_year }} · Chair approved {{ $changeRequest->chair_reviewed_at?->format('M d, Y h:i A') }}</p>
                         </div>
-                        <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">Grade change</span>
+                        @if($showApproved)
+                            @php($requestWasApproved = $changeRequest->status === \App\Models\GradeChangeRequest::STATUS_APPROVED)
+                            <span class="rounded-full px-3 py-1 text-xs font-bold {{ $requestWasApproved ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800' }}">{{ $requestWasApproved ? 'Approved' : 'Rejected' }}</span>
+                        @else
+                            <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">Grade change</span>
+                        @endif
                     </summary>
                     <div class="border-t border-slate-100 p-5">
                         <p class="text-sm"><span class="font-bold text-slate-700">Teacher's reason:</span> {{ $changeRequest->reason }}</p>
@@ -151,6 +194,7 @@
                                 @endforeach
                             </div>
                         </div>
+                        @unless($showApproved)
                         <form method="POST" action="{{ route('registrar.grade-change-requests.review', $changeRequest) }}" class="mt-4 border-t border-slate-100 pt-4">
                             @csrf
                             <label class="block text-xs font-bold uppercase text-slate-500">Review note <span class="normal-case font-medium">(required when rejecting)</span>
@@ -161,15 +205,16 @@
                                 <button type="submit" name="decision" value="approve" class="portal-button-primary">Approve and Publish</button>
                             </div>
                         </form>
+                        @endunless
                     </div>
                 </details>
             @empty
-                <section class="portal-card px-5 py-6 text-center text-sm text-slate-500">No grade change requests awaiting review.</section>
+                <section class="portal-card px-5 py-6 text-center text-sm text-slate-500">{{ $showApproved ? 'No completed grade change requests yet.' : 'No grade change requests awaiting review.' }}</section>
             @endforelse
         </div>
         @if($changeRequests->hasPages())
             <div class="mt-4">{{ $changeRequests->links() }}</div>
         @endif
     </section>
-@endunless
+@endif
 @endsection

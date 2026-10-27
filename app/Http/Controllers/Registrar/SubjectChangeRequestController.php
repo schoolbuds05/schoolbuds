@@ -16,10 +16,26 @@ class SubjectChangeRequestController extends Controller
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);
 
-        return redirect()->route('registrar.subjects.index', array_merge(
-            ['tab' => 'requests'],
-            $request->only(['status', 'action'])
-        ));
+        $requests = SubjectChangeRequest::query()
+            ->with([
+                'student:id,name,email',
+                'subject:id,code,name,units_lec,units_lab',
+                'section:id,name,course,year_level,semester',
+                'reviewer:id,name',
+            ])
+            ->when($request->status, fn ($query) => $query->where('status', $request->status))
+            ->when($request->action, fn ($query) => $query->where('action', $request->action))
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
+        $stats = [
+            'pending' => SubjectChangeRequest::where('status', 'pending')->count(),
+            'approved' => SubjectChangeRequest::where('status', 'approved')->count(),
+            'rejected' => SubjectChangeRequest::where('status', 'rejected')->count(),
+        ];
+
+        return view('registrar.subject-requests.index', compact('requests', 'stats'));
     }
 
     public function approve(Request $request, SubjectChangeRequest $subjectRequest)

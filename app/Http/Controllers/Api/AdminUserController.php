@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Fee;
 use App\Models\User;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
@@ -31,12 +32,6 @@ class AdminUserController extends Controller
             ->groupBy('position')
             ->pluck('total', 'position');
 
-        $recentUsers = User::query()
-            ->whereIn('role', $this->manageableRoles)
-            ->latest()
-            ->limit(5)
-            ->get(['id', 'name', 'email', 'role', 'position', 'created_at']);
-
         return response()->json([
             'counts' => [
                 'admins'     => (int) ($counts['admin'] ?? 0),
@@ -52,7 +47,11 @@ class AdminUserController extends Controller
             ],
             'roles' => $this->roleOptions(),
             'positions' => $this->positionOptions(),
-            'recent_users' => $recentUsers,
+            'finance' => [
+                'collected' => (float) Fee::where('paid_amount', '>', 0)->sum('paid_amount'),
+                'outstanding' => (float) Fee::whereRaw('amount > paid_amount')->sum(\Illuminate\Support\Facades\DB::raw('amount - paid_amount')),
+                'pending_reviews' => Fee::where('payment_verification_status', 'pending')->count(),
+            ],
         ]);
     }
 
