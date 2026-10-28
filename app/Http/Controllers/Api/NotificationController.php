@@ -14,6 +14,7 @@ class NotificationController extends Controller
         'assignments',
         'enrollment',
         'marketplace',
+        'low_stock',
         'points',
         'attendance',
         'low_grade',

@@ -212,6 +212,7 @@ export default function StaffDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [assetFilter, setAssetFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyAsset);
@@ -271,12 +272,15 @@ export default function StaffDashboard() {
   const filteredAssets = useMemo(() => {
     const assets = data?.assets ?? [];
     const term = search.trim().toLowerCase();
-    if (!term) return assets;
-    return assets.filter(asset => [
+    return assets.filter(asset => {
+      const matchesFilter = assetFilter === 'all' || asset.status === assetFilter;
+      const matchesSearch = !term || [
       asset.asset_tag, asset.name, asset.category,
       asset.location, asset.assigned_to, asset.status, asset.condition,
-    ].some(value => String(value || '').toLowerCase().includes(term)));
-  }, [data, search]);
+      ].some(value => String(value || '').toLowerCase().includes(term));
+      return matchesFilter && matchesSearch;
+    });
+  }, [assetFilter, data, search]);
 
   const filteredMarketItems = useMemo(() => {
     const source = marketScope === 'mine' ? marketItems : allMarketItems;
@@ -581,21 +585,23 @@ export default function StaffDashboard() {
   }
 
   return (
-    <View style={[s.container, { backgroundColor: isAssetsScreen ? '#F5EEF0' : theme.bg }]}> 
+    <View style={[s.container, { backgroundColor: (isAssetsScreen || isMarketplaceScreen) ? '#FCF6F7' : theme.bg }]}>
       {isAssetsScreen && !loading && (
-        <View style={[s.inventoryHeader, { paddingTop: 8 + insets.top }]}>
+        <View style={[s.inventoryHeader, { paddingTop: insets.top + 10 }]}>
           <View style={s.inventoryHeaderCopy}>
             <Text style={s.inventoryLabel}>INVENTORY</Text>
             <Text style={s.inventoryTitle}>Assets</Text>
             <Text style={s.inventorySubtitle}>Manage inventory and custody records</Text>
           </View>
           <View style={s.inventoryAvatar}>
-            <Feather name="user" size={22} color="#fff" />
+            <Feather name="user" size={21} color="#B5233D" />
           </View>
         </View>
       )}
 
-      {!isAssetsScreen && (
+      {isMarketplaceScreen && !loading && <MarketplaceHeader counts={marketCounts} insetTop={insets.top} />}
+
+      {!isAssetsScreen && !isMarketplaceScreen && (
         <HeaderGradient
           title={isMarketplaceScreen ? 'Marketplace' : 'Assets'}
           subtitle={isMarketplaceScreen ? 'Manage school marketplace items and orders' : 'Manage inventory and custody records'}
@@ -616,22 +622,22 @@ export default function StaffDashboard() {
         <View style={s.center}><ActivityIndicator size="large" color={theme.primary} /></View>
       ) : (
         <ScrollView
-          contentContainerStyle={isAssetsScreen ? s.inventoryBody : s.body}
+          contentContainerStyle={(isAssetsScreen || isMarketplaceScreen) ? s.inventoryBody : s.body}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         >
           <View style={s.actionRow}>
-            <View style={[s.searchBox, { backgroundColor: isAssetsScreen ? '#F2F1F1' : theme.card, borderColor: isAssetsScreen ? '#D9D1D4' : theme.border }]}> 
-              <Feather name="search" size={17} color={isAssetsScreen ? '#4B5563' : theme.textSub} />
+            <View style={[s.searchBox, { backgroundColor: (isAssetsScreen || isMarketplaceScreen) ? '#FFFFFF' : theme.card, borderColor: (isAssetsScreen || isMarketplaceScreen) ? '#EDD3D8' : theme.border }]}>
+              <Feather name="search" size={18} color={(isAssetsScreen || isMarketplaceScreen) ? '#7A666B' : theme.textSub} />
               <TextInput
-                style={[s.searchInput, { color: isAssetsScreen ? '#1F2937' : theme.text }]}
+                style={[s.searchInput, { color: (isAssetsScreen || isMarketplaceScreen) ? '#2A1B1F' : theme.text }]}
                 placeholder={activeTab === 'assets' ? 'Search asset, tag, room' : 'Search item, category, stock'}
-                placeholderTextColor={isAssetsScreen ? '#7B7277' : theme.textMuted}
+                placeholderTextColor={(isAssetsScreen || isMarketplaceScreen) ? '#7A666B' : theme.textMuted}
                 value={search}
                 onChangeText={setSearch}
               />
             </View>
             <TouchableOpacity
-              style={[s.addBtn, { backgroundColor: isAssetsScreen ? '#B3355C' : theme.primary }]}
+              style={[s.addBtn, { backgroundColor: (isAssetsScreen || isMarketplaceScreen) ? '#B5233D' : theme.primary }]}
               onPress={activeTab === 'assets' ? openCreate : openMarketCreate}
             >
               <Text style={s.addBtnText}>+ Add</Text>
@@ -639,7 +645,7 @@ export default function StaffDashboard() {
           </View>
 
           {activeTab === 'assets' ? (
-            <AssetList assets={filteredAssets} counts={counts} deleteAsset={deleteAsset} openEdit={openEdit} theme={theme} onAdd={openCreate} />
+            <AssetList assets={filteredAssets} counts={counts} filter={assetFilter} setFilter={setAssetFilter} deleteAsset={deleteAsset} openEdit={openEdit} theme={theme} onAdd={openCreate} />
           ) : (
             <MarketplaceList
               counts={marketCounts}
@@ -688,6 +694,7 @@ export default function StaffDashboard() {
 // ── Receipt Modal ─────────────────────────────────────────────────────────────
 function CustodianOverview({ counts, marketCounts, assets, user, loading, refreshing, onRefresh, theme }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const metrics = [
     { label: 'Total assets', value: counts.total ?? 0, icon: 'box' },
     { label: 'Available', value: counts.available ?? 0, icon: 'check-circle' },
@@ -696,11 +703,11 @@ function CustodianOverview({ counts, marketCounts, assets, user, loading, refres
   ];
 
   return (
-    <View style={[s.container, { backgroundColor: '#F5EEF0' }]}> 
+    <View style={[s.container, { backgroundColor: '#FCF6F7' }]}>
       {loading ? (
         <View style={s.center}><ActivityIndicator size="large" color={theme.primary} /></View>
       ) : (
-        <ScrollView contentContainerStyle={s.custodianDashboardBody} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        <ScrollView contentContainerStyle={[s.custodianDashboardBody, { paddingTop: insets.top + 4 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
           <View style={s.customHeader}>
             <View style={s.headerCopy}>
               <Text style={s.welcomeText}>WELCOME BACK</Text>
@@ -708,15 +715,15 @@ function CustodianOverview({ counts, marketCounts, assets, user, loading, refres
               <Text style={s.roleText}>{user?.name ? 'Staff' : 'Staff'}</Text>
             </View>
             <View style={s.avatarBubble}>
-              <Feather name="user" size={22} color="#fff" />
+              <Feather name="user" size={21} color="#B5233D" />
             </View>
           </View>
 
           <Text style={s.sectionTitle}>OVERVIEW</Text>
           <View style={s.overviewMetrics}>
             {metrics.map(metric => (
-              <View key={metric.label} style={[s.overviewMetricCard, { backgroundColor: '#F7F0F1', borderColor: '#E6D5D8' }]}>
-                <View style={[s.overviewMetricIcon, { backgroundColor: '#F2D6D8' }]}><Feather name={metric.icon} size={17} color="#D65E76" /></View>
+              <View key={metric.label} style={[s.overviewMetricCard, { backgroundColor: '#FFFFFF', borderColor: '#EDD3D8' }]}>
+                <View style={[s.overviewMetricIcon, { backgroundColor: '#F7DDE3' }]}><Feather name={metric.icon} size={18} color="#B5233D" /></View>
                 <View style={s.metricTextWrap}>
                   <Text style={s.overviewMetricValue}>{metric.value}</Text>
                   <Text style={s.overviewMetricLabel}>{metric.label}</Text>
@@ -726,18 +733,33 @@ function CustodianOverview({ counts, marketCounts, assets, user, loading, refres
           </View>
 
           <Text style={[s.sectionTitle, { marginTop: 18 }]}>QUICK ACCESS</Text>
-          <TouchableOpacity style={[s.overviewLink, { backgroundColor: '#F7F0F1', borderColor: '#E6D5D8' }]} onPress={() => router.push('/(staff)/assets')}>
-            <View style={[s.overviewLinkIcon, { backgroundColor: '#F2D6D8' }]}><Feather name="box" size={18} color="#D65E76" /></View>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Manage assets" style={[s.overviewLink, { backgroundColor: '#FFFFFF', borderColor: '#EDD3D8' }]} onPress={() => router.push('/(staff)/assets')}>
+            <View style={[s.overviewLinkIcon, { backgroundColor: '#F7DDE3' }]}><Feather name="box" size={19} color="#B5233D" /></View>
             <View style={s.overviewLinkCopy}><Text style={s.overviewLinkTitle}>Manage assets</Text><Text style={s.overviewLinkSub}>Inventory, assignments, and maintenance</Text></View>
             <Feather name="chevron-right" size={18} color="#4B5563" />
           </TouchableOpacity>
-          <TouchableOpacity style={[s.overviewLink, { backgroundColor: '#F7F0F1', borderColor: '#E6D5D8' }]} onPress={() => router.push('/(staff)/marketplace')}>
-            <View style={[s.overviewLinkIcon, { backgroundColor: '#F2D6D8' }]}><Feather name="shopping-bag" size={18} color="#D65E76" /></View>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open marketplace" style={[s.overviewLink, { backgroundColor: '#FFFFFF', borderColor: '#EDD3D8' }]} onPress={() => router.push('/(staff)/marketplace')}>
+            <View style={[s.overviewLinkIcon, { backgroundColor: '#F7DDE3' }]}><Feather name="shopping-bag" size={19} color="#B5233D" /></View>
             <View style={s.overviewLinkCopy}><Text style={s.overviewLinkTitle}>Marketplace</Text><Text style={s.overviewLinkSub}>{marketCounts.available} available items · {marketCounts.lowStock} low stock</Text></View>
             <Feather name="chevron-right" size={18} color="#4B5563" />
           </TouchableOpacity>
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+function MarketplaceHeader({ counts, insetTop }) {
+  return (
+    <View style={[s.marketplaceHeader, { paddingTop: insetTop + 10 }]}>
+      <View style={s.inventoryHeaderCopy}>
+        <Text style={s.inventoryLabel}>MARKETPLACE</Text>
+        <Text style={s.inventoryTitle}>Marketplace</Text>
+        <Text style={s.inventorySubtitle}>{counts.total} {counts.total === 1 ? 'item' : 'items'} · {counts.available} available · {counts.buyers} buyers</Text>
+      </View>
+      <View style={s.inventoryAvatar}>
+        <Feather name="user" size={21} color="#B5233D" />
+      </View>
     </View>
   );
 }
@@ -862,27 +884,30 @@ function ReceiptRow({ label, value, theme, highlight, last }) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AssetList({ assets, counts, deleteAsset, openEdit, theme, onAdd }) {
+function AssetList({ assets, counts, filter, setFilter, deleteAsset, openEdit, theme, onAdd }) {
+  const filters = [
+    { value: 'all', label: 'All', count: counts.total ?? 0 },
+    { value: 'available', label: 'Available', count: counts.available ?? 0 },
+    { value: 'maintenance', label: 'Maintenance', count: counts.maintenance ?? 0 },
+  ];
+
   return (
     <>
       <View style={s.assetFilterRow}>
-        <TouchableOpacity style={[s.assetFilterPill, { backgroundColor: '#B13552', borderColor: '#B13552' }]}>
-          <Text style={s.assetFilterText}>All {assets.length}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.assetFilterPill, { backgroundColor: '#F3EFF0', borderColor: '#E7D9DD' }]}>
-          <Text style={[s.assetFilterText, { color: '#1F2937' }]}>Available {counts.available ?? 0}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.assetFilterPill, { backgroundColor: '#F3EFF0', borderColor: '#E7D9DD' }]}>
-          <Text style={[s.assetFilterText, { color: '#1F2937' }]}>Maintenance {counts.maintenance ?? 0}</Text>
-        </TouchableOpacity>
+        {filters.map(item => {
+          const active = filter === item.value;
+          return <TouchableOpacity key={item.value} accessibilityRole="button" accessibilityState={{ selected: active }} style={[s.assetFilterPill, active ? s.assetFilterPillActive : s.assetFilterPillInactive]} onPress={() => setFilter(item.value)}>
+            <Text style={[s.assetFilterText, !active && s.assetFilterTextInactive]}>{item.label} {item.count}</Text>
+          </TouchableOpacity>;
+        })}
       </View>
       {assets.length === 0 ? (
-        <View style={[s.emptyStateCard, { backgroundColor: '#F7F0F1', borderColor: '#E9D7DB' }]}> 
-          <View style={s.emptyStateIcon}><Feather name="box" size={30} color="#B13552" /></View>
-          <Text style={s.emptyStateTitle}>No assets yet</Text>
-          <Text style={s.emptyStateText}>Add school property records to track location, custody, and condition.</Text>
-          <TouchableOpacity style={s.emptyStateButton} onPress={onAdd}>
-            <Text style={s.emptyStateButtonText}>Add first asset</Text>
+        <View style={[s.emptyStateCard, { backgroundColor: '#FFFFFF', borderColor: '#EDD3D8' }]}>
+          <View style={s.emptyStateIcon}><Feather name="box" size={29} color="#B5233D" /></View>
+          <Text style={s.emptyStateTitle}>{filter === 'all' ? 'No assets yet' : `No ${filter} assets`}</Text>
+          <Text style={s.emptyStateText}>{filter === 'all' ? 'Add school property records to track location, custody, and condition.' : 'Try another filter or add a new school property record.'}</Text>
+          <TouchableOpacity accessibilityRole="button" style={s.emptyStateButton} onPress={onAdd}>
+            <Text style={s.emptyStateButtonText}>{filter === 'all' ? 'Add first asset' : 'Add asset'}</Text>
           </TouchableOpacity>
         </View>
       ) : assets.map(asset => {
@@ -924,27 +949,25 @@ function MarketplaceList({ counts, currentUserId, items, ordersByItem, scope, se
 
   return (
     <>
-      <View style={[s.segment, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={s.marketSegment}>
         {[['mine', 'My Posts'], ['all', 'All Posts']].map(([value, label]) => (
           <TouchableOpacity
             key={value}
-            style={[s.segmentBtn, scope === value && { backgroundColor: theme.primary }]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: scope === value }}
+            style={[s.marketSegmentBtn, scope === value && s.marketSegmentBtnActive]}
             onPress={() => setScope(value)}
           >
-            <Text style={[s.segmentText, { color: scope === value ? '#fff' : theme.textSub }]}>{label}</Text>
+            <Text style={[s.marketSegmentText, { color: scope === value ? '#fff' : '#7A666B' }]}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <View style={s.statsGrid}>
-        <Stat label="Available" value={counts.available} bg="#ECFDF5" color="#047857" theme={theme} />
-        <Stat label="Buyers" value={counts.buyers} bg="#EEF2FF" color="#4338CA" theme={theme} />
-      </View>
-
       {items.length === 0 ? (
-        <View style={[s.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[s.title, { color: theme.text }]}>No marketplace items</Text>
-          <Text style={[s.sub, { color: theme.textSub }]}>Post uniforms, books, supplies, and school-owned items, then monitor stock here.</Text>
+        <View style={s.marketEmptyState}>
+          <View style={s.emptyStateIcon}><Feather name="shopping-bag" size={29} color="#B5233D" /></View>
+          <Text style={s.emptyStateTitle}>No marketplace items</Text>
+          <Text style={s.emptyStateText}>Post uniforms, books, supplies, and school-owned items to manage stock here.</Text>
         </View>
       ) : (
         <View style={s.marketGrid}>
@@ -954,14 +977,14 @@ function MarketplaceList({ counts, currentUserId, items, ordersByItem, scope, se
         const isMine = item.user_id === currentUserId;
         const orders = ordersByItem[item.id] || [];
         return (
-          <View key={item.id} style={[s.marketCard, { width: marketCardWidth, backgroundColor: theme.card, borderColor: theme.border }]}>
-            {!!item.image_urls?.[0] && (
-                  <Image source={{ uri: item.image_urls[0] }} style={s.marketImage} resizeMode="contain" />
-            )}
+          <View key={item.id} style={[s.marketCard, { width: marketCardWidth }]}>
+            {item.image_urls?.[0]
+              ? <Image source={{ uri: item.image_urls[0] }} style={s.marketImage} resizeMode="cover" />
+              : <View style={s.marketImagePlaceholder}><Feather name="image" size={30} color="#B5233D" /></View>}
             <View style={s.assetTop}>
               <View style={{ flex: 1 }}>
-                <Text style={[s.assetTag, { color: theme.textSub }]}>PHP {Number(item.price ?? 0).toLocaleString()}</Text>
-                <Text style={[s.assetName, { color: theme.text }]} numberOfLines={2}>{item.title}</Text>
+                <Text style={s.marketPrice}>PHP {Number(item.price ?? 0).toLocaleString()}</Text>
+                <Text style={s.marketItemTitle} numberOfLines={2}>{item.title}</Text>
               </View>
               {isMine && (
                 <>
@@ -1222,18 +1245,6 @@ function ChipPicker({ items, value, onChange }) {
   );
 }
 
-function Stat({ label, value, bg, color, theme }) {
-  return (
-    <View style={[s.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <View style={[s.statIcon, { backgroundColor: bg }]}>
-        <Text style={[s.statIconText, { color }]}>{label.slice(0, 2).toUpperCase()}</Text>
-      </View>
-      <Text style={[s.statValue, { color: theme.text }]}>{value}</Text>
-      <Text style={[s.statLabel, { color: theme.textSub }]}>{label}</Text>
-    </View>
-  );
-}
-
 function Badge({ item }) {
   return (
     <View style={[s.badge, { backgroundColor: item.bg }]}>
@@ -1266,32 +1277,33 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   body: { padding: 16, gap: 12, paddingBottom: 90 },
-  inventoryBody: { padding: 16, paddingBottom: 28 },
-  inventoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 0, paddingTop: 8, paddingBottom: 0 },
+  inventoryBody: { paddingHorizontal: 20, paddingBottom: 28 },
+  inventoryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 18 },
+  marketplaceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 18 },
   inventoryHeaderCopy: { flex: 1, paddingRight: 12 },
-  inventoryLabel: { fontSize: 11, fontWeight: '900', color: '#6B4A53', letterSpacing: 0.6 },
-  inventoryTitle: { fontSize: 27, fontWeight: '900', color: '#1F2937', lineHeight: 32 },
-  inventorySubtitle: { fontSize: 12, fontWeight: '600', color: '#5C5458', marginTop: 2 },
-  inventoryAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E9C9D0', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
-  custodianDashboardBody: { padding: 16, paddingBottom: 28 },
-  customHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginBottom: 12 },
+  inventoryLabel: { fontSize: 12, fontWeight: '900', color: '#B5233D', letterSpacing: 0.7, marginBottom: 4 },
+  inventoryTitle: { fontSize: 29, fontWeight: '900', color: '#2A1B1F', lineHeight: 34 },
+  inventorySubtitle: { fontSize: 14, fontWeight: '500', color: '#7A666B', marginTop: 5 },
+  inventoryAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F8E0E5', alignItems: 'center', justifyContent: 'center' },
+  custodianDashboardBody: { paddingHorizontal: 20, paddingBottom: 28 },
+  customHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 27 },
   headerCopy: { flex: 1, paddingRight: 18 },
-  welcomeText: { fontSize: 14, fontWeight: '900', color: '#5D5C62', letterSpacing: 0.5, marginBottom: 4 },
-  pageTitle: { fontSize: 28, fontWeight: '900', color: '#191B1F', lineHeight: 34 },
-  roleText: { fontSize: 15, fontWeight: '600', color: '#5D5C62', marginTop: 6 },
-  avatarBubble: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#E9C9D0', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
-  sectionTitle: { fontSize: 14, fontWeight: '900', letterSpacing: 0.7, color: '#2C2F36', marginTop: 10, marginBottom: 10 },
-  overviewMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 6 },
-  overviewMetricCard: { width: '47%', minHeight: 86, borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: 'row', alignItems: 'center' },
-  overviewMetricIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  welcomeText: { fontSize: 12, fontWeight: '900', color: '#B5233D', letterSpacing: 0.65, marginBottom: 3 },
+  pageTitle: { fontSize: 28, fontWeight: '900', color: '#2A1B1F', lineHeight: 33 },
+  roleText: { fontSize: 13, fontWeight: '500', color: '#7A666B', marginTop: 4 },
+  avatarBubble: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F8E0E5', alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.65, color: '#B5233D', marginTop: 0, marginBottom: 8 },
+  overviewMetrics: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12, marginBottom: 18 },
+  overviewMetricCard: { width: '48.5%', minHeight: 72, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' },
+  overviewMetricIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   metricTextWrap: { flex: 1, justifyContent: 'center' },
-  overviewMetricValue: { fontSize: 26, fontWeight: '900', lineHeight: 30 },
-  overviewMetricLabel: { fontSize: 12, fontWeight: '700', marginTop: 2, lineHeight: 15 },
-  overviewLink: { minHeight: 72, borderWidth: 1, borderRadius: 18, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, marginBottom: 10 },
-  overviewLinkIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  overviewMetricValue: { fontSize: 25, fontWeight: '900', color: '#2A1B1F', lineHeight: 28 },
+  overviewMetricLabel: { fontSize: 12, fontWeight: '500', color: '#7A666B', marginTop: 2, lineHeight: 15 },
+  overviewLink: { minHeight: 74, borderWidth: 1, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, marginBottom: 10 },
+  overviewLinkIcon: { width: 44, height: 44, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   overviewLinkCopy: { flex: 1, minWidth: 0, marginRight: 10 },
-  overviewLinkTitle: { fontSize: 15, fontWeight: '800' },
-  overviewLinkSub: { fontSize: 12, marginTop: 2, lineHeight: 16 },
+  overviewLinkTitle: { fontSize: 16, fontWeight: '800', color: '#2A1B1F' },
+  overviewLinkSub: { fontSize: 12, color: '#7A666B', marginTop: 1, lineHeight: 16 },
   recentAsset: { minHeight: 54, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 7 },
   recentAssetCopy: { flex: 1, minWidth: 0, marginRight: 10 },
   recentAssetName: { fontSize: 12, fontWeight: '700' },
@@ -1304,14 +1316,17 @@ const s = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '900' },
   sub: { fontSize: 13, fontWeight: '600', marginTop: 6, lineHeight: 19 },
   date: { fontSize: 11, fontWeight: '700', marginTop: 10 },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, marginBottom: 8 },
-  searchBox: { flex: 1, minHeight: 40, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12 },
-  searchInput: { flex: 1, fontSize: 12, fontWeight: '700' },
-  addBtn: { minWidth: 82, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '900' },
-  assetFilterRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  assetFilterPill: { flex: 1, minHeight: 32, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  assetFilterText: { fontSize: 12, fontWeight: '900', color: '#fff' },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 14 },
+  searchBox: { flex: 1, minHeight: 48, borderRadius: 15, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14 },
+  searchInput: { flex: 1, fontSize: 14, fontWeight: '500' },
+  addBtn: { minWidth: 82, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  addBtnText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  assetFilterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 24 },
+  assetFilterPill: { minHeight: 44, borderRadius: 24, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  assetFilterPillActive: { backgroundColor: '#B5233D', borderColor: '#B5233D' },
+  assetFilterPillInactive: { backgroundColor: '#FFFFFF', borderColor: '#EDD3D8' },
+  assetFilterText: { fontSize: 13, fontWeight: '800', color: '#FFFFFF' },
+  assetFilterTextInactive: { color: '#7A666B' },
   statsGrid: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 14 },
   statIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
@@ -1319,15 +1334,23 @@ const s = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '900' },
   statLabel: { fontSize: 12, fontWeight: '800', marginTop: 2 },
   assetCard: { borderWidth: 1, borderRadius: 12, padding: 14 },
-  emptyStateCard: { borderWidth: 1, borderRadius: 18, padding: 18, alignItems: 'center', marginTop: 6 },
-  emptyStateIcon: { width: 52, height: 52, borderRadius: 14, backgroundColor: '#F2DAD9', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  emptyStateTitle: { fontSize: 20, fontWeight: '900', color: '#1F2937', marginBottom: 5 },
-  emptyStateText: { fontSize: 13, fontWeight: '500', color: '#4B5563', textAlign: 'center', lineHeight: 18 },
-  emptyStateButton: { width: '100%', minHeight: 46, borderRadius: 12, backgroundColor: '#B13552', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-  emptyStateButtonText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  emptyStateCard: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 24, paddingVertical: 32, alignItems: 'center', marginTop: 0 },
+  emptyStateIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#F7DDE3', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyStateTitle: { fontSize: 20, fontWeight: '900', color: '#2A1B1F', marginBottom: 8 },
+  emptyStateText: { fontSize: 14, fontWeight: '500', color: '#7A666B', textAlign: 'center', lineHeight: 21 },
+  emptyStateButton: { width: '100%', minHeight: 48, borderRadius: 14, backgroundColor: '#B5233D', alignItems: 'center', justifyContent: 'center', marginTop: 20 },
+  emptyStateButtonText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   marketGrid: { width: '100%', maxWidth: 980, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', justifyContent: 'center' },
-  marketCard: { borderWidth: 1, borderRadius: 10, padding: 12 },
-  marketImage: { width: '100%', height: 108, borderRadius: 8, marginBottom: 10, backgroundColor: '#F8FAFC' },
+  marketSegment: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderColor: '#EDD3D8', borderWidth: 1, borderRadius: 18, padding: 8, gap: 8, marginBottom: 28 },
+  marketSegmentBtn: { flex: 1, minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  marketSegmentBtnActive: { backgroundColor: '#B5233D' },
+  marketSegmentText: { fontSize: 16, fontWeight: '800' },
+  marketEmptyState: { backgroundColor: '#FFFFFF', borderColor: '#EDD3D8', borderWidth: 1, borderRadius: 18, paddingHorizontal: 24, paddingVertical: 32, alignItems: 'center' },
+  marketCard: { borderWidth: 1, borderColor: '#EDD3D8', backgroundColor: '#FFFFFF', borderRadius: 18, padding: 12 },
+  marketImage: { width: '100%', height: 142, borderRadius: 14, marginBottom: 14, backgroundColor: '#F7DDE3' },
+  marketImagePlaceholder: { width: '100%', height: 142, borderRadius: 14, marginBottom: 14, backgroundColor: '#F7DDE3', alignItems: 'center', justifyContent: 'center' },
+  marketPrice: { fontSize: 14, fontWeight: '900', color: '#B5233D', marginBottom: 3 },
+  marketItemTitle: { fontSize: 18, fontWeight: '900', color: '#2A1B1F', lineHeight: 23 },
   assetTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   assetTag: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   assetName: { fontSize: 14, fontWeight: '900', marginTop: 2, lineHeight: 19 },
