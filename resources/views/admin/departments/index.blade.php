@@ -118,7 +118,7 @@
 
 <section class="space-y-4">
         @forelse($departments as $department)
-            <details class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <details class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" @if((string) session('open_department') === (string) $department->id || (string) old('department_context') === (string) $department->id) open @endif>
                 <summary class="flex cursor-pointer list-none items-center justify-between gap-4 p-4 hover:bg-slate-50">
                     <div class="min-w-0">
                         <p class="text-sm font-black text-slate-900">{{ $department->name }}</p>
@@ -133,8 +133,14 @@
                     <span class="rounded-full px-3 py-1 text-xs font-black {{ $department->is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">{{ $department->is_active ? 'Active' : 'Inactive' }}</span>
                 </summary>
 
-                <form method="POST" action="{{ route('admin.departments.update', $department) }}" class="space-y-4 border-t border-slate-100 p-4" data-department-form>
+                <details class="group/edit-department border-t border-slate-100" @if((string) old('department_context') === (string) $department->id) open @endif>
+                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                        <span class="text-sm font-bold text-slate-700">Edit department</span>
+                        <svg class="h-4 w-4 text-slate-500 transition-transform group-open/edit-department:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+                    </summary>
+                    <form method="POST" action="{{ route('admin.departments.update', $department) }}" class="space-y-4 border-t border-slate-100 p-4" data-department-form>
                     @csrf @method('PUT')
+                    <input type="hidden" name="department_context" value="{{ $department->id }}">
                     <label class="block text-sm font-bold text-slate-700">Department type
                         <select name="type" class="mt-1 w-full rounded-lg border-slate-300 text-sm" data-department-type>
                             <option value="course" @selected($department->type === 'course')>Course department</option>
@@ -209,21 +215,77 @@
                         <label class="flex items-center gap-2 text-sm font-bold text-slate-700"><input type="checkbox" name="is_active" value="1" @checked($department->is_active) class="rounded border-slate-300"> Active</label>
                         <button type="submit" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Save changes</button>
                     </div>
-                </form>
+                    </form>
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+                        <p class="text-xs text-slate-500">Only departments with no assigned records can be removed.</p>
+                        <form method="POST" action="{{ route('admin.departments.destroy', $department) }}" onsubmit="return confirm('Remove {{ addslashes($department->name) }}? This cannot be undone.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100">Remove department</button>
+                        </form>
+                    </div>
+                </details>
 
-                <div class="border-t border-slate-100 p-4">
-                    <h3 class="text-sm font-bold text-slate-700">Managed subjects</h3>
-                    <p class="mt-1 text-sm text-slate-500">@forelse($department->subjects as $subject){{ $subject->code }} — {{ $subject->name }}{{ $loop->last ? '' : ', ' }}@empty No subjects assigned yet. @endforelse</p>
-                    <a href="{{ route('teaching-eligibility.owners', ['department_id' => $department->id]) }}" class="mt-2 inline-block text-sm font-bold text-violet-700">Manage subject ownership</a>
-                </div>
+                <details class="group/managed-subjects border-t border-slate-100">
+                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                        <span class="text-sm font-bold text-slate-700">Managed subjects <span class="ml-1 text-xs font-semibold text-slate-400">{{ $department->subjects->count() }}</span></span>
+                        <svg class="h-4 w-4 text-slate-500 transition-transform group-open/managed-subjects:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+                    </summary>
+                    <div class="px-4 pb-4">
+                        <a href="{{ route('teaching-eligibility.owners', ['department_id' => $department->id]) }}" class="inline-flex items-center rounded-lg border border-portal-border bg-white px-3 py-1.5 text-xs font-bold text-portal-accent transition hover:bg-portal-accent-soft">Manage subject ownership</a>
+                        @if($department->subjects->isEmpty())
+                            <p class="mt-2 text-sm text-slate-500">No subjects assigned yet.</p>
+                        @else
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @foreach($department->subjects as $subject)
+                                    <span class="inline-flex max-w-full items-baseline gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                                        <span class="shrink-0 font-black text-slate-800">{{ $subject->code }}</span>
+                                        <span class="min-w-0">{{ $subject->name }}</span>
+                                    </span>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                </details>
 
                 @if($assignedTeachers->isNotEmpty())
-                    <div class="border-t border-slate-100 px-4 pb-4 pt-3">
-                        <p class="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assigned teacher</p>
-                        <div class="space-y-2">
+                    <details class="group/assigned-teachers border-t border-slate-100" @if((string) session('open_assigned_teachers') === (string) $department->id) open @endif>
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                            <span class="text-sm font-bold text-slate-700">Assigned teachers <span class="ml-1 text-xs font-semibold text-slate-400">{{ $assignedTeachers->count() }}</span></span>
+                            <svg class="h-4 w-4 text-slate-500 transition-transform group-open/assigned-teachers:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+                        </summary>
+                        <div class="space-y-2 px-4 pb-4">
                             @foreach($assignedTeachers as $teacher)
-                                <div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                                    <span class="text-sm font-semibold text-slate-700">{{ $teacher->name }} — {{ $teacher->email }}</span>
+                                @php($teacherAssignments = $teacher->teacherSections->filter(fn ($assignment) => (int) $assignment->subject?->department_id === (int) $department->id)->groupBy('subject_id'))
+                                <div class="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                                    <details class="group min-w-0 flex-1">
+                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                                            @if($teacher->profile_photo_url)
+                                                <img src="{{ $teacher->profile_photo_url }}" alt="{{ $teacher->name }}" class="h-11 w-11 shrink-0 rounded-full border border-slate-200 object-cover">
+                                            @else
+                                                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-portal-accent-soft text-sm font-black text-portal-accent">{{ collect(explode(' ', $teacher->name))->filter()->take(2)->map(fn ($part) => mb_substr($part, 0, 1))->implode('') }}</span>
+                                            @endif
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-sm font-semibold text-slate-700">{{ $teacher->name }}</span>
+                                                <span class="block truncate text-xs text-slate-500">{{ $teacher->email }}</span>
+                                            </span>
+                                            <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-500">
+                                                <span class="inline-flex min-w-6 items-center justify-center rounded-full bg-portal-accent-soft px-2 py-1 text-portal-accent">{{ $teacherAssignments->count() }}</span>
+                                                {{ \Illuminate\Support\Str::plural('subject', $teacherAssignments->count()) }}
+                                                <svg class="h-4 w-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+                                            </span>
+                                        </summary>
+                                        @if($teacherAssignments->isNotEmpty())
+                                            <div class="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+                                                @foreach($teacherAssignments as $assignments)
+                                                    @php($subject = $assignments->first()->subject)
+                                                    <span class="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] text-violet-800"><strong>{{ $subject->code }}</strong><span>{{ $subject->name }}</span></span>
+                                                @endforeach
+                                            </div>
+                                        @else
+                                            <p class="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-400">No subjects assigned to sections yet.</p>
+                                        @endif
+                                    </details>
                                     <form method="POST" action="{{ route('admin.departments.teachers.remove', [$department, $teacher]) }}" onsubmit="return confirm('Remove {{ addslashes($teacher->name) }} from this department?');" class="inline">
                                         @csrf
                                         <button type="submit" class="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-red-600 hover:bg-red-100">
@@ -233,7 +295,7 @@
                                 </div>
                             @endforeach
                         </div>
-                    </div>
+                    </details>
                 @endif
             </details>
         @empty

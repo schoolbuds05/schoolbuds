@@ -148,6 +148,24 @@ export default function Today() {
     && enrollmentApplication?.status === 'pending';
   const applicationApprovedForActiveTerm = applicationForActiveTerm
     && enrollmentApplication?.status === 'approved';
+  const showActiveTermEnrollment = Boolean(
+    enrollmentSettings?.enrollment_open
+    && activeTerm
+    && !applicationApprovedForActiveTerm
+  );
+  const activeTermEnrollmentLabel = applicationPendingForActiveTerm
+    ? 'Enrollment application under review'
+    : enrollmentEligibility?.can_enroll
+      ? 'Enroll for the new school year'
+      : 'Enrollment eligibility';
+  const activeTermEnrollmentMessage = applicationPendingForActiveTerm
+    ? `${activeTerm?.semester?.toUpperCase()} Semester · A.Y. ${activeTerm?.school_year}. View your application status.`
+    : enrollmentEligibility?.can_enroll
+      ? `${activeTerm?.semester?.toUpperCase()} Semester · A.Y. ${activeTerm?.school_year}. Your previous school year is complete.`
+      : enrollmentEligibility?.message || 'Checking your completed grades and enrollment eligibility...';
+  const activeTermEnrollmentAction = showActiveTermEnrollment
+    ? () => router.push(applicationPendingForActiveTerm ? '/enrollment-status' : '/enrollment')
+    : null;
   const enrollment = student?.enrollment;
   const yearLevelLabel = (value) => {
     const year = String(value || '').replace(/[^0-9]/g, '');
@@ -313,6 +331,9 @@ export default function Today() {
       onProfile={() => router.push('/student-profile')}
       onGrades={() => router.push('/student-grades')}
       onNotification={openNotification}
+      enrollmentAction={activeTermEnrollmentAction}
+      enrollmentLabel={activeTermEnrollmentLabel}
+      enrollmentMessage={activeTermEnrollmentMessage}
     />
   );
 

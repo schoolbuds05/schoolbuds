@@ -254,9 +254,27 @@
         <div class="md:col-span-4">
             <p class="text-xs font-bold uppercase text-slate-500 mb-2">Prerequisites</p>
             <p class="text-xs text-slate-400 mb-2">Select subjects that must be completed before this one.</p>
+            <label class="mb-2 block max-w-sm text-xs font-bold uppercase text-slate-500">
+                Filter prerequisites by course
+                <select class="prereq-course-filter mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                    <option value="">All courses and strands</option>
+                    <optgroup label="College courses">
+                        <option value="college-general" data-filter-program="college" data-filter-general="1">General college subjects</option>
+                        @foreach($collegeScopes as $collegeScope)
+                            <option value="college-course-{{ $loop->index }}" data-filter-program="college" data-filter-scope="{{ $collegeScope }}">{{ $collegeScope }}</option>
+                        @endforeach
+                    </optgroup>
+                    <optgroup label="SHS strands">
+                        <option value="shs-general" data-filter-program="shs" data-filter-general="1">General SHS subjects</option>
+                        @foreach($shsStrands as $strandScope)
+                            <option value="shs-strand-{{ $loop->index }}" data-filter-program="shs" data-filter-scope="{{ $strandScope }}">{{ $strandScope }}</option>
+                        @endforeach
+                    </optgroup>
+                </select>
+            </label>
             <div class="prereq-list max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 grid grid-cols-1 gap-1 md:grid-cols-3">
                 @foreach($allSubjects as $prereqSubject)
-                    <label class="prereq-option flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white cursor-pointer transition-colors" data-program="{{ $prereqSubject->program_type }}">
+                    <label class="prereq-option flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white cursor-pointer transition-colors" data-program="{{ $prereqSubject->program_type }}" data-course="{{ $prereqSubject->course }}" data-strand="{{ $prereqSubject->strand }}">
                         <input type="checkbox" name="prerequisite_ids[]" value="{{ $prereqSubject->id }}" class="rounded border-slate-300 text-portal-accent">
                         <span class="font-semibold text-portal-accent">{{ $prereqSubject->code }}</span>
                         <span class="truncate">{{ $prereqSubject->name }}</span>
@@ -392,10 +410,28 @@
                                 @endforeach
                             </div>
                         @endif
+                        <label class="mb-2 block max-w-sm text-xs font-bold uppercase text-slate-500">
+                            Filter prerequisites by course
+                            <select class="prereq-course-filter mt-1 w-full rounded-lg border-slate-300 text-sm normal-case text-slate-900">
+                                <option value="">All courses and strands</option>
+                                <optgroup label="College courses">
+                                    <option value="college-general" data-filter-program="college" data-filter-general="1">General college subjects</option>
+                                    @foreach($collegeScopes as $collegeScope)
+                                        <option value="college-course-{{ $loop->index }}" data-filter-program="college" data-filter-scope="{{ $collegeScope }}">{{ $collegeScope }}</option>
+                                    @endforeach
+                                </optgroup>
+                                <optgroup label="SHS strands">
+                                    <option value="shs-general" data-filter-program="shs" data-filter-general="1">General SHS subjects</option>
+                                    @foreach($shsStrands as $strandScope)
+                                        <option value="shs-strand-{{ $loop->index }}" data-filter-program="shs" data-filter-scope="{{ $strandScope }}">{{ $strandScope }}</option>
+                                    @endforeach
+                                </optgroup>
+                            </select>
+                        </label>
                         <div class="prereq-list max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2 grid grid-cols-1 gap-1 md:grid-cols-3">
                             @php $currentPrereqIds = $subject->prerequisites->pluck('id')->toArray(); @endphp
                             @foreach($allSubjects->where('id', '!=', $subject->id) as $prereqSubject)
-                                <label class="prereq-option flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white cursor-pointer transition-colors" data-program="{{ $prereqSubject->program_type }}">
+                                <label class="prereq-option flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-white cursor-pointer transition-colors" data-program="{{ $prereqSubject->program_type }}" data-course="{{ $prereqSubject->course }}" data-strand="{{ $prereqSubject->strand }}">
                                     <input type="checkbox" name="prerequisite_ids[]" value="{{ $prereqSubject->id }}" @checked(in_array($prereqSubject->id, $currentPrereqIds)) class="rounded border-slate-300 text-portal-accent">
                                     <span class="font-semibold text-portal-accent">{{ $prereqSubject->code }}</span>
                                     <span class="truncate">{{ $prereqSubject->name }}</span>
@@ -491,6 +527,7 @@
         const courseWrap = form.querySelector('.course-wrap') || courseField;
         const strandWrap = form.querySelector('.strand-wrap') || strandField;
         const prereqOptions = form.querySelectorAll('.prereq-option');
+        const prereqCourseFilter = form.querySelector('.prereq-course-filter');
 
         const syncProgramFields = () => {
             const isCollege = programType.value === 'college';
@@ -506,10 +543,24 @@
                 courseField.value = '';
             }
 
-            // Filter prerequisites by matching program type
+            const selectedFilter = prereqCourseFilter?.selectedOptions[0];
+            if (selectedFilter?.dataset.filterProgram && selectedFilter.dataset.filterProgram !== programType.value) {
+                prereqCourseFilter.value = '';
+            }
+            const activeFilter = prereqCourseFilter?.selectedOptions[0];
+
             prereqOptions.forEach((option) => {
                 const matchesProgram = option.dataset.program === programType.value;
-                option.classList.toggle('hidden', !matchesProgram);
+                const scope = programType.value === 'college' ? option.dataset.course : option.dataset.strand;
+                const filterProgram = activeFilter?.dataset.filterProgram;
+                const filterScope = activeFilter?.dataset.filterScope;
+                const isGeneralFilter = activeFilter?.dataset.filterGeneral === '1';
+                const matchesScope = !activeFilter?.value
+                    || (filterProgram === programType.value && (
+                        isGeneralFilter ? !scope : (!scope || scope === filterScope)
+                    ));
+
+                option.classList.toggle('hidden', !matchesProgram || !matchesScope);
                 if (!matchesProgram) {
                     const checkbox = option.querySelector('input[type="checkbox"]');
                     if (checkbox) checkbox.checked = false;
@@ -518,6 +569,7 @@
         };
 
         programType.addEventListener('change', syncProgramFields);
+        prereqCourseFilter?.addEventListener('change', syncProgramFields);
         syncProgramFields();
     });
 </script>

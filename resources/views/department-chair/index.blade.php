@@ -19,10 +19,37 @@
         </div>
         <div class="divide-y divide-slate-100">
             @forelse($teachers as $teacher)
-                <div class="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p class="font-bold text-slate-900">{{ $teacher->name }}</p>
-                    <p class="text-sm text-slate-500">{{ $teacher->email }}</p>
-                </div>
+                @php($teacherAssignments = $teacher->teacherSections->filter(fn ($assignment) => (int) $assignment->subject?->department_id === (int) $department->id)->groupBy('subject_id'))
+                <details class="group px-5 py-3">
+                    <summary class="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                        @if($teacher->profile_photo_url)
+                            <img src="{{ $teacher->profile_photo_url }}" alt="{{ $teacher->name }}" class="h-12 w-12 shrink-0 rounded-full border border-slate-200 object-cover">
+                        @else
+                            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-black text-violet-700">{{ collect(explode(' ', $teacher->name))->filter()->take(2)->map(fn ($part) => mb_substr($part, 0, 1))->implode('') }}</span>
+                        @endif
+                        <span class="min-w-0 flex-1">
+                            <span class="block font-bold text-slate-900">{{ $teacher->name }}</span>
+                            <span class="block truncate text-sm text-slate-500">{{ $teacher->email }}</span>
+                        </span>
+                        <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-500">
+                            <span class="inline-flex min-w-6 items-center justify-center rounded-full bg-portal-accent-soft px-2 py-1 text-portal-accent">{{ $teacherAssignments->count() }}</span>
+                            {{ \Illuminate\Support\Str::plural('subject', $teacherAssignments->count()) }}
+                            <svg class="h-4 w-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" /></svg>
+                        </span>
+                    </summary>
+                    <div class="ml-14 mt-3 border-t border-slate-100 pt-3">
+                        @if($teacherAssignments->isNotEmpty())
+                            <div class="flex flex-wrap gap-2">
+                                @foreach($teacherAssignments as $assignments)
+                                    @php($subject = $assignments->first()->subject)
+                                    <span class="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2.5 py-1.5 text-xs text-violet-800"><strong>{{ $subject->code }}</strong><span>— {{ $subject->name }}</span></span>
+                                @endforeach
+                            </div>
+                        @else
+                            <p class="text-sm text-slate-500">No subjects assigned to sections in this department yet.</p>
+                        @endif
+                    </div>
+                </details>
             @empty
                 <p class="px-5 py-8 text-center text-sm text-slate-500">No teachers are assigned to this department yet.</p>
             @endforelse

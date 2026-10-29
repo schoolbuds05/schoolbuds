@@ -7,12 +7,14 @@
         <p class="mt-1 text-sm text-slate-500">{{ $showStudentGrades ? 'Look up published grades by student name or ID.' : ($showApproved ? 'Review finalized grade sheets and completed grade change requests.' : 'Review chair-approved grade sheets and grade change requests before finalizing.') }}</p>
     </div>
     @if($showStudentGrades)
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-start gap-2">
             <p class="w-full text-xs text-slate-500 sm:text-right">Import finalized grade records from CSV, or export published grades for College and SHS.</p>
-            <form method="POST" action="{{ route('registrar.grades.import') }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
+            <form method="POST" action="{{ route('registrar.grades.import') }}" enctype="multipart/form-data" class="flex flex-wrap items-start gap-2">
                 @csrf
                 <label class="sr-only" for="grades-file">Grade CSV file</label>
-                <input id="grades-file" name="grades_file" type="file" accept=".csv,text/csv" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
+                <div class="grade-import-file-picker flex flex-col items-start gap-1">
+                    <input id="grades-file" name="grades_file" type="file" accept=".csv,text/csv" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
+                </div>
                 <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Import CSV</button>
             </form>
             <a href="{{ route('registrar.grades.export', ['program_type' => 'college']) }}" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Export College CSV</a>
@@ -42,11 +44,25 @@
                     </div>
                     <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 font-black text-violet-700" aria-hidden="true"><span class="group-open:hidden">+</span><span class="hidden group-open:inline">−</span></span>
                 </summary>
-                <div class="overflow-x-auto border-t border-slate-100">
-                    <table class="w-full min-w-[620px] text-left text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-5 py-3">Subject · Section</th><th class="px-4 py-3">School year · Period</th><th class="px-4 py-3">Remarks</th><th class="px-4 py-3 text-right">Score</th></tr></thead>
-                        <tbody class="divide-y divide-slate-100">
-                            @foreach($student->grades as $grade)
+                @php($gradesByPeriod = $student->grades->groupBy(function ($grade) {
+                    $schoolClass = $grade->schoolClass;
+                    $quarter = (int) $grade->quarter;
+                    $period = $schoolClass?->is_college ? (['Prelim', 'Midterm', 'Prefinal', 'Final'][$quarter - 1] ?? 'Quarter ' . $quarter) : 'Q' . $quarter;
+                    return ($grade->school_year ?: 'Unknown school year') . '|' . $period;
+                }))
+                <div class="space-y-2 border-t border-slate-100 bg-slate-50/60 p-3 sm:p-4">
+                    @foreach($gradesByPeriod as $periodKey => $periodGrades)
+                        @php([$schoolYearLabel, $periodLabel] = explode('|', $periodKey, 2))
+                        <details class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-slate-700 hover:bg-slate-50">
+                                <span>{{ $periodLabel }} <span class="font-normal text-slate-500">· {{ $schoolYearLabel }} · {{ $periodGrades->count() }} {{ \Illuminate\Support\Str::plural('subject', $periodGrades->count()) }}</span></span>
+                                <span class="text-slate-400" aria-hidden="true">⌄</span>
+                            </summary>
+                            <div class="overflow-x-auto border-t border-slate-100">
+                                <table class="w-full min-w-[620px] text-left text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-5 py-3">Subject · Section</th><th class="px-4 py-3">School year · Period</th><th class="px-4 py-3">Remarks</th><th class="px-4 py-3 text-right">Score</th></tr></thead>
+                                    <tbody class="divide-y divide-slate-100">
+                            @foreach($periodGrades as $grade)
                                 @php($schoolClass = $grade->schoolClass)
                                 @php($quarter = (int) $grade->quarter)
                                 @php($period = $schoolClass?->is_college ? (['Prelim', 'Midterm', 'Prefinal', 'Final'][$quarter - 1] ?? 'Quarter ' . $quarter) : 'Q' . $quarter)
@@ -57,8 +73,11 @@
                                     <td class="px-4 py-3 text-right font-black text-slate-800">{{ $grade->score === null ? '—' : number_format((float) $grade->score, 2) }}</td>
                                 </tr>
                             @endforeach
-                        </tbody>
-                    </table>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    @endforeach
                 </div>
             </details>
         @empty

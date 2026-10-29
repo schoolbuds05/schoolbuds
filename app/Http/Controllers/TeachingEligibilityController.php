@@ -27,6 +27,8 @@ class TeachingEligibilityController extends Controller
         if ($teacher->position === User::POSITION_HEAD_DEPARTMENT) {
             $department = $workflow->chairDepartment($teacher);
             $subjectsQuery->where('department_id', $department->id);
+        } else {
+            $subjectsQuery->where('department_id', $teacher->department_id);
         }
         $subjects = $subjectsQuery->whereDoesntHave('teachingEligibilities', fn ($query) => $query
             ->where('teacher_id', $request->user()->id)->whereIn('status', ['pending', 'approved']))->get();
@@ -37,6 +39,16 @@ class TeachingEligibilityController extends Controller
     public function chairIndex(Request $request, TeachingEligibilityService $workflow)
     {
         $department = $workflow->chairDepartment($request->user());
+        $pendingCount = TeacherSubjectEligibility::query()
+            ->where('department_id', $department->id)
+            ->where('source', 'teacher_request')
+            ->where('status', 'pending')
+            ->where('teacher_id', '!=', $request->user()->id)
+            ->whereHas('teacher', fn ($teacherQuery) => $teacherQuery->where(fn ($positionQuery) => $positionQuery
+                ->whereNull('position')
+                ->orWhere('position', '!=', User::POSITION_HEAD_DEPARTMENT)))
+            ->whereHas('subject', fn ($subjectQuery) => $subjectQuery->where('department_id', $department->id))
+            ->count();
         $rows = TeacherSubjectEligibility::query()
             ->whereHas('subject', fn ($query) => $query->where('department_id', $department->id))
             ->with(['subject.department:id,name', 'teacher:id,name,email', 'reviewer:id,name'])
@@ -46,19 +58,21 @@ class TeachingEligibilityController extends Controller
             ->where('department_id', $department->id)
             ->orderBy('name')->get(['id', 'name', 'email']);
 
-        return $this->page($request, compact('department', 'rows', 'subjects', 'teachers') + ['mode' => 'chair']);
+        return $this->page($request, compact('department', 'rows', 'subjects', 'teachers', 'pendingCount') + ['mode' => 'chair']);
     }
 
     public function registrarIndex(Request $request)
     {
         $this->requireAnyRole($request, ['registrar']);
-        $rows = TeacherSubjectEligibility::query()
+        $query = TeacherSubjectEligibility::query()
             ->where('source', 'teacher_request')
-            ->whereHas('teacher', fn ($query) => $query->where('position', User::POSITION_HEAD_DEPARTMENT))
+            ->whereHas('teacher', fn ($teacherQuery) => $teacherQuery->where('position', User::POSITION_HEAD_DEPARTMENT));
+        $pendingCount = (clone $query)->where('status', 'pending')->count();
+        $rows = $query
             ->with(['subject.department:id,name', 'teacher:id,name,email', 'reviewer:id,name'])
             ->latest('updated_at')->paginate(25);
 
-        return $this->page($request, compact('rows') + ['mode' => 'registrar']);
+        return $this->page($request, compact('rows', 'pendingCount') + ['mode' => 'registrar']);
     }
 
     public function owners(Request $request)

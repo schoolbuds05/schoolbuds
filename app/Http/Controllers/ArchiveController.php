@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
 use App\Models\ActivityLog;
 use App\Models\ArchivedRecord;
 use App\Models\Course;
+use App\Models\Department;
 use App\Models\MarketplaceItem;
 use App\Models\MarketplaceMessage;
 use App\Models\MarketplaceOrder;
@@ -125,6 +126,7 @@ class ArchiveController extends Controller
         $attributes = $archive->payload['attributes'] ?? [];
 
         match ($archive->record_type) {
+            'Department' => $this->restoreModel(Department::class, $attributes),
             'Course' => $this->restoreModel(Course::class, $attributes),
             'Subject' => $this->restoreModel(Subject::class, $attributes),
             'Section' => $this->restoreModel(Section::class, $attributes),

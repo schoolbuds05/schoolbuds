@@ -2,7 +2,12 @@
 
 @section('content')
 <div class="mb-6">
-    <h1 class="text-2xl font-black text-slate-900">{{ $mode === 'ownership' ? 'Subject Departments' : 'Teaching Eligibility' }}</h1>
+    <div class="flex flex-wrap items-center gap-3">
+        <h1 class="text-2xl font-black text-slate-900">{{ $mode === 'ownership' ? 'Subject Departments' : ($mode === 'registrar' ? 'Chair Teaching Requests' : 'Teaching Eligibility') }}</h1>
+        @if(in_array($mode, ['registrar', 'chair'], true) && $pendingCount > 0)
+            <span class="inline-flex items-center rounded-full bg-portal-accent px-2.5 py-1 text-xs font-black text-white">{{ $pendingCount }} pending approval{{ $pendingCount === 1 ? '' : 's' }}</span>
+        @endif
+    </div>
     <p class="mt-2 text-sm text-slate-500">
         @if($mode === 'ownership')
             Choose the department responsible for each subject and its teacher approvals. Course and general subject applicability stays separate.
@@ -30,11 +35,19 @@
     <div class="mt-5 border-t border-slate-100 pt-5">
     <form method="POST" action="{{ route($mode === 'chair' ? 'teaching-eligibility.grant' : 'teaching-eligibility.store') }}" class="grid gap-4 md:grid-cols-2">
         @csrf
+        <label class="text-sm font-bold">Filter subjects by year level
+            <select data-teaching-year-filter class="mt-1 w-full rounded-lg border-slate-300">
+                <option value="">All year levels</option>
+                @foreach($subjects->pluck('year_level')->filter()->unique()->sort() as $yearLevel)
+                    <option value="{{ $yearLevel }}">{{ ['1' => '1st year', '2' => '2nd year', '3' => '3rd year', '4' => '4th year'][(string) $yearLevel] ?? 'Year '.$yearLevel }}</option>
+                @endforeach
+            </select>
+        </label>
         <label class="text-sm font-bold">Subject
-            <select name="subject_id" required class="mt-1 w-full rounded-lg border-slate-300">
+            <select name="subject_id" data-teaching-subject-select required class="mt-1 w-full rounded-lg border-slate-300">
                 <option value="">Select a subject</option>
                 @foreach($subjects as $subject)
-                    <option value="{{ $subject->id }}" @selected((string) old('subject_id') === (string) $subject->id)>{{ $subject->code }} — {{ $subject->name }} · {{ $subject->semester ? ucfirst($subject->semester).' semester' : 'Any semester' }}</option>
+                    <option value="{{ $subject->id }}" data-year-level="{{ $subject->year_level }}" @selected((string) old('subject_id') === (string) $subject->id)>{{ $subject->code }} — {{ $subject->name }} · {{ $subject->semester ? ucfirst($subject->semester).' semester' : 'Any semester' }}</option>
                 @endforeach
             </select>
         </label>
@@ -247,6 +260,31 @@
         restoreScrollPosition();
         window.requestAnimationFrame(restoreScrollPosition);
     }
+</script>
+@endif
+@if(in_array($mode, ['chair', 'teacher'], true))
+<script>
+    (() => {
+        const yearFilter = document.querySelector('[data-teaching-year-filter]');
+        const subjectSelect = document.querySelector('[data-teaching-subject-select]');
+        if (!yearFilter || !subjectSelect) return;
+
+        const subjectOptions = Array.from(subjectSelect.options).filter((option) => option.value);
+        const applyYearFilter = () => {
+            subjectOptions.forEach((option) => {
+                const visible = !yearFilter.value || option.dataset.yearLevel === yearFilter.value;
+                option.hidden = !visible;
+                option.disabled = !visible;
+            });
+
+            if (subjectSelect.selectedOptions[0]?.disabled) {
+                subjectSelect.value = '';
+            }
+        };
+
+        yearFilter.addEventListener('change', applyYearFilter);
+        applyYearFilter();
+    })();
 </script>
 @endif
 @endsection

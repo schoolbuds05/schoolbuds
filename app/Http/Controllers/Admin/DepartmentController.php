@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Web\Concerns\AuthorizesPortal;
 use App\Models\Course;
 use App\Models\Department;
+use App\Models\TeacherSubjectEligibility;
 use App\Models\User;
+use App\Services\ArchiveService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -42,7 +44,14 @@ class DepartmentController extends Controller
         $search = trim((string) $request->query('search', ''));
         $programType = $request->query('program_type');
         $departments = Department::query()
-            ->with(['chair:id,name', 'courses:id,department_id,name,acronym', 'teachers:id,name,email,department_id,position', 'subjects:id,department_id,code,name'])
+            ->with([
+                'chair:id,name',
+                'courses:id,department_id,name,acronym',
+                'teachers:id,name,email,department_id,position',
+                'teachers.teacherSections.subject:id,code,name,department_id',
+                'teachers.teacherSections.section:id,name,department_id',
+                'subjects:id,department_id,code,name',
+            ])
             ->withCount(['teachers as faculty_count'])
             ->when($request->filled('type'), fn ($query) => $query->where('type', $request->type))
             ->when(in_array($programType, ['college', 'shs'], true), function ($query) use ($programType) {
@@ -102,6 +111,37 @@ class DepartmentController extends Controller
         return back()->with('status', 'Department updated.');
     }
 
+    public function destroy(Request $request, Department $department)
+    {
+        $this->requireAnyRole($request, ['admin']);
+
+        $hasRelatedRecords = $department->courses()->exists()
+            || $department->sections()->exists()
+            || $department->subjects()->exists()
+            || $department->faculty()->exists()
+            || $department->chair_user_id !== null
+            || TeacherSubjectEligibility::query()->where('department_id', $department->id)->exists();
+
+        if ($hasRelatedRecords) {
+            return back()
+                ->withErrors(['department' => 'Reassign or remove the department’s teachers, courses, sections, subjects, and teaching approvals before removing this department.'])
+                ->with('open_department', $department->id);
+        }
+
+        $name = $department->name;
+        DB::transaction(function () use ($department, $request) {
+            ArchiveService::record(
+                $department,
+                $request->user()?->id,
+                'web.admin.departments',
+                $department->name . ' (' . $department->code . ')'
+            );
+            $department->delete();
+        });
+
+        return redirect()->route('admin.departments.index')->with('status', $name . ' department removed.');
+    }
+
     public function removeTeacher(Request $request, Department $department, User $user)
     {
         $this->requireAnyRole($request, ['admin']);
@@ -115,7 +155,10 @@ class DepartmentController extends Controller
             'department' => null,
         ]);
 
-        return back()->with('status', $user->name . ' removed from the department.');
+        return back()
+            ->with('status', $user->name . ' removed from the department.')
+            ->with('open_department', $department->id)
+            ->with('open_assigned_teachers', $department->id);
     }
 
     private function validated(Request $request, ?Department $department = null): array

@@ -368,7 +368,7 @@ export default function EnrollmentScreen() {
       prev_school: student.prev_school || prev.prev_school,
       prev_school_address: student.prev_school_address || prev.prev_school_address,
       academic_status: student.academic_status || prev.academic_status,
-      shiftee_from: student.shiftee_from || prev.shiftee_from,
+      shiftee_from: student.course || student.shiftee_from || prev.shiftee_from,
       shiftee_to: student.shiftee_to || prev.shiftee_to,
       program_type: student.program_type || prev.program_type,
       grade_level: student.grade_level || prev.grade_level,
@@ -583,18 +583,33 @@ export default function EnrollmentScreen() {
     if (form.academic_status === 'Regular') return;
     const offeringId = subject.offering_id;
     const subjectId = subject.id;
-    setForm(prev => ({
-      ...prev,
-      subject_ids: prev.subject_ids.includes(subjectId)
-        ? prev.subject_ids.filter(sid => sid !== subjectId)
-        : [...prev.subject_ids, subjectId],
-      section_subject_ids: offeringId
-        ? (prev.section_subject_ids.includes(offeringId)
-            ? prev.section_subject_ids.filter(id => id !== offeringId)
-            : [...prev.section_subject_ids, offeringId])
-        : prev.section_subject_ids,
-    }));
-  }, [form.academic_status]);
+    setForm(prev => {
+      if (!offeringId) return prev;
+
+      const isSelected = prev.section_subject_ids.includes(offeringId);
+      const nextSectionSubjectIds = isSelected
+        ? prev.section_subject_ids.filter(id => id !== offeringId)
+        : [
+            ...prev.section_subject_ids.filter(selectedId => {
+              const selectedOffering = subjects.find(item => item.offering_id === selectedId);
+              return selectedOffering?.id !== subjectId;
+            }),
+            offeringId,
+          ];
+      const stillSelected = subjects.some(item =>
+        item.id === subjectId && nextSectionSubjectIds.includes(item.offering_id)
+      );
+      const nextSubjectIds = stillSelected
+        ? [...new Set([...prev.subject_ids.filter(id => id !== subjectId), subjectId])]
+        : prev.subject_ids.filter(id => id !== subjectId);
+
+      return {
+        ...prev,
+        subject_ids: nextSubjectIds,
+        section_subject_ids: nextSectionSubjectIds,
+      };
+    });
+  }, [form.academic_status, subjects]);
 
   const handleSubmit = async () => {
     if (!enrollmentSettings?.enrollment_open) {
@@ -629,6 +644,8 @@ export default function EnrollmentScreen() {
       civil_status: form.civil_status,
       citizenship: form.citizenship,
       student_type: normalizeStudentTypeForPayload(form.student_type),
+      shiftee_from: form.student_type === 'shiftee' ? form.shiftee_from : null,
+      shiftee_to: form.student_type === 'shiftee' ? form.shiftee_to : null,
       academic_status: form.academic_status,
       program_type: form.program_type,
       course_id: form.program_type === 'college' ? form.course_id : null,
@@ -787,7 +804,37 @@ export default function EnrollmentScreen() {
   );
 
   const CheckItem = ({ label, value }) => (
-    <TouchableOpacity style={s.checkRow} onPress={() => set('student_type', value)}>
+    <TouchableOpacity
+      style={s.checkRow}
+      onPress={() => {
+        setForm(prev => {
+          if (value === 'shiftee') {
+            return {
+              ...prev,
+              student_type: value,
+              shiftee_from: prev.shiftee_from || existingStudent?.course || prev.course_program,
+              shiftee_to: '',
+              course_id: null,
+              course_program: '',
+              program_type: 'college',
+            };
+          }
+
+          if (value === 'old_student' && prev.student_type === 'shiftee' && existingStudent) {
+            return {
+              ...prev,
+              student_type: value,
+              course_id: existingStudent.course_id || null,
+              course_program: existingStudent.course || '',
+              shiftee_to: '',
+            };
+          }
+
+          return { ...prev, student_type: value };
+        });
+        setCourseDropdownOpen(false);
+      }}
+    >
       <View style={[s.checkBox, form.student_type === value && s.checkBoxActive]}>
         {form.student_type === value && <Text style={s.checkMark}>✓</Text>}
       </View>
@@ -933,11 +980,76 @@ export default function EnrollmentScreen() {
             <View style={s.shifteeRow}>
               <View style={{ flex: 1 }}>
                 <Text style={s.inputLabel}>From</Text>
-                {inp('shiftee_from', { placeholder: 'Previous program' })}
+                {inp('shiftee_from', { placeholder: 'Previous program from student record', editable: false })}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.inputLabel}>To</Text>
-                {inp('shiftee_to', { placeholder: 'New program' })}
+                <TouchableOpacity
+                  style={[s.dropdown, form.course_id && s.dropdownActive]}
+                  onPress={() => setCourseDropdownOpen(open => !open)}
+                >
+                  <View style={s.dropdownLabelGroup}>
+                    <Text style={s.dropdownLabel} numberOfLines={1}>
+                      {form.course_id
+                        ? (courses.find(course => course.id === form.course_id)?.acronym || courseCodeFromName(form.course_program))
+                        : 'Select course'}
+                    </Text>
+                    <Text style={s.dropdownValue} numberOfLines={1}>
+                      {form.course_program || 'Choose the program to shift to'}
+                    </Text>
+                  </View>
+                  <Text style={s.dropdownArrow}>{courseDropdownOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {courseDropdownOpen && (
+                  <View style={s.dropdownPanel}>
+                    <TextInput
+                      style={[s.input, s.courseSearchInput]}
+                      value={courseSearch}
+                      onChangeText={setCourseSearch}
+                      placeholder="Search course list..."
+                      placeholderTextColor={C.muted}
+                      autoCorrect={false}
+                    />
+                    {loadingCourses ? (
+                      <ActivityIndicator size="small" color={C.primary} />
+                    ) : courses.length ? (
+                      <ScrollView
+                        style={s.dropdownScroll}
+                        keyboardShouldPersistTaps="handled"
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator
+                      >
+                        {courses.map(course => (
+                          <TouchableOpacity
+                            key={course.id}
+                            style={[s.courseOption, form.course_id === course.id && s.courseOptionActive]}
+                            onPress={() => {
+                              setForm(prev => ({
+                                ...prev,
+                                course_id: course.id,
+                                course_program: course.name,
+                                shiftee_to: course.name,
+                              }));
+                              setCourseDropdownOpen(false);
+                            }}
+                          >
+                            <View style={s.courseOptionLeft}>
+                              <View style={s.courseCodeBadge}>
+                                <Text style={s.courseCodeText}>{course.acronym || courseCodeFromName(course.name)}</Text>
+                              </View>
+                              <View style={s.courseOptionText}>
+                                <Text style={s.courseOptionName}>{course.name}</Text>
+                                <Text style={s.courseOptionMeta}>{course.acronym ? `College · ${course.acronym}` : 'College'}</Text>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    ) : (
+                      <Text style={s.helperText}>No managed courses match your search.</Text>
+                    )}
+                  </View>
+                )}
               </View>
             </View>
           )}
@@ -973,7 +1085,11 @@ export default function EnrollmentScreen() {
           <Text style={s.sectionTitle}>Academic Information</Text>
 
           <PillRow label="Academic Status *" field="academic_status" options={['Regular', 'Irregular']} />
-          <PillRow label="Program Type *"    field="program_type"    options={['college', 'shs']} />
+          <PillRow
+            label="Program Type *"
+            field="program_type"
+            options={form.student_type === 'shiftee' ? ['college'] : ['college', 'shs']}
+          />
 
           {/* Grade Level (SHS) or Year Level (College) */}
           <Field label={isSHS ? 'Grade Level *' : 'Year Level *'}>
@@ -987,7 +1103,7 @@ export default function EnrollmentScreen() {
           {/* Strand (SHS) or Course dropdown (College) */}
           {isSHS ? (
             <PillRow label="Strand *" field="strand" options={SHS_STRANDS} />
-          ) : (
+          ) : form.student_type === 'shiftee' ? null : (
             <Field label="Course / Program *">
               <TouchableOpacity
                 style={[s.dropdown, form.course_id && s.dropdownActive]}
@@ -1030,8 +1146,12 @@ export default function EnrollmentScreen() {
                           key={course.id}
                           style={[s.courseOption, form.course_id === course.id && s.courseOptionActive]}
                           onPress={() => {
-                            set('course_id', course.id);
-                            set('course_program', course.name);
+                            setForm(prev => ({
+                              ...prev,
+                              course_id: course.id,
+                              course_program: course.name,
+                              shiftee_to: prev.student_type === 'shiftee' ? course.name : prev.shiftee_to,
+                            }));
                             setCourseDropdownOpen(false);
                           }}
                         >
@@ -1404,6 +1524,11 @@ export default function EnrollmentScreen() {
                 const active = form.academic_status === 'Irregular'
                   ? form.section_subject_ids.includes(subject.offering_id)
                   : form.subject_ids.includes(subject.id);
+                const selectedElsewhere = form.academic_status === 'Irregular'
+                  ? subjects.find(item => item.id === subject.id
+                    && item.offering_id !== subject.offering_id
+                    && form.section_subject_ids.includes(item.offering_id))
+                  : null;
                 const unmetPrerequisites = prerequisiteStatuses[subject.id] || [];
                 const blockedByPrerequisite = unmetPrerequisites.length > 0;
                 return (
@@ -1411,7 +1536,7 @@ export default function EnrollmentScreen() {
                     key={subject.offering_id || subject.id}
                     style={[s.tableRow, active && s.tableRowActive, blockedByPrerequisite && { opacity: 0.55 }]}
                     onPress={() => toggleSubject(subject)}
-                    disabled={form.academic_status === 'Regular' || blockedByPrerequisite}
+                    disabled={form.academic_status === 'Regular' || blockedByPrerequisite || (!active && Boolean(selectedElsewhere))}
                   >
                     <View style={[s.checkBox, { marginRight: 6 }, active && s.checkBoxActive]}>
                       {active && <Text style={s.checkMark}>✓</Text>}
@@ -1422,6 +1547,11 @@ export default function EnrollmentScreen() {
                       {blockedByPrerequisite ? (
                         <Text style={{ marginTop: 3, color: '#B91C1C', fontSize: 11, fontWeight: '600' }}>
                           Prerequisite not met: {unmetPrerequisites.map(item => item.code || item.name).join(', ')}
+                        </Text>
+                      ) : null}
+                      {selectedElsewhere ? (
+                        <Text style={{ marginTop: 3, color: C.primary, fontSize: 11, fontWeight: '600' }}>
+                          Already selected in {selectedElsewhere.section_name}
                         </Text>
                       ) : null}
                     </View>

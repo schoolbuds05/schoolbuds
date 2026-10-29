@@ -19,7 +19,7 @@
     @endif
     <label>Year level<select name="year_level" class="mt-1 w-full rounded-lg border-slate-300">@foreach(['1','2','3','4'] as $year)<option @selected(request('year_level', '1') == $year)>{{ $year }}</option>@endforeach</select></label>
     <label>Semester<select name="semester" class="mt-1 w-full rounded-lg border-slate-300">@foreach(['1st','2nd','summer'] as $semester)<option @selected(request('semester', '1st') === $semester)>{{ $semester }}</option>@endforeach</select></label>
-    <button class="rounded-lg bg-portal-accent px-4 py-2 font-bold text-white">{{ $fixedCourse ? 'Update course subjects' : 'Load course subjects' }}</button>
+    <button class="flex w-full items-center justify-center self-end rounded-lg border border-transparent bg-portal-accent px-3 py-2.5 text-center text-sm font-bold text-white" style="height: 42px; align-self: end;">{{ $fixedCourse ? 'Update course subjects' : 'Load course subjects' }}</button>
 </form>
 @if(request('course_id'))
 <form method="POST" action="{{ route($prefix.'.generate.preview') }}" class="grid gap-4 rounded-xl bg-white p-5 md:grid-cols-3">

@@ -8,6 +8,58 @@
     };
     $accountLabel = collect([$roleLabel, $positionLabel])->filter()->unique()->implode(' · ');
 
+    $pendingEnrollmentCount = 0;
+    $pendingCourseShiftCount = 0;
+    $pendingSubjectRequestCount = 0;
+    $pendingChairTeachingRequestCount = 0;
+    $pendingDepartmentTeachingApprovalCount = 0;
+    $pendingSectionCount = 0;
+    $pendingGradeCount = 0;
+    if (in_array($role, ['admin', 'registrar'], true)) {
+        $pendingEnrollmentCount = \App\Models\EnrollmentApplication::where('status', 'pending')->count();
+        $pendingCourseShiftCount = \App\Models\CourseShiftRequest::where('status', \App\Models\CourseShiftRequest::STATUS_PENDING)->count();
+        $pendingSubjectRequestCount = \App\Models\SubjectChangeRequest::where('status', 'pending')->count();
+        $pendingChairTeachingRequestCount = \App\Models\TeacherSubjectEligibility::query()
+            ->where('source', 'teacher_request')
+            ->where('status', 'pending')
+            ->whereHas('teacher', fn ($query) => $query->where('position', \App\Models\User::POSITION_HEAD_DEPARTMENT))
+            ->count();
+        $pendingSectionCount = \App\Models\Section::where('workflow_status', 'pending')->count()
+            + \App\Models\SectionEditRequest::where('status', 'pending')->count()
+            + \App\Models\SectionTransferRequest::where('status', 'pending')->count();
+        $pendingGradeCount = \App\Models\GradeSubmission::where('status', \App\Models\GradeSubmission::STATUS_REGISTRAR_REVIEW)->count()
+            + \App\Models\GradeChangeRequest::where('status', \App\Models\GradeChangeRequest::STATUS_REGISTRAR_REVIEW)->count();
+    }
+    if ($user?->position === \App\Models\User::POSITION_HEAD_DEPARTMENT && $user->department_id) {
+        $isAssignedDepartmentChair = \App\Models\Department::query()
+            ->whereKey($user->department_id)
+            ->where('is_active', true)
+            ->where('chair_user_id', $user->id)
+            ->exists();
+        if ($isAssignedDepartmentChair) {
+            $pendingDepartmentTeachingApprovalCount = \App\Models\TeacherSubjectEligibility::query()
+                ->where('department_id', $user->department_id)
+                ->where('source', 'teacher_request')
+                ->where('status', 'pending')
+                ->where('teacher_id', '!=', $user->id)
+                ->whereHas('teacher', fn ($query) => $query->where(fn ($positionQuery) => $positionQuery
+                    ->whereNull('position')
+                    ->orWhere('position', '!=', \App\Models\User::POSITION_HEAD_DEPARTMENT)))
+                ->count();
+        }
+    }
+    $navBadgeCount = fn ($route, $params = []) => match ($route) {
+        'registrar.subjects.index' => $pendingSubjectRequestCount + $pendingChairTeachingRequestCount,
+        'registrar.enrollments.index' => $pendingEnrollmentCount,
+        'registrar.course-shift-requests.index' => $pendingCourseShiftCount,
+        'registrar.subject-requests.index' => $pendingSubjectRequestCount,
+        'registrar.teaching-eligibility.index' => $pendingChairTeachingRequestCount,
+        'teaching-eligibility.chair' => $pendingDepartmentTeachingApprovalCount,
+        'registrar.sections.index' => $pendingSectionCount,
+        'registrar.grades.index' => (($params['view'] ?? null) === 'students' ? $pendingGradeCount : 0),
+        default => 0,
+    };
+
     $navGroups = [
         'Admin' => [
             ['label' => 'Dashboard', 'route' => 'admin.dashboard', 'match' => 'admin/dashboard', 'roles' => ['admin']],
@@ -164,6 +216,9 @@
                                                     </svg>
                                                 </span>
                                                 <span class="portal-nav-label min-w-0 flex-1 truncate">{{ $item['label'] }}</span>
+                                                @if(($badgeCount = $navBadgeCount($item['route'], $item['params'] ?? [])) > 0)
+                                                    <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-portal-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-white" aria-label="{{ $badgeCount }} pending requests" title="{{ $pendingSubjectRequestCount }} subject requests; {{ $pendingChairTeachingRequestCount }} chair teaching requests">{{ $badgeCount }}</span>
+                                                @endif
                                             </a>
                                             <button type="button" data-subnav-toggle aria-expanded="{{ $active || $childActive ? 'true' : 'false' }}" aria-label="Toggle {{ $item['label'] }} submenu" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-portal-sidebar-text transition hover:bg-portal-hover hover:text-portal-accent">
                                                 <svg class="h-4 w-4 transition-transform {{ $active || $childActive ? 'rotate-90' : '' }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
@@ -176,6 +231,9 @@
                                                 <a href="{{ route($child['route'], $child['params'] ?? []) }}" class="portal-subnav-link -ml-[1px] flex items-center gap-3 rounded-full px-3 py-2 text-sm font-bold transition {{ $childIsActive ? 'bg-white text-portal-text shadow-sm' : 'text-portal-sidebar-text hover:bg-white/80 hover:text-portal-text' }}">
                                                     <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H10l2 2h7.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/><path d="M3 9h18"/></svg>
                                                     <span class="truncate">{{ $child['label'] }}</span>
+                                                    @if(($badgeCount = $navBadgeCount($child['route'], $child['params'] ?? [])) > 0)
+                                                        <span class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-portal-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-white" aria-label="{{ $badgeCount }} pending">{{ $badgeCount }}</span>
+                                                    @endif
                                                 </a>
                                             @endforeach
                                         </div>
@@ -189,6 +247,9 @@
                                         </svg>
                                     </span>
                                     <span class="portal-nav-label min-w-0 flex-1 truncate">{{ $item['label'] }}</span>
+                                    @if(($badgeCount = $navBadgeCount($item['route'], $item['params'] ?? [])) > 0)
+                                        <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-portal-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-white" aria-label="{{ $badgeCount }} pending">{{ $badgeCount }}</span>
+                                    @endif
                                 </a>
                                 @endif
                             @endforeach
@@ -265,7 +326,10 @@
                                                 <div class="flex items-center gap-1">
                                                     <a href="{{ route($item['route'], $item['params'] ?? []) }}" class="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold {{ $active || $mobileChildActive ? 'text-portal-accent' : 'text-portal-text-soft' }}">
                                                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {{ $active || $mobileChildActive ? 'bg-portal-accent text-white' : 'bg-portal-sidebar-icon text-portal-sidebar-icon-text' }}"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $navIcons[$item['label']] ?? '<circle cx="12" cy="12" r="8" />' !!}</svg></span>
-                                                        <span class="truncate">{{ $item['label'] }}</span>
+                                                        <span class="min-w-0 flex-1 truncate">{{ $item['label'] }}</span>
+                                                        @if(($badgeCount = $navBadgeCount($item['route'], $item['params'] ?? [])) > 0)
+                                                            <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-portal-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-white" aria-label="{{ $badgeCount }} pending requests" title="{{ $pendingSubjectRequestCount }} subject requests; {{ $pendingChairTeachingRequestCount }} chair teaching requests">{{ $badgeCount }}</span>
+                                                        @endif
                                                     </a>
                                                     <button type="button" data-mobile-subnav-toggle aria-expanded="{{ $mobileChildActive ? 'true' : 'false' }}" aria-controls="{{ $mobileSubnavId }}" aria-label="Toggle {{ $item['label'] }} submenu" class="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-portal-sidebar-text hover:bg-white/70">
                                                         <svg class="h-4 w-4 transition-transform {{ $mobileChildActive ? 'rotate-180' : '' }}" data-mobile-subnav-chevron viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
@@ -274,14 +338,17 @@
                                                 <div id="{{ $mobileSubnavId }}" class="{{ $mobileChildActive ? '' : 'hidden' }} border-l border-portal-border pb-2 pl-4 ml-7">
                                                     @foreach($item['children'] as $child)
                                                         @php($childIsActive = request()->is($child['match']) && (!array_key_exists('active_query', $child) || request()->query('view') === $child['active_query']))
-                                                        <a href="{{ route($child['route'], $child['params'] ?? []) }}" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold {{ $childIsActive ? 'bg-white text-portal-accent shadow-sm' : 'text-portal-sidebar-text hover:bg-white/70' }}"><span class="h-1.5 w-1.5 rounded-full {{ $childIsActive ? 'bg-portal-accent' : 'bg-current opacity-50' }}"></span>{{ $child['label'] }}</a>
+                                                        <a href="{{ route($child['route'], $child['params'] ?? []) }}" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold {{ $childIsActive ? 'bg-white text-portal-accent shadow-sm' : 'text-portal-sidebar-text hover:bg-white/70' }}"><span class="h-1.5 w-1.5 rounded-full {{ $childIsActive ? 'bg-portal-accent' : 'bg-current opacity-50' }}"></span><span>{{ $child['label'] }}</span>@if(($badgeCount = $navBadgeCount($child['route'], $child['params'] ?? [])) > 0)<span class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-portal-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-white" aria-label="{{ $badgeCount }} pending">{{ $badgeCount }}</span>@endif</a>
                                                     @endforeach
                                                 </div>
                                             </div>
                                         @else
                                             <a href="{{ route($item['route'], $item['params'] ?? []) }}" class="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold {{ $active ? 'bg-portal-accent text-white' : 'text-portal-text-soft hover:bg-portal-hover' }}">
                                                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {{ $active ? 'bg-white/20 text-white' : 'bg-portal-sidebar-icon text-portal-sidebar-icon-text' }}"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $navIcons[$item['label']] ?? '<circle cx="12" cy="12" r="8" />' !!}</svg></span>
-                                                <span>{{ $item['label'] }}</span>
+                                                <span class="min-w-0 flex-1">{{ $item['label'] }}</span>
+                                                @if(($badgeCount = $navBadgeCount($item['route'], $item['params'] ?? [])) > 0)
+                                                    <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-portal-accent px-1.5 py-0.5 text-[10px] font-black leading-none text-white" aria-label="{{ $badgeCount }} pending">{{ $badgeCount }}</span>
+                                                @endif
                                             </a>
                                         @endif
                                     @endforeach

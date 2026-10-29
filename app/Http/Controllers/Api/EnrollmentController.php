@@ -130,8 +130,8 @@ class EnrollmentController extends Controller
             'semester'    => 'required|in:1st,2nd,summer',
         ];
 
-        if ($request->student_type === 'old_student') {
-            // id_no must match an approved application
+        if (in_array($request->student_type, ['old_student', 'shiftee'], true)) {
+            // Existing-student and shiftee IDs must belong to the signed-in account.
             $rules['id_no'] = [
                 'required', 'string', 'max:50',
                 function ($attribute, $value, $fail) use ($studentUser) {
@@ -163,8 +163,14 @@ class EnrollmentController extends Controller
             ], 422);
         }
 
-        // Block exact name + birthdate duplicates (new students only)
-        if ($request->student_type !== 'old_student' && $request->filled('birthdate')) {
+        $isOwnShifteeRecord = $request->student_type === 'shiftee'
+            && Student::query()
+                ->where('student_id', $request->id_no)
+                ->where('user_id', $studentUser->id)
+                ->exists();
+
+        // Block exact name + birthdate duplicates, while allowing a verified student to shift their own course.
+        if ($request->student_type !== 'old_student' && ! $isOwnShifteeRecord && $request->filled('birthdate')) {
             $nameMatch = EnrollmentApplication::query()
                 ->whereRaw('LOWER(first_name) = ?', [strtolower($request->first_name)])
                 ->whereRaw('LOWER(last_name) = ?', [strtolower($request->last_name)])
@@ -241,6 +247,18 @@ class EnrollmentController extends Controller
             return response()->json([
                 'message' => 'Some selected subjects are not offered for this school year and semester. Refresh the subject list and try again.',
             ], 422);
+        }
+
+        if ($request->academic_status === 'Irregular') {
+            $selectedSubjectIds = SectionSubject::query()
+                ->whereIn('id', $sectionSubjectIds)
+                ->pluck('subject_id');
+
+            if ($selectedSubjectIds->count() !== $selectedSubjectIds->unique()->count()) {
+                return response()->json([
+                    'message' => 'Select only one section offering for each subject.',
+                ], 422);
+            }
         }
 
         $subjectIds = $this->subjectIdsForApplication($request, $sectionSubjectIds);

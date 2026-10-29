@@ -31,13 +31,17 @@ class TeachingEligibilityService
         $this->requireTeacher($teacher);
         $department = $teacher->position === User::POSITION_HEAD_DEPARTMENT
             ? $this->chairDepartment($teacher)
-            : null;
+            : Department::query()->where('is_active', true)->find($teacher->department_id);
+
+        if (! $department) {
+            throw ValidationException::withMessages([
+                'subject_id' => 'Your account must be assigned to an active department to request subjects.',
+            ]);
+        }
 
         return DB::transaction(function () use ($teacher, $subjectId, $qualification, $department) {
             $subject = Subject::query()->lockForUpdate()->findOrFail($subjectId);
-            if ($department) {
-                $this->requireOwnedSubject($subject, $department);
-            }
+            $this->requireOwnedSubject($subject, $department);
             $this->requireManagedSubject($subject);
             $eligibility = TeacherSubjectEligibility::firstOrNew(['teacher_id' => $teacher->id, 'subject_id' => $subject->id]);
             if ($eligibility->exists && in_array($eligibility->status, ['pending', 'approved'], true)) {

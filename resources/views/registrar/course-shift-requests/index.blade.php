@@ -57,15 +57,27 @@
                         @csrf
                         <input name="source_subject_code" required maxlength="50" placeholder="Previous subject code" class="rounded-lg border-slate-300 text-sm">
                         <input name="source_subject_name" required maxlength="255" placeholder="Previous subject name" class="rounded-lg border-slate-300 text-sm">
-                        <select name="target_subject_id" class="rounded-lg border-slate-300 text-sm">
-                            <option value="">No equivalent subject</option>
-                            @foreach($subjects as $subject)
-                                <option value="{{ $subject->id }}">{{ $subject->code }} · {{ $subject->name }}</option>
-                            @endforeach
-                        </select>
+                        <div>
+                            <input
+                                type="text"
+                                list="course-shift-target-subjects-{{ $shiftRequest->id }}"
+                                data-target-subject-input
+                                placeholder="Equivalent subject (type code or name)"
+                                autocomplete="off"
+                                class="w-full rounded-lg border-slate-300 text-sm"
+                            >
+                            <input type="hidden" name="target_subject_id" data-target-subject-id>
+                            <datalist id="course-shift-target-subjects-{{ $shiftRequest->id }}">
+                                @foreach($subjects as $subject)
+                                    <option value="{{ $subject->code }} — {{ $subject->name }}" data-subject-id="{{ $subject->id }}"></option>
+                                @endforeach
+                            </datalist>
+                            <p class="mt-1 text-xs text-slate-500">Leave blank if no equivalent subject applies.</p>
+                        </div>
                         <select name="decision" required class="rounded-lg border-slate-300 text-sm">
-                            <option value="credited">Credit subject</option>
-                            <option value="not_credited">Do not credit</option>
+                            <option value="" disabled @selected(!old('decision'))>Select a decision</option>
+                            <option value="credited" @selected(old('decision') === 'credited')>Credit subject</option>
+                            <option value="not_credited" @selected(old('decision') === 'not_credited')>Do not credit</option>
                         </select>
                         <input name="remarks" maxlength="2000" placeholder="Equivalency remarks" class="rounded-lg border-slate-300 text-sm md:col-span-2">
                         <button class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 md:col-span-2">Record subject evaluation</button>
@@ -90,4 +102,20 @@
 </div>
 
 <div class="mt-5">{{ $requests->links() }}</div>
+<script>
+    document.querySelectorAll('[data-target-subject-input]').forEach((input) => {
+        const form = input.closest('form');
+        const subjectIdInput = form?.querySelector('[data-target-subject-id]');
+        const datalist = input.list;
+        if (!subjectIdInput || !datalist) return;
+
+        const syncSubjectId = () => {
+            const selected = Array.from(datalist.options).find(option => option.value === input.value.trim());
+            subjectIdInput.value = selected?.dataset.subjectId || '';
+        };
+
+        input.addEventListener('input', syncSubjectId);
+        form.addEventListener('submit', syncSubjectId);
+    });
+</script>
 @endsection

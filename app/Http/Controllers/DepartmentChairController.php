@@ -112,7 +112,9 @@ class DepartmentChairController extends Controller
         $sections = $this->departmentSections($courses)->get();
         $data = match ($page) {
             'teachers' => [
-                'teachers' => $department->teachers()->orderBy('name')->paginate(50),
+                'teachers' => $department->teachers()
+                    ->with(['teacherSections.subject:id,code,name,department_id', 'teacherSections.section:id,name,department_id'])
+                    ->orderBy('name')->paginate(50),
             ],
             'students' => [
                 'students' => $this->departmentStudents($courses),

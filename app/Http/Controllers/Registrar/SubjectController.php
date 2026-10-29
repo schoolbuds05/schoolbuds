@@ -150,7 +150,7 @@ class SubjectController extends Controller
             ->unique()
             ->sortBy(fn ($yearLevel) => (int) $yearLevel)
             ->values();
-        $allSubjects = Subject::orderBy('code')->get(['id', 'code', 'name', 'program_type']);
+        $allSubjects = Subject::orderBy('code')->get(['id', 'code', 'name', 'program_type', 'course', 'strand']);
 
         return view('registrar.subjects.index', compact('tab', 'subjects', 'requests', 'requestStats', 'courses', 'collegeScopes', 'collegeCourseOptions', 'shsStrands', 'yearLevels', 'allSubjects'));
     }

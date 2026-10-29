@@ -47,6 +47,7 @@ class ArchiveService
             'Subject' => trim(($model->code ?? '') . ' - ' . ($model->name ?? '')),
             'Section' => $model->name ?? null,
             'Course' => $model->name ?? null,
+            'Department' => trim(($model->name ?? '') . ' - ' . ($model->code ?? '')),
             'User' => trim(($model->name ?? '') . ' - ' . ($model->email ?? '')),
             'Student' => trim(($model->student_id ?? '') . ' - ' . ($model->first_name ?? '') . ' ' . ($model->last_name ?? '')),
             'SectionSubject' => trim(($model->section?->name ?? 'Section') . ' - ' . ($model->subject?->code ?? 'Subject')),
