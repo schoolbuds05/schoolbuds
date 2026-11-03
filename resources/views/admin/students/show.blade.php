@@ -243,7 +243,7 @@
         <summary class="mb-4 flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
             <h2 class="font-black text-slate-800">Subjects</h2>
             <span class="flex items-center gap-2">
-                <span class="text-xs font-black uppercase text-slate-400">{{ count($subjects) }} enrolled</span>
+                <span class="text-xs font-black uppercase text-slate-400">{{ count($subjects) }} subjects</span>
                 <svg class="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </span>
         </summary>
@@ -253,10 +253,16 @@
                 @php
                     $subjectGrades = $gradeRecords->filter(function ($grade) use ($subject) {
                         $schoolClass = $grade->schoolClass;
+                        if (!$schoolClass) {
+                            return false;
+                        }
 
-                        return $schoolClass
-                            && strcasecmp(trim((string) $schoolClass->subject), trim((string) $subject['name'])) === 0
-                            && (($subject['source'] ?? '') !== 'section'
+                        $classSubject = trim((string) $schoolClass->subject);
+                        $matchesSubject = strcasecmp($classSubject, trim((string) $subject['name'])) === 0
+                            || (!empty($subject['code']) && strcasecmp($classSubject, trim((string) $subject['code'])) === 0);
+
+                        return $matchesSubject
+                            && (!in_array(($subject['source'] ?? ''), ['section', 'grade'], true)
                                 || strcasecmp(trim((string) $schoolClass->section), trim((string) $subject['section_name'])) === 0)
                             && (empty($subject['school_year']) || (string) $grade->school_year === (string) $subject['school_year']);
                     })->keyBy(fn ($grade) => (string) $grade->quarter);
@@ -290,9 +296,12 @@
                                 {{ $subject['code'] }}{{ $subject['code'] ? ' · ' : '' }}{{ $subject['name'] }}
                             </p>
                             <p class="mt-1 text-xs text-slate-500">
-                                {{ $subject['section_name'] }}
+                                {{ $subject['section_name'] ?: 'Imported academic record' }}
                                 @if($subject['teacher'])
                                     · {{ $subject['teacher'] }}
+                                @endif
+                                @if($subject['school_year'] || $subject['semester'])
+                                    · {{ $subject['school_year'] }}{{ $subject['semester'] ? ' · ' . ucfirst($subject['semester']) . ' semester' : '' }}
                                 @endif
                                 @if($subject['schedule'])
                                     · {{ $subject['schedule'] }}
@@ -304,7 +313,9 @@
                         </div>
                         <div class="flex shrink-0 items-center gap-2">
                             <span class="rounded-full px-3 py-1 text-xs font-black {{ $statusClass }}">{{ $subjectStatus }}</span>
-                            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{{ $subject['units'] }}u</span>
+                            @if($subject['units'] !== null)
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{{ $subject['units'] }}u</span>
+                            @endif
                             <svg class="h-4 w-4 text-slate-400 transition-transform group-open/subject:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                         </div>
                     </summary>

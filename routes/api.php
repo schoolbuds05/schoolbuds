@@ -64,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);
     Route::get('/enrollment/lookup', [EnrollmentController::class, 'lookup']);
+    Route::post('/enrollment/claim', [EnrollmentController::class, 'claimImportedStudentRecord'])->middleware('throttle:5,10');
     Route::get('/section-generation/options', [SectionGenerationController::class, 'options']);
     Route::post('/section-generation/preview', [SectionGenerationController::class, 'preview'])->middleware('throttle:20,1');
     Route::post('/section-generation', [SectionGenerationController::class, 'store'])->middleware('throttle:20,1');
