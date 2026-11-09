@@ -17,16 +17,17 @@
 
 <div class="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
     <div>
-        <p class="text-sm font-bold text-slate-800">Student data CSV</p>
-        <p class="mt-1 text-xs text-slate-500">Download the template, import a CSV file, or export the student list.</p>
+        <p class="text-sm font-bold text-slate-800">Student and grade workbook</p>
+        <p class="mt-1 text-xs text-slate-500">Use one Excel workbook with Students and Grades tabs. Grades use one row per student, subject, and quarter; matching classes must already be set up. College quarters are 1–4 with grades 1–5; SHS grades are 1–100.</p>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-        <a href="{{ route($routePrefix . '.students.template') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Download template</a>
+        <a href="{{ route($routePrefix . '.students.workbook-template') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Download workbook template</a>
+        <a href="{{ route($routePrefix . '.students.workbook-sample') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Download sample data</a>
         <a href="{{ route($routePrefix . '.students.export') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Export CSV</a>
-        <form method="POST" action="{{ route($routePrefix . '.students.import') }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
+        <form method="POST" action="{{ route($routePrefix . '.students.workbook-import') }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
             @csrf
-            <input type="file" name="file" accept=".csv,text/csv" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
-            <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Import CSV</button>
+            <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="max-w-56 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-slate-700">
+            <button class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Import workbook</button>
         </form>
     </div>
 </div>

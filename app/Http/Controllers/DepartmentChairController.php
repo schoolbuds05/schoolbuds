@@ -23,7 +23,7 @@ class DepartmentChairController extends Controller
         return $this->page('teachers');
     }
 
-    public function grades()
+    public function grades(GradeWorkflowService $workflow)
     {
         $user = request()->user();
         abort_unless($user?->position === User::POSITION_HEAD_DEPARTMENT, 403);
@@ -31,18 +31,16 @@ class DepartmentChairController extends Controller
         $department = Department::query()->with('courses')->find($user->department_id);
         abort_unless($department, 403, 'Assign this Department Chair to a department first.');
 
-        $courses = $department->courses->where('program_type', 'college')->values();
-        $sections = $this->departmentSections($courses)->get();
-        $classes = $this->schoolClassesForSections($sections);
+        $classIds = $workflow->classIdsForDepartment($department);
         $submissions = GradeSubmission::query()
-            ->whereIn('school_class_id', $classes->pluck('id'))
+            ->whereIn('school_class_id', $classIds)
             ->whereIn('status', [GradeSubmission::STATUS_CHAIR_REVIEW, GradeSubmission::STATUS_REGISTRAR_RETURNED])
             ->with(['schoolClass.teacher', 'teacher', 'events.actor'])
             ->orderByDesc('submitted_at')
             ->paginate(25);
         $changeRequests = GradeChangeRequest::query()
             ->where('status', GradeChangeRequest::STATUS_CHAIR_REVIEW)
-            ->whereHas('submission', fn ($query) => $query->whereIn('school_class_id', $classes->pluck('id')))
+            ->whereHas('submission', fn ($query) => $query->whereIn('school_class_id', $classIds))
             ->with(['submission.schoolClass', 'teacher', 'events.actor'])
             ->orderByDesc('created_at')
             ->paginate(25, ['*'], 'change_page')

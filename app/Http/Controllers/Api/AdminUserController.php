@@ -25,7 +25,6 @@ class AdminUserController extends Controller
             ->whereIn('role', User::ROLES)
             ->groupBy('role')
             ->pluck('total', 'role');
-
         $positionCounts = User::query()
             ->selectRaw('position, COUNT(*) as total')
             ->whereNotNull('position')
@@ -62,7 +61,7 @@ class AdminUserController extends Controller
         $role = $request->query('role');
         $search = trim((string) $request->query('search', ''));
 
-        $users = User::query()
+        $query = User::query()
             ->whereIn('role', $this->manageableRoles)
             ->when(in_array($role, $this->manageableRoles, true), fn ($query) => $query->where('role', $role))
             ->when($search !== '', function ($query) use ($search) {
@@ -73,13 +72,47 @@ class AdminUserController extends Controller
                 });
             })
             ->orderBy('role')
-            ->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'position', 'department', 'created_at', 'updated_at']);
+            ->orderBy('name');
+
+        $users = $query->paginate(min(max((int) $request->query('per_page', 15), 1), 100), ['id', 'name', 'email', 'role', 'position', 'department', 'created_at', 'updated_at']);
 
         return response()->json([
             'roles' => $this->roleOptions(),
             'positions' => $this->positionOptions(),
-            'users' => $users,
+            'users' => $users->items(),
+            'current_page' => $users->currentPage(),
+            'last_page' => $users->lastPage(),
+            'per_page' => $users->perPage(),
+            'total' => $users->total(),
+        ]);
+    }
+
+    public function listSummary(Request $request)
+    {
+        $this->authorizeAdmin($request);
+
+        $counts = User::query()
+            ->whereIn('role', $this->manageableRoles)
+            ->selectRaw('role, COUNT(*) as total')
+            ->groupBy('role')
+            ->pluck('total', 'role');
+        $positionCounts = User::query()
+            ->whereNotNull('position')
+            ->selectRaw('position, COUNT(*) as total')
+            ->groupBy('position')
+            ->pluck('total', 'position');
+
+        return response()->json([
+            'counts' => [
+                'admin' => (int) ($counts['admin'] ?? 0),
+                'registrar' => (int) ($counts['registrar'] ?? 0),
+                'faculty' => (int) ($counts['faculty'] ?? 0) + (int) ($counts['teacher'] ?? 0),
+                'head_teachers' => (int) ($positionCounts['head_teacher'] ?? 0),
+                'deans' => (int) ($positionCounts['dean'] ?? 0),
+                'staff' => (int) ($counts['staff'] ?? 0),
+                'librarians' => (int) ($positionCounts['librarian'] ?? 0),
+                'property_custodians' => (int) ($positionCounts['property_custodian'] ?? 0),
+            ],
         ]);
     }
 

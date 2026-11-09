@@ -40,6 +40,29 @@ class EnrollmentController extends Controller
             return response()->json(['message' => 'Please register or log in before enrolling.'], 401);
         }
 
+        $request->validate([
+            'student_type' => ['required', Rule::in(['new_student', 'old_student', 'transferee', 'shiftee', 'returnee'])],
+        ]);
+
+        if ($request->student_type === 'new_student') {
+            $hasExistingStudentRecord = Student::query()
+                ->where(function ($query) use ($studentUser) {
+                    $query->where('user_id', $studentUser->id)
+                        ->orWhere('email', $studentUser->email);
+                })
+                ->exists();
+            $hasApprovedEnrollment = EnrollmentApplication::query()
+                ->where('user_id', $studentUser->id)
+                ->where('status', 'approved')
+                ->exists();
+
+            if ($hasExistingStudentRecord || $hasApprovedEnrollment) {
+                return response()->json([
+                    'message' => 'An existing student record is linked to your account. Select Old Student and enter your student ID to continue.',
+                ], 422);
+            }
+        }
+
         $eligibility = $progression->evaluateNextEnrollmentEligibility($studentUser);
         if (!$eligibility['can_enroll']) {
             return response()->json([
@@ -169,26 +192,32 @@ class EnrollmentController extends Controller
                 ->where('user_id', $studentUser->id)
                 ->exists();
 
-        // Block exact name + birthdate duplicates, while allowing a verified student to shift their own course.
-        if ($request->student_type !== 'old_student' && ! $isOwnShifteeRecord && $request->filled('birthdate')) {
+        // Block duplicate names while allowing an old student or verified shiftee to reuse their own record.
+        if ($request->student_type !== 'old_student' && ! $isOwnShifteeRecord) {
             $nameMatch = EnrollmentApplication::query()
-                ->whereRaw('LOWER(first_name) = ?', [strtolower($request->first_name)])
-                ->whereRaw('LOWER(last_name) = ?', [strtolower($request->last_name)])
-                ->where('birthdate', $request->birthdate)
+                ->where(function ($query) use ($studentUser) {
+                    $query->whereNull('user_id')->orWhere('user_id', '!=', $studentUser->id);
+                })
+                ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($request->first_name))])
+                ->whereRaw('LOWER(TRIM(last_name)) = ?', [strtolower(trim($request->last_name))])
+                ->when($request->filled('middle_name'), fn ($query) => $query->where(function ($middleNameQuery) use ($request) {
+                    $middleNameQuery->whereNull('middle_name')
+                        ->orWhereRaw('LOWER(TRIM(middle_name)) = ?', [strtolower(trim($request->middle_name))]);
+                }))
                 ->whereIn('status', ['pending', 'approved'])
                 ->exists();
 
             if (! $nameMatch) {
                 $nameMatch = Student::query()
-                    ->whereRaw('LOWER(first_name) = ?', [strtolower($request->first_name)])
-                    ->whereRaw('LOWER(last_name) = ?', [strtolower($request->last_name)])
-                    ->where('birthdate', $request->birthdate)
+                    ->where('user_id', '!=', $studentUser->id)
+                    ->whereRaw('LOWER(TRIM(first_name)) = ?', [strtolower(trim($request->first_name))])
+                    ->whereRaw('LOWER(TRIM(last_name)) = ?', [strtolower(trim($request->last_name))])
                     ->exists();
             }
 
             if ($nameMatch) {
                 return response()->json([
-                    'message' => 'A student with the same name and birthdate already exists. If this is you, please use the "Old Student" option instead.',
+                    'message' => 'A student with the same name already exists. If this is you, please use the "Old Student" option instead.',
                 ], 422);
             }
         }

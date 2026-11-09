@@ -257,6 +257,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/archive', [ArchiveController::class, 'apiIndex']);
         Route::post('/admin/archive/{archive}/restore', [ArchiveController::class, 'apiRestore']);
         Route::get('/admin/dashboard',      [AdminUserController::class, 'dashboard']);
+        Route::get('/admin/users/summary',  [AdminUserController::class, 'listSummary']);
         Route::get('/admin/activity-logs',  [ActivityLogController::class, 'index']);
         Route::get('/admin/users',          [AdminUserController::class, 'index']);
         Route::post('/admin/users',         [AdminUserController::class, 'store']);

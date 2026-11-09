@@ -207,6 +207,34 @@ class GradeApprovalController extends Controller
         ]);
     }
 
+    public function template(Request $request)
+    {
+        abort_unless($request->user()?->hasAnyRole(['admin', 'registrar']), 403);
+        $data = $request->validate(['program_type' => ['required', 'in:college,shs']]);
+        $programType = $data['program_type'];
+        $periods = $programType === 'college'
+            ? ['prelim', 'midterm', 'prefinal', 'final']
+            : ['q1', 'q2', 'q3', 'q4'];
+        $headers = [
+            'export_version', 'source_system', 'source_class_id', 'source_student_id',
+            'student_number', 'student_name', 'program_type', 'subject_code', 'subject_name',
+            'school_year', 'semester', 'year_level', 'section', 'grade_scale', 'grade_scale_note',
+            ...array_map(fn ($period) => $period . '_grade', $periods),
+            ...array_map(fn ($period) => $period . '_remarks', $periods),
+            ...array_map(fn ($period) => $period . '_source_submission_id', $periods),
+            ...array_map(fn ($period) => $period . '_finalized_at', $periods),
+        ];
+
+        return response()->streamDownload(function () use ($headers) {
+            $output = fopen('php://output', 'w');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, $headers, ',', '"', '');
+            fclose($output);
+        }, 'schoolbuds-' . $programType . '-grade-import-template.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
     public function import(Request $request, GradeCsvTransferService $transfer)
     {
         $request->validate([

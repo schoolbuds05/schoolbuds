@@ -5,8 +5,8 @@
     eyebrow="Staff workspace · {{ now()->format('F j, Y') }}"
     title="Campus resources"
     description="Review inventory availability, assigned equipment, and maintenance needs."
-    :action-href="route('property-custodian.market')"
-    action-label="Open marketplace"
+    :action-href="route('property-custodian.assets')"
+    action-label="Manage assets"
 />
 
 <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">

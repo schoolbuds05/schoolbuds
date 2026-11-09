@@ -17,6 +17,8 @@
                 </div>
                 <button type="submit" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Import CSV</button>
             </form>
+            <a href="{{ route('registrar.grades.template', ['program_type' => 'college']) }}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">College template</a>
+            <a href="{{ route('registrar.grades.template', ['program_type' => 'shs']) }}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">SHS template</a>
             <a href="{{ route('registrar.grades.export', ['program_type' => 'college']) }}" class="rounded-lg bg-portal-accent px-4 py-2 text-sm font-bold text-white hover:bg-portal-accent-hover">Export College CSV</a>
             <a href="{{ route('registrar.grades.export', ['program_type' => 'shs']) }}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Export SHS CSV</a>
         </div>

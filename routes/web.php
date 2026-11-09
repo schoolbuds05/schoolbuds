@@ -118,6 +118,9 @@ Route::middleware(['auth', 'web.roles:admin'])->prefix('admin')->name('admin.')-
     Route::get('/students/template', [StudentManageController::class, 'template'])->name('students.template');
     Route::get('/students/export', [StudentManageController::class, 'export'])->name('students.export');
     Route::post('/students/import', [StudentManageController::class, 'import'])->name('students.import');
+    Route::get('/students/workbook-template', [StudentManageController::class, 'workbookTemplate'])->name('students.workbook-template');
+    Route::get('/students/workbook-sample', [StudentManageController::class, 'workbookSample'])->name('students.workbook-sample');
+    Route::post('/students/workbook-import', [StudentManageController::class, 'importWorkbook'])->name('students.workbook-import');
     Route::get('/students/{student}', [StudentManageController::class, 'show'])->name('students.show');
     Route::put('/students/{student}', [StudentManageController::class, 'update'])->name('students.update');
     Route::put('/students/{student}/parent', [StudentManageController::class, 'updateParent'])->name('students.parent.update');
@@ -162,6 +165,9 @@ Route::middleware(['auth', 'web.roles:registrar,head_department'])->prefix('regi
     Route::get('/students/template', [StudentManageController::class, 'template'])->name('students.template');
     Route::get('/students/export', [StudentManageController::class, 'export'])->name('students.export');
     Route::post('/students/import', [StudentManageController::class, 'import'])->name('students.import');
+    Route::get('/students/workbook-template', [StudentManageController::class, 'workbookTemplate'])->name('students.workbook-template');
+    Route::get('/students/workbook-sample', [StudentManageController::class, 'workbookSample'])->name('students.workbook-sample');
+    Route::post('/students/workbook-import', [StudentManageController::class, 'importWorkbook'])->name('students.workbook-import');
     Route::get('/students/{student}', [StudentManageController::class, 'show'])->name('students.show');
     Route::put('/students/{student}', [StudentManageController::class, 'update'])->name('students.update');
     Route::put('/students/{student}/parent', [StudentManageController::class, 'updateParent'])->name('students.parent.update');
@@ -204,6 +210,7 @@ Route::middleware(['auth', 'web.roles:registrar,head_department'])->prefix('regi
     Route::post('/points', [PointsController::class, 'store'])->name('points.store');
     Route::get('/grades', [GradeApprovalController::class, 'index'])->name('grades.index');
     Route::post('/grades/import', [GradeApprovalController::class, 'import'])->name('grades.import');
+    Route::get('/grades/template', [GradeApprovalController::class, 'template'])->name('grades.template');
     Route::get('/grades/export', [GradeApprovalController::class, 'export'])->name('grades.export');
     Route::post('/grades/{submission}/review', [GradeApprovalController::class, 'review'])->name('grades.review');
     Route::post('/grade-change-requests/{changeRequest}/review', [RegistrarGradeChangeRequestController::class, 'review'])->name('grade-change-requests.review');
@@ -261,6 +268,10 @@ Route::middleware(['auth', 'web.roles:faculty,head_department'])->prefix('depart
 
 Route::middleware(['auth', 'web.roles:admin,property_custodian'])->prefix('property-custodian')->name('property-custodian.')->group(function () {
     Route::get('/dashboard', [PropertyCustodianDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/assets', [PropertyCustodianDashboardController::class, 'assets'])->name('assets');
+    Route::post('/assets', [PropertyCustodianDashboardController::class, 'storeAsset'])->name('assets.store');
+    Route::put('/assets/{asset}', [PropertyCustodianDashboardController::class, 'updateAsset'])->name('assets.update');
+    Route::delete('/assets/{asset}', [PropertyCustodianDashboardController::class, 'destroyAsset'])->name('assets.destroy');
     Route::get('/market', [PropertyCustodianDashboardController::class, 'market'])->middleware('marketplace.access')->name('market');
     Route::get('/reports', [PropertyCustodianDashboardController::class, 'reports'])->name('reports');
     Route::post('/marketplace', [PropertyCustodianDashboardController::class, 'storeMarketplaceItem'])->middleware('marketplace.access')->name('marketplace.store');

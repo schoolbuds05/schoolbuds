@@ -36,6 +36,78 @@ class DashboardController extends Controller
         return view('property-custodian.dashboard', compact('stats', 'assets'));
     }
 
+    public function assets(Request $request): View
+    {
+        $stats = [
+            'total' => PropertyAsset::count(),
+            'available' => PropertyAsset::where('status', 'available')->count(),
+            'assigned' => PropertyAsset::where('status', 'assigned')->count(),
+            'maintenance' => PropertyAsset::where('status', 'maintenance')->count(),
+            'needs_attention' => PropertyAsset::whereIn('condition', ['needs_repair', 'damaged', 'lost'])->count(),
+        ];
+
+        $search = trim((string) $request->query('search', ''));
+        $status = $request->query('status');
+        $condition = $request->query('condition');
+        $assets = PropertyAsset::query()
+            ->when($search !== '', fn ($query) => $query->where(function ($inner) use ($search) {
+                $inner->where('asset_tag', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('category', 'like', "%{$search}%")
+                    ->orWhere('location', 'like', "%{$search}%")
+                    ->orWhere('assigned_to', 'like', "%{$search}%");
+            }))
+            ->when(in_array($status, PropertyAsset::STATUSES, true), fn ($query) => $query->where('status', $status))
+            ->when(in_array($condition, PropertyAsset::CONDITIONS, true), fn ($query) => $query->where('condition', $condition))
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('property-custodian.assets', compact('assets', 'stats', 'search', 'status', 'condition'));
+    }
+
+    public function storeAsset(Request $request): RedirectResponse
+    {
+        $data = $request->validate($this->assetRules());
+        $data['created_by'] = $request->user()->id;
+        $data['updated_by'] = $request->user()->id;
+
+        PropertyAsset::create($data);
+
+        return redirect()->route('property-custodian.assets')->with('status', 'Asset added to inventory.');
+    }
+
+    public function updateAsset(Request $request, PropertyAsset $asset): RedirectResponse
+    {
+        $data = $request->validate($this->assetRules($asset));
+        $data['updated_by'] = $request->user()->id;
+
+        $asset->update($data);
+
+        return redirect()->route('property-custodian.assets')->with('status', 'Asset details updated.');
+    }
+
+    public function destroyAsset(PropertyAsset $asset): RedirectResponse
+    {
+        $asset->delete();
+
+        return redirect()->route('property-custodian.assets')->with('status', 'Asset removed from inventory.');
+    }
+
+    private function assetRules(?PropertyAsset $asset = null): array
+    {
+        return [
+            'asset_tag' => ['required', 'string', 'max:255', Rule::unique('property_assets', 'asset_tag')->ignore($asset?->id)],
+            'name' => ['required', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:255'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'condition' => ['required', Rule::in(PropertyAsset::CONDITIONS)],
+            'status' => ['required', Rule::in(PropertyAsset::STATUSES)],
+            'assigned_to' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ];
+    }
+
     public function market(Request $request): View
     {
         $user = auth()->user();

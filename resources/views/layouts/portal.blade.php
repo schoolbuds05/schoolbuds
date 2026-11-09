@@ -115,6 +115,7 @@
         ],
         'Staff' => [
             ['label' => 'Property', 'route' => 'property-custodian.dashboard', 'match' => 'property-custodian/dashboard', 'roles' => ['admin', 'property_custodian']],
+            ['label' => 'Assets', 'route' => 'property-custodian.assets', 'match' => 'property-custodian/assets*', 'roles' => ['admin', 'property_custodian']],
             ['label' => 'Market', 'route' => 'property-custodian.market', 'match' => 'property-custodian/market*', 'roles' => ['admin', 'property_custodian']],
             ['label' => 'Report', 'route' => 'property-custodian.reports', 'match' => 'property-custodian/reports*', 'roles' => ['admin', 'property_custodian']],
         ],
@@ -147,6 +148,7 @@
         'Report' => '<path d="M3 3v18h18" /><path d="M7 14v3m5-7v7m5-11v11" />',
         'Reports' => '<path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-5 5" />',
         'Property' => '<path d="M3 7h18v14H3zM5 7l2-4h10l2 4M8 11h8m-8 4h8" />',
+        'Assets' => '<path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" />',
     ];
 
     $portalGroupsForRole = match (true) {

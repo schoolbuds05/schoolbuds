@@ -14,7 +14,10 @@ use App\Models\StudentReward;
 use App\Models\StudentSubject;
 use App\Models\Subject;
 use App\Services\PointsService;
+use App\Services\GradeCsvTransferService;
+use App\Services\StudentGradeWorkbookService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -513,6 +516,179 @@ class StudentManageController extends Controller
         }
 
         return null;
+    }
+
+    public function workbookTemplate(StudentGradeWorkbookService $workbook)
+    {
+        $gradeHeaders = [
+            'student_number', 'program_type', 'subject_code', 'subject_name',
+            'school_year', 'semester', 'year_level', 'section', 'quarter', 'grade_value', 'remarks',
+        ];
+        $path = $workbook->createTemplate($this->studentCsvHeaders(), $gradeHeaders);
+        return response()->download($path, 'schoolbuds-students-and-grades-template.xlsx')
+            ->deleteFileAfterSend(true);
+    }
+
+    public function workbookSample(StudentGradeWorkbookService $workbook)
+    {
+        $headers = $this->studentCsvHeaders();
+        $suffix = Str::upper(Str::random(8));
+        $sampleStudents = [
+            [
+                'student_id' => "TEST-OLD-{$suffix}-1", 'first_name' => 'Alex', 'last_name' => 'Sample',
+                'middle_name' => 'One', 'birthdate' => '2005-04-12', 'gender' => 'male',
+                'address' => 'Test Address 1', 'father_name' => 'Sample Father', 'mother_name' => 'Sample Mother',
+                'student_type' => 'old_student', 'academic_status' => 'Regular', 'program_type' => 'college',
+                'course' => 'BS Information Technology', 'year_level' => '1', 'grade_level' => '1',
+                'school_year' => '2024-2025', 'semester' => '1st', 'section' => 'BSIT 1A',
+                'status' => 'active', 'application_status' => 'approved',
+            ],
+            [
+                'student_id' => "TEST-OLD-{$suffix}-2", 'first_name' => 'Jamie', 'last_name' => 'Example',
+                'middle_name' => 'Two', 'birthdate' => '2004-09-23', 'gender' => 'female',
+                'address' => 'Test Address 2', 'father_name' => 'Example Father', 'mother_name' => 'Example Mother',
+                'student_type' => 'old_student', 'academic_status' => 'Regular', 'program_type' => 'college',
+                'course' => 'BS Information Technology', 'year_level' => '2', 'grade_level' => '2',
+                'school_year' => '2024-2025', 'semester' => '1st', 'section' => 'BSIT 2A',
+                'status' => 'active', 'application_status' => 'approved',
+            ],
+        ];
+        $sampleRows = array_map(
+            fn ($student) => array_map(fn ($header) => $student[$header] ?? '', $headers),
+            $sampleStudents
+        );
+        $gradeHeaders = [
+            'student_number', 'program_type', 'subject_code', 'subject_name',
+            'school_year', 'semester', 'year_level', 'section', 'quarter', 'grade_value', 'remarks',
+        ];
+        $gradeRows = [
+            ["TEST-OLD-{$suffix}-1", 'college', 'IT101', 'Introduction to Programming', '2024-2025', '1st', '1', 'BSIT 1A', '1', '2.00', 'Sample imported grade'],
+            ["TEST-OLD-{$suffix}-1", 'college', 'IT102', 'Computer Systems and Programming', '2024-2025', '2nd', '1', 'BSIT 1A', '4', '2.25', 'Sample imported grade'],
+            ["TEST-OLD-{$suffix}-2", 'college', 'IT103', 'Data Structures and Algorithms', '2024-2025', '1st', '2', 'BSIT 2A', '1', '2.25', 'Sample imported grade'],
+        ];
+        $path = $workbook->createTemplate($headers, $gradeHeaders, $sampleRows, $gradeRows);
+        return response()->download($path, 'schoolbuds-student-import-sample.xlsx')
+            ->deleteFileAfterSend(true);
+    }
+
+    public function importWorkbook(Request $request, StudentGradeWorkbookService $workbook, GradeCsvTransferService $gradeTransfer)
+    {
+        abort_unless($request->user()?->hasAnyRole(['admin', 'registrar']), 403);
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx', 'max:10240']]);
+        try {
+            $sheets = $workbook->readSheets($request->file('file')->getRealPath());
+        } catch (\RuntimeException $exception) {
+            return back()->withErrors(['file' => $exception->getMessage()]);
+        }
+
+        $studentFile = $this->sheetCsvUpload($sheets['Students'], 'students-import.csv');
+        try {
+            $gradeFile = $this->gradeSheetCsvUpload($sheets['Grades']);
+        } catch (\Throwable $exception) {
+            if ($studentFile) @unlink($studentFile->getPathname());
+            throw $exception;
+        }
+        if (!$studentFile && !$gradeFile) {
+            return back()->withErrors(['file' => 'Add student records or grade records to the workbook before importing.']);
+        }
+
+        $studentCount = 0;
+        $gradeCount = 0;
+        try {
+            DB::transaction(function () use ($request, $studentFile, $gradeFile, $sheets, $gradeTransfer, &$studentCount, &$gradeCount) {
+                if ($studentFile) {
+                    $studentRequest = $request->duplicate();
+                    $studentRequest->setRouteResolver(fn () => $request->route());
+                    $studentRequest->files->set('file', $studentFile);
+                    $this->import($studentRequest);
+                    $studentCount = max(0, count($sheets['Students']) - 1);
+                }
+
+                if ($gradeFile) {
+                    $gradeCount = $gradeTransfer->import($gradeFile, $request->user());
+                }
+            });
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            if ($studentCount > 0 && $gradeFile) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'file' => 'The workbook import was rolled back because grade import failed: ' . collect($exception->errors())->flatten()->first(),
+                ]);
+            }
+            throw $exception;
+        } finally {
+            if ($studentFile) @unlink($studentFile->getPathname());
+            if ($gradeFile) @unlink($gradeFile->getPathname());
+        }
+
+        return redirect()->route($request->routeIs('registrar.*') ? 'registrar.students.index' : 'admin.students.index')
+            ->with('status', "Workbook imported: {$studentCount} student row(s), {$gradeCount} finalized grade(s).");
+    }
+
+    private function sheetCsvUpload(array $grid, string $filename): ?UploadedFile
+    {
+        if (count($grid) < 2) return null;
+        $path = tempnam(sys_get_temp_dir(), 'schoolbud-sheet-');
+        if ($path === false) throw new \RuntimeException('Could not prepare workbook data for import.');
+        $handle = fopen($path, 'w+b');
+        foreach ($grid as $row) fputcsv($handle, $row, ',', '"', '');
+        fclose($handle);
+        return new UploadedFile($path, $filename, 'text/csv', UPLOAD_ERR_OK, true);
+    }
+
+    private function gradeSheetCsvUpload(array $grid): ?UploadedFile
+    {
+        if (count($grid) < 2) return null;
+        $inputHeaders = array_map(fn ($header) => strtolower(trim((string) $header)), $grid[0]);
+        $required = ['student_number', 'program_type', 'subject_code', 'subject_name', 'school_year', 'semester', 'year_level', 'section', 'quarter', 'grade_value'];
+        $missing = array_diff($required, $inputHeaders);
+        if ($missing) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'file' => 'Grades tab is missing columns: ' . implode(', ', $missing),
+            ]);
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'schoolbud-grades-');
+        if ($path === false) throw new \RuntimeException('Could not prepare grade data for import.');
+        $handle = fopen($path, 'w+b');
+        $headers = [
+            'export_version', 'source_system', 'source_submission_id', 'source_class_id',
+            'source_student_id', 'student_number', 'student_name', 'program_type',
+            'subject_code', 'subject_name', 'school_year', 'semester', 'year_level',
+            'section', 'quarter', 'quarter_label', 'grade_record_type', 'grade_value',
+            'grade_scale', 'grade_scale_note', 'remarks', 'approval_status', 'finalized_at',
+        ];
+        fputcsv($handle, $headers, ',', '"', '');
+        $classReferences = [];
+        $recordNumber = 0;
+        foreach (array_slice($grid, 1) as $values) {
+            $row = [];
+            foreach ($inputHeaders as $index => $header) $row[$header] = trim((string) ($values[$index] ?? ''));
+            if (!array_filter($row, fn ($value) => $value !== '')) continue;
+            $recordNumber++;
+            $classKey = json_encode(array_map(fn ($key) => $row[$key] ?? '', ['program_type', 'subject_code', 'subject_name', 'school_year', 'semester', 'year_level', 'section']));
+            $classReferences[$classKey] ??= count($classReferences) + 1;
+            $isCollege = ($row['program_type'] ?? '') === 'college';
+            $quarter = (string) ($row['quarter'] ?? '');
+            $labels = $isCollege
+                ? ['1' => 'Prelim', '2' => 'Midterm', '3' => 'Prefinal', '4' => 'Final']
+                : ['1' => 'Q1', '2' => 'Q2', '3' => 'Q3', '4' => 'Q4'];
+            $student = Student::query()->where('student_id', $row['student_number'])->first(['first_name', 'last_name']);
+            fputcsv($handle, [
+                '2.0', 'Legacy system', $recordNumber, $classReferences[$classKey], $recordNumber,
+                $row['student_number'] ?? '', $student ? trim($student->first_name . ' ' . $student->last_name) : ($row['student_number'] ?? ''),
+                $row['program_type'] ?? '', $row['subject_code'] ?? '', $row['subject_name'] ?? '',
+                $row['school_year'] ?? '', $row['semester'] ?? '', $row['year_level'] ?? '', $row['section'] ?? '',
+                $quarter, $labels[$quarter] ?? ('Q' . $quarter), 'quarter_grade', $row['grade_value'] ?? '',
+                $isCollege ? 'college_1_to_5' : 'shs_1_to_100', $isCollege ? '1 is highest' : '100 is highest',
+                $row['remarks'] ?? '', 'finalized', now()->toIso8601String(),
+            ], ',', '"', '');
+        }
+        fclose($handle);
+        if ($recordNumber === 0) {
+            @unlink($path);
+            return null;
+        }
+        return new UploadedFile($path, 'grades-import.csv', 'text/csv', UPLOAD_ERR_OK, true);
     }
 
     private function studentCsvHeaders(): array

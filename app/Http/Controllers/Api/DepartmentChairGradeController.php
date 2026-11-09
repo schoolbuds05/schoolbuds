@@ -3,10 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Department;
 use App\Models\GradeChangeRequest;
 use App\Models\GradeSubmission;
-use App\Models\SchoolClass;
 use App\Models\Section;
 use App\Models\User;
 use App\Services\GradeChangeRequestService;
@@ -18,7 +16,8 @@ class DepartmentChairGradeController extends Controller
     public function index(Request $request)
     {
         $chair = $this->chair($request);
-        $classIds = $this->departmentClassIds($chair);
+        $department = $chair->academicDepartment()->firstOrFail();
+        $classIds = app(GradeWorkflowService::class)->classIdsForDepartment($department);
 
         $submissions = GradeSubmission::query()
             ->whereIn('school_class_id', $classIds)
@@ -96,44 +95,6 @@ class DepartmentChairGradeController extends Controller
         abort_unless($chair->department_id, 422, 'Assign this Department Chair to a department first.');
 
         return $chair;
-    }
-
-    private function departmentClassIds(User $chair)
-    {
-        $department = Department::query()->with('courses')->findOrFail($chair->department_id);
-        $sections = Section::query()
-            ->where('program_type', 'college')
-            ->whereIn('course', $department->courses->pluck('name'))
-            ->get();
-
-        if ($sections->isEmpty()) {
-            return collect();
-        }
-
-        return SchoolClass::query()
-            ->where(function ($query) use ($sections) {
-                foreach ($sections as $section) {
-                    $subjectNames = $section->sectionSubjects()
-                        ->with('subject:id,name')
-                        ->get()
-                        ->pluck('subject.name')
-                        ->filter()
-                        ->unique()
-                        ->values();
-
-                    if ($subjectNames->isEmpty()) {
-                        continue;
-                    }
-
-                    $query->orWhere(function ($classQuery) use ($section, $subjectNames) {
-                        $classQuery->where('section', $section->name)
-                            ->where('grade_level', $section->year_level)
-                            ->where('school_year', $section->school_year)
-                            ->whereIn('subject', $subjectNames);
-                    });
-                }
-            })
-            ->pluck('id');
     }
 
     private function submissionPayload(GradeSubmission $submission): array

@@ -45,13 +45,14 @@ class UserManageController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'email', 'max:255', 'ends_with:.com,.ph,.edu', 'unique:users,email'],
             'role' => ['required', Rule::in(User::ADMIN_MANAGEABLE_ROLES)],
             'position' => ['nullable', 'string', Rule::in($this->allowedPositions())],
             'department_id' => ['nullable', 'exists:departments,id', 'required_if:position,head_department'],
             'password' => ['required', 'string', 'min:6'],
         ], [
             'department_id.required_if' => 'Choose a department before assigning the Department Chair position.',
+            'email.ends_with' => 'The email address must end in .com, .ph, or .edu.',
         ]);
         $data['position'] = $this->positionForRole($data['role'], $data['position'] ?? null);
         $department = $this->departmentForPosition($data);
@@ -84,13 +85,14 @@ class UserManageController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'email' => ['required', 'email', 'max:255', 'ends_with:.com,.ph,.edu', Rule::unique('users', 'email')->ignore($user->id)],
             'role' => ['required', Rule::in(User::ADMIN_MANAGEABLE_ROLES)],
             'position' => ['nullable', 'string', Rule::in($this->allowedPositions())],
             'department_id' => ['nullable', 'exists:departments,id', 'required_if:position,head_department'],
             'password' => ['nullable', 'string', 'min:6'],
         ], [
             'department_id.required_if' => 'Choose a department before assigning the Department Chair position.',
+            'email.ends_with' => 'The email address must end in .com, .ph, or .edu.',
         ]);
         $data['position'] = $this->positionForRole($data['role'], $data['position'] ?? null);
         $department = $this->departmentForPosition($data);

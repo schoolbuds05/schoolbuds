@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Course;
 use App\Models\Department;
 use App\Models\Grade;
 use App\Models\GradeChangeRequest;
@@ -12,6 +11,7 @@ use App\Models\GradeSubmissionEvent;
 use App\Models\SchoolClass;
 use App\Models\SchoolNotification;
 use App\Models\Section;
+use App\Models\SectionSubject;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -283,16 +283,7 @@ class GradeChangeRequestService
 
     private function notifyChair(GradeChangeRequest $request, SchoolClass $class): void
     {
-        $section = $this->sectionForClass($class);
-        $departmentId = $section
-            ? Course::query()
-                ->where('name', $section->course)
-                ->where('program_type', 'college')
-                ->value('department_id')
-            : null;
-        $chairId = $departmentId
-            ? Department::query()->whereKey($departmentId)->value('chair_user_id')
-            : null;
+        $chairId = $this->sectionSubjectForClass($class)?->subject?->department?->chair_user_id;
 
         if (!$chairId) {
             throw ValidationException::withMessages(['submission' => 'Assign a Department Chair before submitting a grade change request.']);
@@ -343,35 +334,29 @@ class GradeChangeRequestService
         ]);
     }
 
-    private function sectionForClass(SchoolClass $class): ?Section
-    {
-        return Section::query()
-            ->where('program_type', 'college')
-            ->where('name', $class->section)
-            ->where('year_level', $class->grade_level)
-            ->where('school_year', $class->school_year)
-            ->first();
-    }
-
     private function classBelongsToDepartment(SchoolClass $class, ?Department $department): bool
     {
         if (!$department) {
             return false;
         }
 
-        $courseNames = $department->courses()->where('program_type', 'college')->pluck('name');
-        if ($courseNames->isEmpty()) {
-            return false;
-        }
+        $sectionSubject = $this->sectionSubjectForClass($class);
 
-        return Section::query()
-            ->where('program_type', 'college')
-            ->whereIn('course', $courseNames)
-            ->where('name', $class->section)
-            ->where('year_level', $class->grade_level)
-            ->where('school_year', $class->school_year)
-            ->whereHas('sectionSubjects', fn ($query) => $query
-                ->whereHas('subject', fn ($subjectQuery) => $subjectQuery->where('name', $class->subject)))
-            ->exists();
+        return $sectionSubject
+            && $sectionSubject->section?->program_type === 'college'
+            && (int) $sectionSubject->subject?->department_id === (int) $department->id;
+    }
+
+    private function sectionSubjectForClass(SchoolClass $class): ?SectionSubject
+    {
+        return SectionSubject::query()
+            ->with(['section', 'subject.department'])
+            ->whereHas('section', fn ($query) => $query
+                ->where('name', $class->section)
+                ->where('year_level', $class->grade_level)
+                ->where('school_year', $class->school_year))
+            ->whereHas('subject', fn ($query) => $query->where('name', $class->subject))
+            ->when($class->teacher_id, fn ($query) => $query->where('teacher_id', $class->teacher_id))
+            ->first();
     }
 }

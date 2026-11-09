@@ -27,7 +27,7 @@ class AdminStudentController extends Controller
         $search = trim((string) $request->query('search', ''));
         $status = $request->query('status');
 
-        $students = Student::query()
+        $query = Student::query()
             ->with(['user:id,name,email,role,created_at', 'parent:id,name,email,role'])
             ->when(in_array($status, ['active', 'inactive', 'graduated'], true), fn ($query) => $query->where('status', $status))
             ->when($search !== '', function ($query) use ($search) {
@@ -45,10 +45,31 @@ class AdminStudentController extends Controller
                 });
             })
             ->orderBy('last_name')
-            ->orderBy('first_name')
-            ->get();
+            ->orderBy('first_name');
 
-        return response()->json($students->map(fn (Student $student) => $this->studentPayload($student, $points)));
+        if ($request->user()->role !== 'admin' && !$request->user()->hasRole('admin')) {
+            $students = $query->get();
+            return response()->json($students->map(fn (Student $student) => $this->studentPayload($student, $points)));
+        }
+
+        $students = $query->paginate(min(max((int) $request->query('per_page', 15), 1), 100));
+        $statusCounts = Student::query()
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return response()->json([
+            'data' => $students->getCollection()->map(fn (Student $student) => $this->studentPayload($student, $points))->values(),
+            'current_page' => $students->currentPage(),
+            'last_page' => $students->lastPage(),
+            'per_page' => $students->perPage(),
+            'total' => $students->total(),
+            'status_counts' => [
+                'active' => (int) ($statusCounts['active'] ?? 0),
+                'inactive' => (int) ($statusCounts['inactive'] ?? 0),
+                'graduated' => (int) ($statusCounts['graduated'] ?? 0),
+            ],
+        ]);
     }
 
     public function update(Request $request, Student $student)

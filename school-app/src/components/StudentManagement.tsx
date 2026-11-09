@@ -49,8 +49,11 @@ export default function StudentManagement({ role }) {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState(role === 'registrar' || role === 'admin' ? 'active' : 'all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ currentPage: 1, lastPage: 1, total: 0 });
+  const [serverTotals, setServerTotals] = useState({ active: 0, inactive: 0, graduated: 0 });
   const [filters, setFilters] = useState({ yearLevel: '', schoolYear: '', course: '' });
   const [draftFilters, setDraftFilters] = useState({ yearLevel: '', schoolYear: '', course: '' });
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -68,16 +71,22 @@ export default function StudentManagement({ role }) {
   });
 
   const totals = useMemo(() => ({
-    active: students.filter(student => student.status === 'active').length,
-    inactive: students.filter(student => student.status === 'inactive').length,
-    graduated: students.filter(student => student.status === 'graduated').length,
-  }), [students]);
+    active: role === 'admin' ? serverTotals.active : students.filter(student => student.status === 'active').length,
+    inactive: role === 'admin' ? serverTotals.inactive : students.filter(student => student.status === 'inactive').length,
+    graduated: role === 'admin' ? serverTotals.graduated : students.filter(student => student.status === 'graduated').length,
+  }), [role, serverTotals, students]);
 
   const load = useCallback(async () => {
     try {
-      const params = {};
+      const params = role === 'admin' ? { page: currentPage, per_page: 15, status: statusFilter } : {};
+      if (role === 'admin' && debouncedSearch.trim()) params.search = debouncedSearch.trim();
       const res = await api.get(`/${role}/students`, { params });
-      setStudents(res.data || []);
+      const rows = role === 'admin' ? (res.data?.data || []) : (res.data || []);
+      setStudents(rows);
+      if (role === 'admin') {
+        setPagination({ currentPage: res.data.current_page || 1, lastPage: res.data.last_page || 1, total: res.data.total || 0 });
+        setServerTotals(res.data.status_counts || { active: 0, inactive: 0, graduated: 0 });
+      }
     } catch (e) {
       console.log(`${role} students error:`, e.message);
       Alert.alert('Could not load students', e.response?.data?.message || 'Please try again.');
@@ -85,10 +94,15 @@ export default function StudentManagement({ role }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [role]);
+  }, [role, currentPage, statusFilter, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setCurrentPage(1); }, [search, statusFilter]);
+  useEffect(() => {
+    if (role !== 'admin') return;
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [role, search]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, statusFilter]);
 
   const filterOptions = useMemo(() => ({
     yearLevels: [...new Set(students.map(student => String(student.grade_level ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
@@ -107,17 +121,12 @@ export default function StudentManagement({ role }) {
         return matchesSearch && matchesAcademicFilters && (statusFilter === 'all' || student.status === statusFilter);
       })
     : role === 'admin'
-      ? students.filter(student => {
-          const term = search.trim().toLowerCase();
-          const matchesSearch = !term || [student.student_id, student.first_name, student.last_name, student.email, student.grade_level, student.section]
-            .some(value => value?.toString().toLowerCase().includes(term));
-          return matchesSearch && (statusFilter === 'all' || student.status === statusFilter);
-        })
+      ? students
       : students;
 
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / 15));
-  const page = Math.min(currentPage, totalPages);
-  const visibleStudents = filteredStudents.slice((page - 1) * 15, page * 15);
+  const totalPages = role === 'admin' ? pagination.lastPage : Math.max(1, Math.ceil(filteredStudents.length / 15));
+  const page = role === 'admin' ? pagination.currentPage : Math.min(currentPage, totalPages);
+  const visibleStudents = role === 'admin' ? students : filteredStudents.slice((page - 1) * 15, page * 15);
   const pageNumbers = totalPages <= 5
     ? Array.from({ length: totalPages }, (_, index) => index + 1)
     : page <= 3
@@ -591,7 +600,7 @@ export default function StudentManagement({ role }) {
           {role === 'admin' && filteredStudents.length > 0 && (
             <View style={s.adminPagination}>
               <Text style={s.adminPaginationCount}>
-                Showing {(page - 1) * 15 + 1}-{Math.min(page * 15, filteredStudents.length)} of {filteredStudents.length}
+                Showing {(page - 1) * 15 + 1}-{Math.min(page * 15, pagination.total)} of {pagination.total}
               </Text>
               {totalPages > 1 && (
                 <View style={s.adminPageControls}>

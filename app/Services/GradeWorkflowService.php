@@ -415,26 +415,39 @@ class GradeWorkflowService
             ->first();
     }
 
+    public function classIdsForDepartment(Department $department): Collection
+    {
+        return SchoolClass::query()
+            ->whereExists(function ($query) use ($department) {
+                $query->selectRaw('1')
+                    ->from('sections')
+                    ->join('section_subjects', 'section_subjects.section_id', '=', 'sections.id')
+                    ->join('subjects', 'subjects.id', '=', 'section_subjects.subject_id')
+                    ->where('sections.program_type', 'college')
+                    ->where('subjects.department_id', $department->id)
+                    ->whereColumn('sections.name', 'school_classes.section')
+                    ->whereColumn('sections.year_level', 'school_classes.grade_level')
+                    ->whereColumn('sections.school_year', 'school_classes.school_year')
+                    ->whereColumn('subjects.name', 'school_classes.subject')
+                    ->where(function ($teacherQuery) {
+                        $teacherQuery->whereNull('school_classes.teacher_id')
+                            ->orWhereColumn('section_subjects.teacher_id', 'school_classes.teacher_id');
+                    });
+            })
+            ->pluck('id');
+    }
+
     private function classBelongsToDepartment(SchoolClass $class, ?Department $department): bool
     {
         if (!$department) {
             return false;
         }
 
-        $courseNames = $department->courses()->where('program_type', 'college')->pluck('name');
-        if ($courseNames->isEmpty()) {
-            return false;
-        }
+        $sectionSubject = $this->sectionSubjectForClass($class);
 
-        return Section::query()
-            ->where('program_type', 'college')
-            ->whereIn('course', $courseNames)
-            ->where('name', $class->section)
-            ->where('year_level', $class->grade_level)
-            ->where('school_year', $class->school_year)
-            ->whereHas('sectionSubjects', fn ($query) => $query
-                ->whereHas('subject', fn ($subjectQuery) => $subjectQuery->where('name', $class->subject)))
-            ->exists();
+        return $sectionSubject
+            && $sectionSubject->section?->program_type === 'college'
+            && (int) $sectionSubject->subject?->department_id === (int) $department->id;
     }
 
     private function recordEvent(
@@ -461,12 +474,7 @@ class GradeWorkflowService
     private function notifyChair(SchoolClass $class, GradeSubmission $submission, string $body): void
     {
         $sectionSubject = $this->sectionSubjectForClass($class);
-        $course = Course::query()
-            ->where('name', $sectionSubject?->section?->course)
-            ->where('program_type', 'college')
-            ->with('department')
-            ->first();
-        $chairId = $course?->department?->chair_user_id;
+        $chairId = $sectionSubject?->subject?->department?->chair_user_id;
 
         if ($chairId) {
             $this->notify($chairId, 'Grade sheet awaiting review', $body, $submission);

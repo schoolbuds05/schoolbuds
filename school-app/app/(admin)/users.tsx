@@ -54,25 +54,29 @@ export default function AdminUsers() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ currentPage: 1, lastPage: 1, total: 0 });
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
   const load = useCallback(async () => {
     try {
-      const params = {};
-      if (search.trim()) params.search = search.trim();
+      const params = { page: currentPage, per_page: 15 };
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+      if (roleFilter !== 'all') params.role = roleFilter;
 
-      const [res, dashboardRes] = await Promise.all([
+      const [res, summaryRes] = await Promise.all([
         api.get('/admin/users', { params }),
-        api.get('/admin/dashboard'),
+        api.get('/admin/users/summary'),
       ]);
-      setDashboardCounts(dashboardRes.data?.counts || {});
+      setDashboardCounts(summaryRes.data?.counts || {});
       const payload = res.data || [];
       const userRows = Array.isArray(payload) ? payload : (payload.users || []);
       setUsers(userRows.filter(user => STAFF_ROLE_VALUES.includes(normalizedRole(user.role))));
+      if (!Array.isArray(payload)) setPagination({ currentPage: payload.current_page || 1, lastPage: payload.last_page || 1, total: payload.total || 0 });
       if (!Array.isArray(payload) && payload.roles?.length) {
         setRoles(payload.roles.filter(option => STAFF_ROLE_VALUES.includes(option.value)).map(option => ({
           ...option,
@@ -95,10 +99,14 @@ export default function AdminUsers() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search]);
+  }, [currentPage, debouncedSearch, roleFilter]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setCurrentPage(1); }, [roleFilter, search]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+  useEffect(() => { setCurrentPage(1); }, [roleFilter, debouncedSearch]);
 
   const totals = {
     admin: dashboardCounts.admins ?? 0,
@@ -106,12 +114,10 @@ export default function AdminUsers() {
     faculty: (dashboardCounts.faculty ?? 0) + (dashboardCounts.head_teachers ?? 0) + (dashboardCounts.deans ?? 0),
     staff: (dashboardCounts.staff ?? 0) + (dashboardCounts.librarians ?? 0) + (dashboardCounts.property_custodians ?? 0),
   };
-  const filteredUsers = roleFilter === 'all'
-    ? users
-    : users.filter(user => normalizedRole(user.role) === roleFilter);
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / 15));
-  const page = Math.min(currentPage, totalPages);
-  const visibleUsers = filteredUsers.slice((page - 1) * 15, page * 15);
+  const filteredUsers = users;
+  const totalPages = pagination.lastPage;
+  const page = pagination.currentPage;
+  const visibleUsers = users;
   const pageNumbers = totalPages <= 5
     ? Array.from({ length: totalPages }, (_, index) => index + 1)
     : page <= 3
@@ -120,9 +126,7 @@ export default function AdminUsers() {
         ? [1, 'end-gap', totalPages - 2, totalPages - 1, totalPages]
         : [1, 'start-gap', page - 1, page, page + 1, 'end-gap', totalPages];
   const totalStaff = totals.admin + totals.registrar + totals.faculty + totals.staff;
-  const totalForCurrentFilter = search.trim()
-    ? filteredUsers.length
-    : roleFilter === 'all' ? totalStaff : (totals[roleFilter] ?? filteredUsers.length);
+  const totalForCurrentFilter = debouncedSearch.trim() ? pagination.total : (roleFilter === 'all' ? totalStaff : (totals[roleFilter] ?? pagination.total));
 
   const openCreate = () => {
     setEditing(null);
@@ -276,7 +280,7 @@ export default function AdminUsers() {
           contentContainerStyle={s.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
         >
-          {filteredUsers.length === 0 ? (
+          {visibleUsers.length === 0 ? (
             <View style={s.empty}>
               <Text style={s.emptyTitle}>No staff accounts found</Text>
               <Text style={s.emptySub}>Try another filter or add a staff account.</Text>
@@ -313,7 +317,7 @@ export default function AdminUsers() {
           })}
           {filteredUsers.length > 0 && (
             <View style={s.loadMoreRow}>
-              <Text style={[s.loadMoreText, { color: theme.textSub }]}>Showing {(page - 1) * 15 + 1}–{Math.min(page * 15, filteredUsers.length)} of {totalForCurrentFilter}</Text>
+              <Text style={[s.loadMoreText, { color: theme.textSub }]}>Showing {(page - 1) * 15 + 1}–{Math.min(page * 15, pagination.total)} of {totalForCurrentFilter}</Text>
               {totalPages > 1 && (
                 <View style={s.pagination}>
                   <TouchableOpacity accessibilityLabel="Previous page" disabled={page === 1} onPress={() => setCurrentPage(page - 1)} style={s.pageControl}>
