@@ -429,6 +429,7 @@ class EnrollmentController extends Controller
 
         // Pull extra details from their most recent approved application
         $app = EnrollmentApplication::where('user_id', $user->id)
+            ->where('id_no', $idNo)
             ->where('status', 'approved')
             ->latest()
             ->first();
@@ -468,6 +469,76 @@ class EnrollmentController extends Controller
             'course'              => $app?->course,
             'year_level'          => $app?->year_level,
             'semester'            => $app?->semester,
+        ]);
+    }
+
+    public function claimImportedStudentRecord(Request $request)
+    {
+        $data = $request->validate([
+            'id_no' => 'required|string|max:50',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'birthdate' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $user = $request->user();
+        abort_unless($user && ($user->role === User::ROLE_STUDENT || $user->hasRole(User::ROLE_STUDENT)), 403);
+
+        if (Student::query()->where('user_id', $user->id)->exists()) {
+            return response()->json([
+                'message' => 'This account is already linked to a student record. Please contact the registrar if that record is incorrect.',
+            ], 409);
+        }
+
+        $idNo = trim($data['id_no']);
+        $claimed = DB::transaction(function () use ($data, $idNo, $user) {
+            $student = Student::query()
+                ->where('student_id', $idNo)
+                ->whereNull('user_id')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$student
+                || !$student->birthdate
+                || substr((string) $student->birthdate, 0, 10) !== $data['birthdate']
+                || strcasecmp(trim($student->first_name), trim($data['first_name'])) !== 0
+                || strcasecmp(trim($student->last_name), trim($data['last_name'])) !== 0) {
+                return false;
+            }
+
+            if (Student::query()->where('user_id', $user->id)->exists()) {
+                abort(409, 'This account is already linked to a student record. Please contact the registrar.');
+            }
+
+            if (EnrollmentApplication::query()
+                ->where('id_no', $idNo)
+                ->where('status', 'approved')
+                ->whereNotNull('user_id')
+                ->where('user_id', '!=', $user->id)
+                ->exists()) {
+                abort(409, 'This student record is already linked to another account. Please contact the registrar.');
+            }
+
+            $student->user_id = $user->id;
+            $student->save();
+
+            EnrollmentApplication::query()
+                ->where('id_no', $idNo)
+                ->where('status', 'approved')
+                ->whereNull('user_id')
+                ->update(['user_id' => $user->id]);
+
+            return true;
+        });
+
+        if (!$claimed) {
+            return response()->json([
+                'message' => 'The student details did not match an unlinked record. Check the ID, name, and date of birth or contact the registrar.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Student record verified and linked to your account.',
         ]);
     }
 
@@ -1092,6 +1163,7 @@ class EnrollmentController extends Controller
 
             return 'The parent account was created, but its setup email could not be sent.';
         }
+
     }
 
     /**
@@ -1419,4 +1491,5 @@ class EnrollmentController extends Controller
             abort(403, 'Unauthorized.');
         }
     }
+
 }

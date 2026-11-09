@@ -10,6 +10,7 @@ use App\Models\Student;
 use App\Models\Grade;
 use App\Models\Attendance;
 use App\Models\Fee;
+use App\Models\SectionSubject;
 use App\Models\StudentReward;
 use App\Models\StudentSubject;
 use App\Models\Subject;
@@ -19,6 +20,7 @@ use App\Services\StudentGradeWorkbookService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -740,7 +742,7 @@ class StudentManageController extends Controller
             $middleName,
             $student->last_name,
         ])));
-        $subjects = $this->subjectsForStudent($student, $application);
+        $subjects = $this->subjectsForStudent($student, $application, $gradeRecords);
 
         $routePrefix = $request->routeIs('registrar.*') ? 'registrar' : 'admin';
 
@@ -932,7 +934,7 @@ class StudentManageController extends Controller
         return back()->with('status', $status === 'paid' ? 'Fee marked as paid.' : 'Partial payment recorded.');
     }
 
-    private function subjectsForStudent(Student $student, ?EnrollmentApplication $application): array
+    private function subjectsForStudent(Student $student, ?EnrollmentApplication $application, EloquentCollection $gradeRecords): array
     {
         $overrides = StudentSubject::query()
             ->where('user_id', $student->user_id)
@@ -949,20 +951,27 @@ class StudentManageController extends Controller
         $sectionSubjects = Section::query()
             ->whereHas('students', function ($query) use ($student) {
                 $query->where('users.id', $student->user_id)
-                    ->where('section_students.status', 'enrolled');
+                    ->whereIn('section_students.status', ['enrolled', 'completed']);
             })
-            ->with(['sectionSubjects.subject', 'sectionSubjects.teacher:id,name'])
+            ->with([
+                'students' => fn ($query) => $query->where('users.id', $student->user_id),
+                'sectionSubjects.subject',
+                'sectionSubjects.teacher:id,name',
+            ])
             ->get()
             ->flatMap(fn (Section $section) => $section->sectionSubjects
                 ->filter(fn ($sectionSubject) => ($overrides->get($this->subjectOverrideKey($section->id, $sectionSubject->subject?->id))?->status ?? 'enrolled') !== 'dropped'
                     && ($overrides->get($this->subjectOverrideKey(null, $sectionSubject->subject?->id))?->status ?? 'enrolled') !== 'dropped')
                 ->map(function ($sectionSubject) use ($section, $overrides) {
                 $override = $overrides->get($this->subjectOverrideKey($section->id, $sectionSubject->subject?->id));
+                $enrollmentStatus = $section->students->first()?->pivot?->status;
 
                 return [
                     'id' => $sectionSubject->subject?->id,
+                    'section_id' => $section->id,
                     'section_name' => $section->name,
                     'school_year' => $section->school_year,
+                    'semester' => $section->semester,
                     'program_type' => $section->program_type,
                     'code' => $sectionSubject->subject?->code,
                     'name' => $sectionSubject->subject?->name,
@@ -970,10 +979,47 @@ class StudentManageController extends Controller
                     'teacher' => $sectionSubject->teacher?->name,
                     'schedule' => trim(collect([$sectionSubject->day, trim(($sectionSubject->time_start ?: '') . '-' . ($sectionSubject->time_end ?: '')), $sectionSubject->room])->filter()->join(' · ')),
                     'source' => 'section',
-                    'status' => $override?->status ?? 'enrolled',
+                    'status' => $override?->status === 'completed' || $enrollmentStatus === 'completed'
+                        ? 'completed'
+                        : ($override?->status ?? 'enrolled'),
                     'drop_reason' => $override?->drop_reason,
                 ];
             }));
+
+        $importedSectionSubjects = SectionSubject::query()
+            ->whereIn('id', collect($application?->section_subject_ids ?? [])->map(fn ($id) => (int) $id)->filter()->unique())
+            ->with(['section', 'subject', 'teacher:id,name'])
+            ->get()
+            ->filter(fn (SectionSubject $sectionSubject) => $sectionSubject->subject
+                && ($overrides->get($this->subjectOverrideKey($sectionSubject->section_id, $sectionSubject->subject_id))?->status ?? 'enrolled') !== 'dropped'
+                && ($overrides->get($this->subjectOverrideKey(null, $sectionSubject->subject_id))?->status ?? 'enrolled') !== 'dropped')
+            ->map(function (SectionSubject $sectionSubject) use ($overrides) {
+                $section = $sectionSubject->section;
+                $subject = $sectionSubject->subject;
+                $override = $overrides->get($this->subjectOverrideKey($sectionSubject->section_id, $subject->id));
+
+                return [
+                    'id' => $subject->id,
+                    'section_id' => $section?->id,
+                    'section_name' => $section?->name ?? 'Direct enrollment',
+                    'school_year' => $section?->school_year,
+                    'semester' => $section?->semester,
+                    'program_type' => $section?->program_type ?? $subject->program_type,
+                    'code' => $subject->code,
+                    'name' => $subject->name,
+                    'units' => (int) ($subject->units_lec ?? 0) + (int) ($subject->units_lab ?? 0),
+                    'teacher' => $sectionSubject->teacher?->name,
+                    'schedule' => trim(collect([$sectionSubject->day, trim(($sectionSubject->time_start ?: '') . '-' . ($sectionSubject->time_end ?: '')), $sectionSubject->room])->filter()->join(' · ')),
+                    'source' => 'section',
+                    'status' => $override?->status ?? 'enrolled',
+                    'drop_reason' => $override?->drop_reason,
+                ];
+            });
+
+        $sectionSubjects = $sectionSubjects
+            ->concat($importedSectionSubjects)
+            ->unique(fn (array $subject) => ($subject['section_id'] ?? 'direct') . ':' . $subject['id'])
+            ->values();
 
         $sectionSubjectIds = $sectionSubjects->pluck('id')->filter()->unique()->all();
         $directSubjectIds = collect($application?->subject_ids ?? [])
@@ -994,6 +1040,7 @@ class StudentManageController extends Controller
                     'id' => $subject->id,
                     'section_name' => 'Direct enrollment',
                     'school_year' => $application?->school_year,
+                    'semester' => $application?->semester,
                     'program_type' => $application?->program_type,
                     'code' => $subject->code,
                     'name' => $subject->name,
@@ -1006,9 +1053,85 @@ class StudentManageController extends Controller
                 ];
             });
 
+        $listedSubjects = $sectionSubjects->concat($directSubjects);
+        $gradeGroups = $gradeRecords
+            ->filter(fn (Grade $grade) => $grade->schoolClass && trim((string) $grade->schoolClass->subject) !== '')
+            ->groupBy(fn (Grade $grade) => implode('|', [
+                strtolower(trim((string) $grade->schoolClass->subject)),
+                strtolower(trim((string) $grade->schoolClass->section)),
+                (string) $grade->school_year,
+            ]));
+        $gradeSubjectNames = $gradeGroups
+            ->map(fn ($grades) => trim((string) $grades->first()->schoolClass->subject))
+            ->unique()
+            ->values();
+        $gradeSubjectLookup = Subject::query()
+            ->where(fn ($query) => $query
+                ->whereIn('name', $gradeSubjectNames)
+                ->orWhereIn('code', $gradeSubjectNames))
+            ->get()
+            ->flatMap(fn (Subject $subject) => [
+                strtolower(trim($subject->name)) => $subject,
+                strtolower(trim($subject->code)) => $subject,
+            ]);
+
+        $gradeSubjects = $gradeGroups
+            ->map(function ($grades) use ($application, $listedSubjects, $gradeSubjectLookup) {
+                /** @var Grade $grade */
+                $grade = $grades->first();
+                $schoolClass = $grade->schoolClass;
+                $classSubject = trim((string) $schoolClass->subject);
+                $classSection = trim((string) $schoolClass->section);
+                $schoolYear = (string) $grade->school_year;
+
+                $alreadyListed = $listedSubjects->contains(function (array $subject) use ($classSubject, $classSection, $schoolYear) {
+                    $sameSubject = strcasecmp($classSubject, trim((string) $subject['name'])) === 0
+                        || strcasecmp($classSubject, trim((string) $subject['code'])) === 0;
+
+                    return $sameSubject
+                        && (empty($subject['school_year']) || (string) $subject['school_year'] === $schoolYear)
+                        && (($subject['source'] ?? '') !== 'section'
+                            || strcasecmp($classSection, trim((string) $subject['section_name'])) === 0);
+                });
+
+                if ($alreadyListed) {
+                    return null;
+                }
+
+                $subject = $gradeSubjectLookup->get(strtolower($classSubject));
+
+                return [
+                    'id' => $subject?->id,
+                    'section_id' => null,
+                    'section_name' => $classSection,
+                    'school_year' => $schoolYear,
+                    'semester' => null,
+                    'program_type' => $subject?->program_type ?? $application?->program_type,
+                    'code' => $subject?->code,
+                    'name' => $subject?->name ?? $classSubject,
+                    'units' => $subject
+                        ? (int) ($subject->units_lec ?? 0) + (int) ($subject->units_lab ?? 0)
+                        : null,
+                    'teacher' => null,
+                    'schedule' => '',
+                    'source' => 'grade',
+                    'status' => 'completed',
+                    'drop_reason' => null,
+                ];
+            })
+            ->filter()
+            ->values();
+
         return $sectionSubjects
             ->concat($directSubjects)
-            ->filter(fn ($subject) => $subject['id'])
+            ->concat($gradeSubjects)
+            ->filter(fn ($subject) => $subject['name'])
+            ->unique(fn (array $subject) => implode('|', [
+                strtolower(trim((string) ($subject['name'] ?? ''))),
+                strtolower(trim((string) ($subject['section_name'] ?? ''))),
+                (string) ($subject['school_year'] ?? ''),
+                (string) ($subject['semester'] ?? ''),
+            ]))
             ->values()
             ->all();
     }

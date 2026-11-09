@@ -206,6 +206,11 @@ export default function EnrollmentScreen() {
   const [documents, setDocuments] = useState([]);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupMessage, setLookupMessage] = useState('');
+  const [claimAvailable, setClaimAvailable] = useState(false);
+  const [claimFirstName, setClaimFirstName] = useState('');
+  const [claimLastName, setClaimLastName] = useState('');
+  const [claimBirthdate, setClaimBirthdate] = useState('');
+  const [claimLoading, setClaimLoading] = useState(false);
 
   const set = useCallback((key, val) => setForm(p => ({ ...p, [key]: val })), []);
 
@@ -379,7 +384,7 @@ export default function EnrollmentScreen() {
     }));
   };
 
-  const lookupExistingStudent = async (studentId, user = authenticatedUser) => {
+  async function lookupExistingStudent(studentId, user = authenticatedUser) {
     const idNo = studentId.trim();
     if (!idNo) {
       return Alert.alert('Required', 'Enter a student ID number to look up.');
@@ -413,30 +418,70 @@ export default function EnrollmentScreen() {
       }
 
       setExistingStudent(student);
+      setClaimAvailable(false);
       fillExistingStudent(student);
       setLookupMessage('Existing student found. Personal details have been prefilled.');
-    } catch {
+    } catch (error) {
       setExistingStudent(null);
-      setLookupMessage('Student lookup failed. Please try again.');
+      if (error.response?.status === 404) {
+        setClaimAvailable(true);
+        setLookupMessage('This record is not linked to your account. If it was imported, you can verify ownership below.');
+      } else {
+        setLookupMessage(error.response?.data?.message || 'Student lookup failed. Please try again.');
+      }
     } finally {
       setLookupLoading(false);
     }
-  };
+  }
 
   const handleLookupStudent = async () => {
     await lookupExistingStudent(form.id_no);
+  };
+
+  const claimImportedStudentRecord = async () => {
+    const idNo = form.id_no.trim();
+    if (!idNo) return Alert.alert('Required', 'Enter a student ID number first.');
+
+    if (!claimFirstName.trim() || !claimLastName.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(claimBirthdate)) {
+      return Alert.alert('Required details', 'Enter the student’s exact first and last name and full date of birth.');
+    }
+
+    setClaimLoading(true);
+    try {
+      await api.post('/enrollment/claim', {
+        id_no: idNo,
+        first_name: claimFirstName.trim(),
+        last_name: claimLastName.trim(),
+        birthdate: claimBirthdate,
+      });
+      setClaimAvailable(false);
+      setLookupMessage('Student record verified. Loading your details…');
+      await lookupExistingStudent(idNo);
+    } catch (error) {
+      setLookupMessage(error.response?.data?.message || 'Unable to verify the student details. Please contact the registrar.');
+    } finally {
+      setClaimLoading(false);
+    }
   };
 
   useEffect(() => {
     if (form.student_type !== 'old_student') {
       setExistingStudent(null);
       setLookupMessage('');
+      setClaimAvailable(false);
+      setClaimFirstName('');
+      setClaimLastName('');
+      setClaimBirthdate('');
     }
   }, [form.student_type]);
 
   useEffect(() => {
     setExistingStudent(null);
     setLookupMessage('');
+    setClaimAvailable(false);
+    setClaimFirstName('');
+    setClaimLastName('');
+    setClaimBirthdate('');
   }, [form.id_no]);
 
   // Reset course/strand when switching program type
@@ -1069,6 +1114,46 @@ export default function EnrollmentScreen() {
                 }
               </TouchableOpacity>
               {lookupMessage ? <Text style={s.lookupMessage}>{lookupMessage}</Text> : null}
+              {claimAvailable ? (
+                <View style={s.claimBox}>
+                  <Text style={s.claimHelp}>To verify an imported record, enter the student’s exact details as recorded by the school.</Text>
+                  <TextInput
+                    style={s.input}
+                    value={claimFirstName}
+                    onChangeText={setClaimFirstName}
+                    placeholder="Student first name"
+                    autoCapitalize="words"
+                    accessibilityLabel="Student first name for record verification"
+                  />
+                  <TextInput
+                    style={[s.input, { marginTop: 8 }]}
+                    value={claimLastName}
+                    onChangeText={setClaimLastName}
+                    placeholder="Student last name"
+                    autoCapitalize="words"
+                    accessibilityLabel="Student last name for record verification"
+                  />
+                  <TextInput
+                    style={[s.input, { marginTop: 8 }]}
+                    value={claimBirthdate}
+                    onChangeText={setClaimBirthdate}
+                    placeholder="Date of birth (YYYY-MM-DD)"
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={10}
+                    accessibilityLabel="Student date of birth for record verification"
+                  />
+                  <TouchableOpacity
+                    style={[s.lookupBtn, s.claimBtn]}
+                    onPress={claimImportedStudentRecord}
+                    disabled={claimLoading}
+                  >
+                    {claimLoading
+                      ? <ActivityIndicator color={C.primary} />
+                      : <Text style={s.claimBtnText}>Verify and Link Record</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               {existingStudent ? (
                 <View style={s.lookupResult}>
                   <Text style={s.lookupResultText}>
@@ -1740,6 +1825,10 @@ const s = StyleSheet.create({
   lookupBtn:     { backgroundColor: C.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', marginTop: 10, marginBottom: 8 },
   lookupBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   lookupMessage: { fontSize: 13, color: C.accent, marginBottom: 8, fontStyle: 'italic' },
+  claimBtn:      { backgroundColor: '#EEF4FF', borderWidth: 1, borderColor: C.primary },
+  claimBtnText:  { color: C.primary, fontSize: 15, fontWeight: '700' },
+  claimBox:      { marginTop: 8, padding: 12, backgroundColor: '#F6F8FC', borderRadius: 10 },
+  claimHelp:     { fontSize: 13, color: C.subtext, marginBottom: 8 },
   lookupResult:  { backgroundColor: '#FFF3E0', borderRadius: 10, padding: 12, marginTop: 8, borderLeftWidth: 4, borderLeftColor: C.accent },
   lookupResultText: { fontSize: 13, color: C.text, fontWeight: '600' },
 
