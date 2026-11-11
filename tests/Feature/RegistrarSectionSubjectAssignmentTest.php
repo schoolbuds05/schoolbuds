@@ -35,7 +35,7 @@ class RegistrarSectionSubjectAssignmentTest extends TestCase
             ->get(route('registrar.sections.index'))
             ->assertOk()
             ->assertSee('Select one or more subjects')
-            ->assertSee('Set teacher or edit schedule');
+            ->assertSee('You can leave the teacher blank and assign teachers to each subject later.');
 
         $this->post(route('registrar.sections.subjects.store', $section), [
             'subject_ids' => [$math->id, $english->id],

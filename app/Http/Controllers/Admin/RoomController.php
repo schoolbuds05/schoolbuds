@@ -12,6 +12,34 @@ class RoomController extends Controller
 {
     use AuthorizesPortal;
 
+    public function apiIndex(Request $request)
+    {
+        $this->requireAnyRole($request, ['admin']);
+
+        return response()->json(Room::query()->orderBy('name')->get());
+    }
+
+    public function apiStore(Request $request)
+    {
+        $this->requireAnyRole($request, ['admin']);
+        $data = $this->validated($request);
+        $data['name'] = trim($data['name']);
+        $data['is_active'] = $request->boolean('is_active');
+
+        return response()->json(Room::create($data), 201);
+    }
+
+    public function apiUpdate(Request $request, Room $room)
+    {
+        $this->requireAnyRole($request, ['admin']);
+        $data = $this->validated($request, $room);
+        $data['name'] = trim($data['name']);
+        $data['is_active'] = $request->boolean('is_active');
+        $room->update($data);
+
+        return response()->json($room->fresh());
+    }
+
     public function index(Request $request)
     {
         $this->requireAnyRole($request, ['admin', 'registrar']);

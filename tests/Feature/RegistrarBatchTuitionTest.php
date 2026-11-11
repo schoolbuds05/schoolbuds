@@ -59,7 +59,7 @@ class RegistrarBatchTuitionTest extends TestCase
 
         $this->actingAs($admin)
             ->get(route('registrar.tuition.index'))
-            ->assertRedirect(route('login'));
+            ->assertForbidden();
     }
 
     private function createStudent(string $studentId, string $section): Student

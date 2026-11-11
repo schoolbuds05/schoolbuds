@@ -144,6 +144,9 @@ class EnrollmentPrerequisiteTest extends TestCase
         Schema::create('enrollment_applications', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('first_name')->nullable();
+            $table->string('middle_name')->nullable();
+            $table->string('last_name')->nullable();
             $table->string('school_year');
             $table->string('semester');
             $table->string('status');
@@ -258,7 +261,7 @@ class EnrollmentPrerequisiteTest extends TestCase
             ->assertJsonPath('outstanding_subjects.0', $subject->code);
 
         $this->actingAs($user)
-            ->postJson('/api/enrollment', [])
+            ->postJson('/api/enrollment', ['student_type' => 'old_student'])
             ->assertUnprocessable()
             ->assertJsonPath('outstanding_subjects.0', $subject->code);
     }

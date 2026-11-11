@@ -40,6 +40,7 @@ class AuthenticatedSessionController extends Controller
             User::ROLE_ADMIN,
             User::ROLE_REGISTRAR,
             User::ROLE_FACULTY,
+            User::POSITION_HEAD_DEPARTMENT,
         ], true) || in_array($user->position, User::POSITIONS[User::ROLE_FACULTY], true) || $isPropertyCustodian;
 
         if (!$isAllowedWebUser) {
@@ -55,7 +56,9 @@ class AuthenticatedSessionController extends Controller
         $route = match (true) {
             $user->role === User::ROLE_ADMIN => route('admin.dashboard'),
             $user->role === User::ROLE_REGISTRAR => route('registrar.dashboard'),
-            $user->role === User::ROLE_FACULTY || in_array($user->position, User::POSITIONS[User::ROLE_FACULTY], true) => route('teacher.dashboard'),
+            $user->role === User::ROLE_FACULTY
+                || $user->role === User::POSITION_HEAD_DEPARTMENT
+                || in_array($user->position, User::POSITIONS[User::ROLE_FACULTY], true) => route('teacher.dashboard'),
             $isPropertyCustodian => route('property-custodian.dashboard'),
         };
 

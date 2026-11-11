@@ -6,6 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class SchoolClass extends Model
 {
+    protected $fillable = [
+        'name',
+        'subject',
+        'grade_level',
+        'section',
+        'school_year',
+        'teacher_id',
+        'room',
+        'schedule',
+    ];
+
     protected $appends = ['is_college'];
 
     public function teacher()

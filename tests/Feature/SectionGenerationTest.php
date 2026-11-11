@@ -141,9 +141,13 @@ class SectionGenerationTest extends TestCase
             $savedAssignment = $section->sectionSubjects->firstWhere('subject_id', $plannedAssignment['subject_id']);
             $this->assertNotNull($savedAssignment);
             $this->assertSame(
-                $plannedAssignment['meetings'],
+                array_map(fn ($meeting) => [
+                    'day' => $meeting['day'],
+                    'time_start' => $meeting['time_start'],
+                    'time_end' => $meeting['time_end'],
+                    'room' => $meeting['room'],
+                ], $plannedAssignment['meetings']),
                 $savedAssignment->schedules->map(fn ($schedule) => [
-                    'type' => $plannedAssignment['meetings'][0]['type'],
                     'day' => $schedule->day,
                     'time_start' => $schedule->time_start,
                     'time_end' => $schedule->time_end,

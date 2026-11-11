@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ArchiveController;
 use App\Http\Controllers\Admin\DepartmentController;
+use App\Http\Controllers\Admin\RoomController;
 use App\Http\Controllers\TeachingEligibilityController;
 use App\Http\Controllers\SectionGenerationController;
 use App\Http\Controllers\Api\AuthController;
@@ -255,6 +256,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Admin
     Route::middleware('role:admin')->group(function () {
         Route::get('/admin/departments', [DepartmentController::class, 'apiIndex']);
+        Route::get('/admin/rooms', [RoomController::class, 'apiIndex']);
+        Route::post('/admin/rooms', [RoomController::class, 'apiStore']);
+        Route::put('/admin/rooms/{room}', [RoomController::class, 'apiUpdate']);
         Route::get('/admin/archive', [ArchiveController::class, 'apiIndex']);
         Route::post('/admin/archive/{archive}/restore', [ArchiveController::class, 'apiRestore']);
         Route::get('/admin/dashboard',      [AdminUserController::class, 'dashboard']);

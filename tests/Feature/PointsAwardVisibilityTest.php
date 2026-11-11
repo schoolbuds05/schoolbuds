@@ -53,6 +53,22 @@ class PointsAwardVisibilityTest extends TestCase
             $table->string('semester');
             $table->timestamps();
         });
+
+        Schema::create('activity_logs', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('actor_name')->nullable();
+            $table->string('actor_email')->nullable();
+            $table->string('actor_role')->nullable();
+            $table->string('action');
+            $table->text('description');
+            $table->string('subject_type')->nullable();
+            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->json('meta')->nullable();
+            $table->timestamps();
+        });
     }
 
     protected function tearDown(): void
@@ -60,6 +76,7 @@ class PointsAwardVisibilityTest extends TestCase
         Schema::dropIfExists('student_rewards');
         Schema::dropIfExists('academic_terms');
         Schema::dropIfExists('students');
+        Schema::dropIfExists('activity_logs');
 
         parent::tearDown();
     }

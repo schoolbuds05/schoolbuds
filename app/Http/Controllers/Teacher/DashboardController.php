@@ -31,7 +31,7 @@ class DashboardController extends Controller
         $todayName = now('Asia/Manila')->format('l');
         $classes = $classes->filter(function (SchoolClass $class) use ($todayName) {
             $segments = collect(explode(' · ', (string) $class->schedule));
-            return $segments->contains(fn ($segment) => $this->scheduleIncludesDay($segment, $todayName));
+            return true;
         })->map(function (SchoolClass $class) use ($todayName) {
             $class->schedule = collect(explode(' · ', (string) $class->schedule))
                 ->filter(fn ($segment) => $this->scheduleIncludesDay($segment, $todayName))

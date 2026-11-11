@@ -54,7 +54,9 @@ $redirectToPortalDashboard = function ($user) {
     return match (true) {
         $user->role === User::ROLE_ADMIN => redirect('/admin/dashboard'),
         $user->role === User::ROLE_REGISTRAR => redirect('/registrar/dashboard'),
-        $user->role === User::ROLE_FACULTY || in_array($user->position, User::POSITIONS[User::ROLE_FACULTY], true) => redirect('/teacher/dashboard'),
+        $user->role === User::ROLE_FACULTY
+            || $user->role === User::POSITION_HEAD_DEPARTMENT
+            || in_array($user->position, User::POSITIONS[User::ROLE_FACULTY], true) => redirect('/teacher/dashboard'),
         $isPropertyCustodian => redirect('/property-custodian/dashboard'),
         default => redirect('/login'),
     };
@@ -74,6 +76,7 @@ Route::get('/', function () use ($redirectToPortalDashboard) {
         User::ROLE_ADMIN,
         User::ROLE_REGISTRAR,
         User::ROLE_FACULTY,
+        User::POSITION_HEAD_DEPARTMENT,
     ], true) || $isPropertyCustodian;
 
     if (!$isAllowedWebUser) {
@@ -97,6 +100,7 @@ Route::get('/dashboard', function () use ($redirectToPortalDashboard) {
         User::ROLE_ADMIN,
         User::ROLE_REGISTRAR,
         User::ROLE_FACULTY,
+        User::POSITION_HEAD_DEPARTMENT,
     ], true) || $isPropertyCustodian;
 
     if (!$isAllowedWebUser) {

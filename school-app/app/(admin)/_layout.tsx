@@ -143,6 +143,8 @@ export default function AdminLayout() {
         name="market"
         options={{ tabBarItemStyle: { display: 'none' } }}
       />
+      <Tabs.Screen name="fees" options={{ tabBarItemStyle: { display: 'none' } }} />
+      <Tabs.Screen name="rooms" options={{ tabBarItemStyle: { display: 'none' } }} />
       <Tabs.Screen
         name="archived"
         options={{ tabBarItemStyle: { display: 'none' } }}

@@ -147,7 +147,7 @@ class PointsConfigurationTest extends TestCase
         app(SystemControlController::class)->storePoints($request, app(PointsConfiguration::class));
 
         $this->assertSame(180, app(PointsConfiguration::class)->get('semester_cap'));
-        $this->assertSame('points_configuration_updated', ActivityLog::firstOrFail()->action);
-        $this->assertSame(180, ActivityLog::firstOrFail()->meta['after']['semester_cap']);
+        $log = ActivityLog::query()->where('action', 'points_configuration_updated')->firstOrFail();
+        $this->assertSame(180, $log->meta['after']['semester_cap']);
     }
 }

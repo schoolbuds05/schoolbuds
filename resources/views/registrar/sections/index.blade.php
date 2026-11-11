@@ -919,7 +919,11 @@
                 modal.classList.add('hidden'); modal.classList.remove('flex');
                 return;
             }
-            const index = list.querySelectorAll('[data-meeting-row]').length;
+            const usedIndexes = Array.from(list.querySelectorAll('[data-meeting-row] input[name]'))
+                .map((input) => input.name.match(/^schedules\[(\d+)\]/))
+                .filter(Boolean)
+                .map((match) => Number(match[1]));
+            const index = usedIndexes.length ? Math.max(...usedIndexes) + 1 : 0;
             const row = document.createElement('div');
             row.className = 'grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3';
             row.dataset.meetingRow = 'true';

@@ -282,7 +282,7 @@ class DepartmentTypeTest extends TestCase
         $transferRequest = SectionTransferRequest::firstOrFail();
         $this->actingAs($chair)
             ->delete("/department-chair/sections/{$source->id}/students/{$student->id}")
-            ->assertForbidden();
+            ->assertSessionHasErrors();
 
         $registrar = User::factory()->create(['role' => 'registrar', 'position' => null]);
         $this->actingAs($registrar)

@@ -20,7 +20,7 @@ class AuthenticationTest extends TestCase
 
     public function test_users_can_authenticate_using_the_login_screen(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN]);
 
         $response = $this->post('/login', [
             'email' => $user->email,
@@ -28,7 +28,7 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('dashboard', absolute: false));
+        $response->assertRedirect(route('admin.dashboard', absolute: false));
     }
 
     public function test_mobile_api_login_is_labeled_in_the_activity_log(): void

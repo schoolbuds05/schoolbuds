@@ -13,7 +13,7 @@ class MySqlGrammarCompatibilityTest extends TestCase
         $grammar = new MySqlGrammar($this->createMock(Connection::class));
 
         $this->assertSame(
-            'select count(*) as `Value` from information_schema.processlist',
+            "select variable_value as `Value` from performance_schema.session_status where variable_name = 'threads_connected'",
             $grammar->compileThreadCount()
         );
     }

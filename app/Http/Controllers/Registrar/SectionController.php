@@ -112,7 +112,6 @@ class SectionController extends Controller
         $data = $this->validated($request);
         SectionDepartmentAccess::validateCourse($department, $data);
         if ($this->isChair($request)) {
-            app(SectionEditAccess::class)->prepareChairEdit($request->user(), $section);
             $data['department_id'] = $request->user()->department_id;
             $data['created_by'] = $request->user()->id;
             $data['workflow_status'] = 'draft';

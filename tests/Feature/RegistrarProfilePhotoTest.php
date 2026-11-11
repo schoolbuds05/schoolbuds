@@ -68,7 +68,10 @@ class RegistrarProfilePhotoTest extends TestCase
         $this->actingAs($user)
             ->from(route('registrar.profile.show'))
             ->post(route('registrar.profile.photo.update'), [
-                'profile_photo' => UploadedFile::fake()->image('registrar.png'),
+                'profile_photo' => UploadedFile::fake()->createWithContent(
+                    'registrar.png',
+                    base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+c9WQAAAAASUVORK5CYII=')
+                ),
             ])
             ->assertRedirect(route('registrar.profile.show'))
             ->assertSessionHasNoErrors();

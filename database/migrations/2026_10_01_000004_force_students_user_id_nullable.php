@@ -7,7 +7,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('ALTER TABLE students MODIFY user_id BIGINT UNSIGNED NULL');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE students MODIFY user_id BIGINT UNSIGNED NULL');
+        }
     }
 
     public function down(): void
@@ -16,6 +18,8 @@ return new class extends Migration
             throw new \RuntimeException('Cannot require student accounts while account-less student records exist.');
         }
 
-        DB::statement('ALTER TABLE students MODIFY user_id BIGINT UNSIGNED NOT NULL');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE students MODIFY user_id BIGINT UNSIGNED NOT NULL');
+        }
     }
 };

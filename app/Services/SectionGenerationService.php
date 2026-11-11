@@ -275,8 +275,8 @@ class SectionGenerationService
                     ];
                     $key = json_encode([
                         $meeting['day'],
-                        $meeting['time_start'],
-                        $meeting['time_end'],
+                        $this->schedules->minutes($meeting['time_start']) ?? strtolower(trim((string) $meeting['time_start'])),
+                        $this->schedules->minutes($meeting['time_end']) ?? strtolower(trim((string) $meeting['time_end'])),
                         strtolower($meeting['room']),
                     ]);
                     if (isset($seen[$key])) {

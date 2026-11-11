@@ -42,12 +42,6 @@ class DepartmentTeacherAssignmentTest extends TestCase
         ]);
         $admin->assignRole(User::ROLE_ADMIN);
 
-        $department = Department::create([
-            'name' => 'Computer Science',
-            'code' => 'CS',
-            'is_active' => true,
-        ]);
-
         $teacherOne = User::factory()->create([
             'role' => User::ROLE_FACULTY,
             'position' => User::POSITION_TEACHER,
@@ -69,6 +63,7 @@ class DepartmentTeacherAssignmentTest extends TestCase
         ]);
 
         $response->assertRedirect();
+        $department = Department::where('code', 'CS')->firstOrFail();
         $this->assertDatabaseHas('users', ['id' => $teacherOne->id, 'department_id' => $department->id]);
         $this->assertDatabaseHas('users', ['id' => $teacherTwo->id, 'department_id' => $department->id]);
     }

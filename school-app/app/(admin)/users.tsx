@@ -109,10 +109,10 @@ export default function AdminUsers() {
   useEffect(() => { setCurrentPage(1); }, [roleFilter, debouncedSearch]);
 
   const totals = {
-    admin: dashboardCounts.admins ?? 0,
-    registrar: dashboardCounts.registrars ?? 0,
-    faculty: (dashboardCounts.faculty ?? 0) + (dashboardCounts.head_teachers ?? 0) + (dashboardCounts.deans ?? 0),
-    staff: (dashboardCounts.staff ?? 0) + (dashboardCounts.librarians ?? 0) + (dashboardCounts.property_custodians ?? 0),
+    admin: dashboardCounts.admin ?? 0,
+    registrar: dashboardCounts.registrar ?? 0,
+    faculty: dashboardCounts.faculty ?? 0,
+    staff: dashboardCounts.staff ?? 0,
   };
   const filteredUsers = users;
   const totalPages = pagination.lastPage;

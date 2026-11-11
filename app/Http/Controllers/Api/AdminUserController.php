@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Fee;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\ArchiveService;
 use Illuminate\Http\Request;
@@ -42,7 +43,7 @@ class AdminUserController extends Controller
                 'staff'      => (int) ($counts['staff'] ?? 0),
                 'librarians' => (int) ($positionCounts['librarian'] ?? 0),
                 'property_custodians' => (int) ($positionCounts['property_custodian'] ?? 0),
-                'students'   => (int) ($counts['student'] ?? 0),
+                'students'   => Student::query()->count(),
             ],
             'roles' => $this->roleOptions(),
             'positions' => $this->positionOptions(),

@@ -8,6 +8,8 @@ import api, { removeToken } from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 const ADMIN_TOOLS = [
+  { name: 'fees', label: 'Fees', description: 'Balances and payment verification', icon: 'cash-outline' },
+  { name: 'rooms', label: 'Rooms', description: 'Manage rooms and seating capacity', icon: 'business-outline' },
   { name: 'activity', label: 'Activity', description: 'Audit trail of every action', icon: 'time-outline' },
   { name: 'controls', label: 'Controls', description: 'Enrollment, terms and deadlines', icon: 'sunny-outline', status: true },
   { name: 'archived', label: 'Archive', description: 'Restore hidden records', icon: 'archive-outline' },

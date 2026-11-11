@@ -39,6 +39,7 @@ class TeachingEligibilityTest extends TestCase
 
     private function requestSubject(User $teacher, Subject $subject): TeacherSubjectEligibility
     {
+        $teacher->update(['department_id' => $subject->department_id]);
         $this->actingAs($teacher)->postJson('/api/teaching-eligibility/requests', [
             'subject_id' => $subject->id, 'qualification' => 'Mathematics degree and five years of teaching.',
         ])->assertCreated()->assertJsonPath('data.status', 'pending');
@@ -80,9 +81,9 @@ class TeachingEligibilityTest extends TestCase
         $this->actingAs($registrar)->getJson('/api/registrar/teaching-eligibility')
             ->assertOk()->assertJsonCount(1, 'rows.data')
             ->assertJsonPath('rows.data.0.id', $chairRequest->id);
-        $this->postJson("/api/teaching-eligibility/{$ordinaryRequest->id}/registrar-review", ['decision' => 'approve'])
+        $this->postJson("/api/registrar/teaching-eligibility/{$ordinaryRequest->id}/review", ['decision' => 'approve'])
             ->assertUnprocessable();
-        $this->postJson("/api/teaching-eligibility/{$chairRequest->id}/registrar-review", ['decision' => 'approve'])
+        $this->postJson("/api/registrar/teaching-eligibility/{$chairRequest->id}/review", ['decision' => 'approve'])
             ->assertOk()->assertJsonPath('data.status', 'approved')->assertJsonPath('data.reviewed_by', $registrar->id);
         $this->assertSame(1, TeacherSubjectEligibility::eligible()->count());
 
@@ -93,10 +94,10 @@ class TeachingEligibilityTest extends TestCase
         ]);
         $secondChair->update(['department_id' => $secondDepartment->id]);
         $secondChairRequest = $this->requestSubject($secondChair, $this->subject($secondDepartment));
-        $this->actingAs($otherRegistrar)->postJson("/api/teaching-eligibility/{$secondChairRequest->id}/registrar-review", [
+        $this->actingAs($otherRegistrar)->postJson("/api/registrar/teaching-eligibility/{$secondChairRequest->id}/review", [
             'decision' => 'reject',
         ])->assertUnprocessable();
-        $this->postJson("/api/teaching-eligibility/{$secondChairRequest->id}/registrar-review", [
+        $this->postJson("/api/registrar/teaching-eligibility/{$secondChairRequest->id}/review", [
             'decision' => 'reject', 'remarks' => 'Please provide updated qualifications.',
         ])->assertOk()->assertJsonPath('data.status', 'rejected');
     }
@@ -251,10 +252,10 @@ class TeachingEligibilityTest extends TestCase
         $courseSubject = $this->subject($department, 'BSIT');
         $admin = User::factory()->create(['role' => 'admin']);
 
-        $this->actingAs($admin)
-            ->get('/teaching-eligibility/subject-departments?department_id='.$department->id)
-            ->assertOk()
-            ->assertViewHas('rows', fn ($rows) => $rows->pluck('id')->all() === [$matchingSubject->id]);
+        $departmentResponse = $this->actingAs($admin)
+            ->get('/teaching-eligibility/subject-departments?subject_type=general&department_id='.$department->id)
+            ->assertOk();
+        $this->assertSame([$matchingSubject->id], $departmentResponse->viewData('rows')->pluck('id')->all());
 
         $this->get('/teaching-eligibility/subject-departments?department_id=unassigned')
             ->assertOk()

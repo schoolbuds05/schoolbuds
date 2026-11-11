@@ -124,7 +124,7 @@ export default function AdminDashboard() {
           </Svg>
           <View pointerEvents="none" style={s.donutCenter}>
             <Text style={[s.totalValue, { color: theme.text }]}>{totalUsers}</Text>
-            <Text style={[s.totalLabel, { color: theme.textSub }]}>Total users</Text>
+            <Text style={[s.totalLabel, { color: theme.textSub }]}>School community</Text>
           </View>
         </View>
         <View style={s.legend}>

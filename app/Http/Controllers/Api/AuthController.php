@@ -334,6 +334,7 @@ class AuthController extends Controller
             User::ROLE_FACULTY => [User::ROLE_FACULTY, $position ?: User::POSITION_TEACHER],
             User::ROLE_STAFF => [User::ROLE_STAFF, $position],
             User::ROLE_TEACHER => [User::ROLE_FACULTY, User::POSITION_TEACHER],
+            User::POSITION_HEAD_DEPARTMENT => [User::ROLE_FACULTY, User::POSITION_HEAD_DEPARTMENT],
             User::ROLE_HEAD_TEACHER => [User::ROLE_FACULTY, User::POSITION_HEAD_TEACHER],
             User::ROLE_DEAN => [User::ROLE_FACULTY, User::POSITION_DEAN],
             User::POSITION_LIBRARIAN => [User::ROLE_STAFF, User::POSITION_LIBRARIAN],

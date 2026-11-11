@@ -8,32 +8,49 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // This is a production data backfill. Fresh SQLite test databases have no
+        // legacy enrollment data, and older SQLite schemas may not have these columns.
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         if (!Schema::hasTable('students') || !Schema::hasTable('enrollment_applications')) {
             return;
         }
 
+        $columns = [
+            'father_name',
+            'father_occupation',
+            'mother_name',
+            'mother_occupation',
+            'prev_school',
+            'prev_school_address',
+            'student_type',
+            'academic_status',
+        ];
+        $columns = array_values(array_filter($columns, fn (string $column) =>
+            Schema::hasColumn('students', $column)
+            && Schema::hasColumn('enrollment_applications', $column)
+        ));
+
+        if ($columns === []) {
+            return;
+        }
+
+        $updates = [];
+        foreach ($columns as $column) {
+            $updates["students.{$column}"] = DB::raw("COALESCE(students.{$column}, enrollment_applications.{$column})");
+        }
+
         DB::table('students')
             ->join('enrollment_applications', 'enrollment_applications.user_id', '=', 'students.user_id')
-            ->where(function ($query) {
-                $query->whereNull('students.father_name')
-                    ->orWhereNull('students.father_occupation')
-                    ->orWhereNull('students.mother_name')
-                    ->orWhereNull('students.mother_occupation')
-                    ->orWhereNull('students.prev_school')
-                    ->orWhereNull('students.prev_school_address')
-                    ->orWhereNull('students.student_type')
-                    ->orWhereNull('students.academic_status');
+            ->where(function ($query) use ($columns) {
+                foreach ($columns as $index => $column) {
+                    $method = $index === 0 ? 'whereNull' : 'orWhereNull';
+                    $query->{$method}("students.{$column}");
+                }
             })
-            ->update([
-                'students.father_name' => DB::raw('COALESCE(students.father_name, enrollment_applications.father_name)'),
-                'students.father_occupation' => DB::raw('COALESCE(students.father_occupation, enrollment_applications.father_occupation)'),
-                'students.mother_name' => DB::raw('COALESCE(students.mother_name, enrollment_applications.mother_name)'),
-                'students.mother_occupation' => DB::raw('COALESCE(students.mother_occupation, enrollment_applications.mother_occupation)'),
-                'students.prev_school' => DB::raw('COALESCE(students.prev_school, enrollment_applications.prev_school)'),
-                'students.prev_school_address' => DB::raw('COALESCE(students.prev_school_address, enrollment_applications.prev_school_address)'),
-                'students.student_type' => DB::raw('COALESCE(students.student_type, enrollment_applications.student_type)'),
-                'students.academic_status' => DB::raw('COALESCE(students.academic_status, enrollment_applications.academic_status)'),
-            ]);
+            ->update($updates);
     }
 
     public function down(): void

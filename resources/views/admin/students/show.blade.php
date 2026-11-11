@@ -267,10 +267,11 @@
                             && (empty($subject['school_year']) || (string) $grade->school_year === (string) $subject['school_year']);
                     })->keyBy(fn ($grade) => (string) $grade->quarter);
                     $finalScore = $subjectGrades->get('4')?->score;
-                    $isPassingFinal = $finalScore !== null && (($subject['program_type'] ?? null) === 'college'
+                    $isCollegeGrade = ($subject['program_type'] ?? null) === 'college' && ($subject['source'] ?? null) !== 'grade';
+                    $isPassingFinal = $finalScore !== null && ($isCollegeGrade
                         ? (float) $finalScore <= 3
                         : (float) $finalScore >= 75);
-                    $isFailingFinal = $finalScore !== null && (($subject['program_type'] ?? null) === 'college'
+                    $isFailingFinal = $finalScore !== null && ($isCollegeGrade
                         ? (float) $finalScore > 3
                         : (float) $finalScore < 75);
                     $subjectStatus = $subject['status'] === 'dropped'
@@ -325,7 +326,7 @@
                             @php($grade = $subjectGrades->get($quarter))
                             <div class="rounded-lg bg-slate-50 px-3 py-2">
                                 <p class="text-[10px] font-black uppercase tracking-wide text-slate-400">{{ $periodLabel }}</p>
-                                <p class="mt-1 text-sm font-black text-slate-800">{{ $grade?->score ?? '—' }}</p>
+                                <p class="mt-1 text-sm font-black text-slate-800">{{ $grade?->score !== null ? number_format((float) $grade->score, 2) : "—" }}</p>
                             </div>
                         @endforeach
                     </div>
