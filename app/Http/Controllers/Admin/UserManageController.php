@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\Department;
 use App\Services\ArchiveService;
+use App\Services\PasswordChangeNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -111,7 +112,10 @@ class UserManageController extends Controller
             'department' => $department?->name,
         ]);
 
-        if (!empty($data['password'])) {
+        $passwordChanged = !empty($data['password']);
+        $oldEmail = $user->email;
+
+        if ($passwordChanged) {
             $user->password = Hash::make($data['password']);
         }
 
@@ -127,6 +131,10 @@ class UserManageController extends Controller
         } else {
             Department::query()->where('chair_user_id', $user->id)->get()
                 ->each(fn (Department $department) => $department->update(['chair_user_id' => null]));
+        }
+
+        if ($passwordChanged) {
+            PasswordChangeNotifier::send($user, $request->user(), $oldEmail);
         }
 
         return redirect()->route('admin.users.index')->with('status', 'User updated.');

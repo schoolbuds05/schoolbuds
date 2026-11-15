@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\PasswordChangeNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -243,6 +244,8 @@ class AuthController extends Controller
             'meta' => ['client' => 'mobile_api'],
         ]);
 
+        PasswordChangeNotifier::send($user);
+
         return response()->json(['message' => 'Password has been reset.']);
     }
 
@@ -321,6 +324,8 @@ class AuthController extends Controller
             'subject_type' => User::class,
             'subject_id' => $user->id,
         ]);
+
+        PasswordChangeNotifier::send($user, $user);
 
         return response()->json(['message' => 'Password updated.']);
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\PasswordChangeNotifier;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -57,6 +58,11 @@ class NewPasswordController extends Controller
             ActivityLog::record($request, 'auth_password_reset_failed', 'Password reset verification failed through the web portal.', [
                 'meta' => ['email' => substr(strtolower(trim($request->email)), 0, 255), 'client' => 'web'],
             ]);
+        } else {
+            $user = User::where('email', $request->email)->first();
+            if ($user) {
+                PasswordChangeNotifier::send($user);
+            }
         }
 
         // If the password was successfully reset, we will redirect the user back to

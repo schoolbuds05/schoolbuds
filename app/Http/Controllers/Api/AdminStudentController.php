@@ -13,6 +13,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Services\ArchiveService;
 use App\Services\PointsConfiguration;
+use App\Services\PasswordChangeNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -164,6 +165,8 @@ class AdminStudentController extends Controller
         $student->user->update([
             'password' => Hash::make($data['password']),
         ]);
+
+        PasswordChangeNotifier::send($student->user, $request->user());
 
         return response()->json(['message' => 'Student password updated.']);
     }

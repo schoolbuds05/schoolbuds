@@ -8,6 +8,7 @@ use App\Models\Fee;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\ArchiveService;
+use App\Services\PasswordChangeNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -184,7 +185,10 @@ class AdminUserController extends Controller
         $user->position = $data['position'];
         $user->department = $data['department'] ?? null;
 
-        if (!empty($data['password'])) {
+        $passwordChanged = !empty($data['password']);
+        $oldEmail = $user->email;
+
+        if ($passwordChanged) {
             $user->password = Hash::make($data['password']);
         }
 
@@ -196,6 +200,10 @@ class AdminUserController extends Controller
             'subject_id' => $user->id,
             'meta' => ['updated_role' => $user->role, 'updated_email' => $user->email],
         ]);
+
+        if ($passwordChanged) {
+            PasswordChangeNotifier::send($user, $request->user(), $oldEmail);
+        }
 
         return response()->json($user->only(['id', 'name', 'email', 'role', 'position', 'department', 'created_at', 'updated_at']));
     }
