@@ -6,9 +6,6 @@
         return $time ? \Illuminate\Support\Carbon::parse($time)->format('g:i A') : '';
     };
 @endphp
-@if(session('status'))
-    <div class="portal-card mb-4 border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{{ session('status') }}</div>
-@endif
 @if($errors->any())
     <div class="portal-card mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-800">
         <ul class="list-inside list-disc">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>

@@ -267,7 +267,7 @@
                             && (empty($subject['school_year']) || (string) $grade->school_year === (string) $subject['school_year']);
                     })->keyBy(fn ($grade) => (string) $grade->quarter);
                     $finalScore = $subjectGrades->get('4')?->score;
-                    $isCollegeGrade = ($subject['program_type'] ?? null) === 'college' && ($subject['source'] ?? null) !== 'grade';
+                    $isCollegeGrade = ($subject['program_type'] ?? null) === 'college';
                     $isPassingFinal = $finalScore !== null && ($isCollegeGrade
                         ? (float) $finalScore <= 3
                         : (float) $finalScore >= 75);
