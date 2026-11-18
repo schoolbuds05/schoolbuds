@@ -1114,6 +1114,14 @@ export default function EnrollmentScreen() {
                 }
               </TouchableOpacity>
               {lookupMessage ? <Text style={s.lookupMessage}>{lookupMessage}</Text> : null}
+              {!claimAvailable && !existingStudent ? (
+                <TouchableOpacity
+                  style={s.importedRecordLink}
+                  onPress={() => setClaimAvailable(true)}
+                >
+                  <Text style={s.importedRecordLinkText}>Can’t look it up? Verify an imported record</Text>
+                </TouchableOpacity>
+              ) : null}
               {claimAvailable ? (
                 <View style={s.claimBox}>
                   <Text style={s.claimHelp}>To verify an imported record, enter the student’s exact details as recorded by the school.</Text>
@@ -1825,6 +1833,8 @@ const s = StyleSheet.create({
   lookupBtn:     { backgroundColor: C.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignItems: 'center', marginTop: 10, marginBottom: 8 },
   lookupBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   lookupMessage: { fontSize: 13, color: C.accent, marginBottom: 8, fontStyle: 'italic' },
+  importedRecordLink: { alignSelf: 'flex-start', paddingVertical: 8 },
+  importedRecordLinkText: { color: C.primary, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
   claimBtn:      { backgroundColor: '#EEF4FF', borderWidth: 1, borderColor: C.primary },
   claimBtnText:  { color: C.primary, fontSize: 15, fontWeight: '700' },
   claimBox:      { marginTop: 8, padding: 12, backgroundColor: '#F6F8FC', borderRadius: 10 },

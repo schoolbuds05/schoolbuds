@@ -168,16 +168,28 @@ class SemesterProgressionService
             ->when($schoolYear, fn ($query) => $query->where('grades.school_year', $schoolYear))
             ->whereHas('schoolClass', function ($query) use ($subject) {
                 $query->whereIn('school_classes.subject', array_filter([$subject->name, $subject->code]))
-                    ->whereExists(function ($sectionQuery) use ($subject) {
-                        $sectionQuery->selectRaw('1')
-                            ->from('sections')
-                            ->join('section_subjects', 'section_subjects.section_id', '=', 'sections.id')
-                            ->whereColumn('sections.name', 'school_classes.section')
-                            ->whereColumn('sections.year_level', 'school_classes.grade_level')
-                            ->whereColumn('sections.school_year', 'school_classes.school_year')
-                            ->where('sections.program_type', $subject->program_type)
-                            ->when($subject->semester, fn ($sectionQuery) => $sectionQuery->where('sections.semester', $subject->semester))
-                            ->where('section_subjects.subject_id', $subject->id);
+                    ->where(function ($classQuery) use ($subject) {
+                        $classQuery->whereExists(function ($sectionQuery) use ($subject) {
+                            $sectionQuery->selectRaw('1')
+                                ->from('sections')
+                                ->join('section_subjects', 'section_subjects.section_id', '=', 'sections.id')
+                                ->whereColumn('sections.name', 'school_classes.section')
+                                ->whereColumn('sections.year_level', 'school_classes.grade_level')
+                                ->whereColumn('sections.school_year', 'school_classes.school_year')
+                                ->where('sections.program_type', $subject->program_type)
+                                ->when($subject->semester, fn ($sectionQuery) => $sectionQuery->where('sections.semester', $subject->semester))
+                                ->where('section_subjects.subject_id', $subject->id);
+                        });
+
+                        // Imported historical grades can have no section row. Match
+                        // those by the catalog subject, year level, and school year.
+                        if ($subject->year_level !== null && $subject->year_level !== '') {
+                            $classQuery->orWhere(function ($importedClassQuery) use ($subject) {
+                                $importedClassQuery->where('school_classes.section', '')
+                                    ->where('school_classes.grade_level', (string) $subject->year_level)
+                                    ->whereColumn('school_classes.school_year', 'grades.school_year');
+                            });
+                        }
                     });
             })
             ->whereExists(function ($query) {
