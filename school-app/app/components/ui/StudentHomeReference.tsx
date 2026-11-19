@@ -79,12 +79,21 @@ export default function StudentHomeReference({
       </TouchableOpacity> : null}
 
       <View style={s.sectionTitle}><Text style={[s.sectionHeading, { color: theme.text }]}>Notifications</Text>{unread ? <Text style={[s.sectionLink, { color: theme.primary }]}>{unread} unread</Text> : null}</View>
-      {notifications?.notifications?.slice(0, 2).map(item => (
-        <TouchableOpacity key={item.id} style={[s.notification, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => onNotification(item)}>
-          <View style={[s.dot, { backgroundColor: item.read_at ? theme.textMuted : theme.primary }]} />
-          <View style={s.flex}><Text style={[s.noteTitle, { color: theme.text }]}>{item.title}</Text><Text style={[s.noteBody, { color: theme.textSub }]} numberOfLines={2}>{item.body || item.type}</Text><Text style={[s.noteDate, { color: theme.textMuted }]}>{item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}</Text></View>
-        </TouchableOpacity>
-      ))}
+      {notifications?.notifications?.length ? (
+        <ScrollView
+          style={s.notificationList}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+          persistentScrollbar
+        >
+          {notifications.notifications.map(item => (
+            <TouchableOpacity key={item.id} style={[s.notification, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => onNotification(item)}>
+              <View style={[s.dot, { backgroundColor: item.read_at ? theme.textMuted : theme.primary }]} />
+              <View style={s.flex}><Text style={[s.noteTitle, { color: theme.text }]}>{item.title}</Text><Text style={[s.noteBody, { color: theme.textSub }]} numberOfLines={2}>{item.body || item.type}</Text><Text style={[s.noteDate, { color: theme.textMuted }]}>{item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}</Text></View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      ) : null}
       {!notifications?.notifications?.length ? <View style={[s.empty, { borderColor: theme.border }]}><Ionicons name="notifications-outline" size={22} color={theme.textMuted} /><Text style={[s.emptyText, { color: theme.textSub }]}>You’re all caught up.</Text></View> : null}
 
       <View style={s.sectionTitle}><Text style={[s.sectionHeading, { color: theme.text }]}>Latest grades</Text><TouchableOpacity onPress={onGrades}><Text style={[s.sectionLink, { color: theme.primary }]}>See all</Text></TouchableOpacity></View>
@@ -143,7 +152,7 @@ const s = StyleSheet.create({
   stats: { marginHorizontal: 20, marginTop: 10, borderWidth: 1, borderRadius: 14, paddingVertical: 10, flexDirection: 'row' }, stat: { flex: 1, alignItems: 'center', paddingHorizontal: 4, borderRightWidth: 1, borderRightColor: '#EBDDDF' }, statValue: { fontSize: 16, fontWeight: '900' }, statLabel: { color: '#7A666B', fontSize: 9, marginTop: 3, textAlign: 'center' },
   sectionTitle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 18, marginTop: 23, marginBottom: 9 }, sectionHeading: { fontSize: 16, fontWeight: '800' }, sectionLink: { fontSize: 12, fontWeight: '800' },
   enrollment: { marginHorizontal: 16, marginTop: 14, borderWidth: 1, borderRadius: 13, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 11 }, enrollmentIcon: { width: 39, height: 39, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  notification: { marginHorizontal: 16, borderWidth: 1, borderRadius: 13, padding: 13, flexDirection: 'row', gap: 10, marginBottom: 8 }, dot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 }, noteTitle: { fontSize: 13, fontWeight: '800' }, noteBody: { fontSize: 12, lineHeight: 17, marginTop: 3 }, noteDate: { fontSize: 10, marginTop: 6 },
+  notificationList: { maxHeight: 270 }, notification: { marginHorizontal: 16, borderWidth: 1, borderRadius: 13, padding: 13, flexDirection: 'row', gap: 10, marginBottom: 8 }, dot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 }, noteTitle: { fontSize: 13, fontWeight: '800' }, noteBody: { fontSize: 12, lineHeight: 17, marginTop: 3 }, noteDate: { fontSize: 10, marginTop: 6 },
   grade: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, marginHorizontal: 16, padding: 11, gap: 10, marginBottom: 8 }, gradeCode: { minWidth: 43, height: 38, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 }, gradeCodeText: { fontSize: 9, fontWeight: '900' }, gradeName: { flex: 1, fontSize: 13, fontWeight: '700' }, gradeValue: { fontSize: 18, fontWeight: '900' },
   empty: { marginHorizontal: 16, borderWidth: 1, borderStyle: 'dashed', borderRadius: 13, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 11 }, emptyText: { fontSize: 13, fontWeight: '600' },
 });

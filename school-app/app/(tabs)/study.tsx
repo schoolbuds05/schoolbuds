@@ -61,7 +61,9 @@ export default function Study() {
         {messages.map((message, index) => (
           <View key={index} style={[styles.bubble, message.role === 'user' ? [styles.bubbleUser, { backgroundColor: theme.primary }] : [styles.bubbleAI, index === 0 && styles.welcomeBubble, { backgroundColor: theme.card, borderColor: theme.border }]]}>
             {message.role === 'assistant' && index > 0 && <Text style={[styles.aiLabel, { color: theme.primary }]}>Study AI</Text>}
-            <Text style={[styles.bubbleText, message.role === 'user' ? styles.bubbleTextUser : { color: theme.text }]}>{index === 0 ? `Hi ${firstName}! Ask me anything about your subjects, or pick a quick prompt.` : message.text}</Text>
+            {message.role === 'assistant' && index > 0
+              ? <AssistantResponse text={message.text} theme={theme} />
+              : <Text style={[styles.bubbleText, message.role === 'user' ? styles.bubbleTextUser : { color: theme.text }]}>{index === 0 ? `Hi ${firstName}! Ask me anything about your subjects, or pick a quick prompt.` : message.text}</Text>}
           </View>
         ))}
         {messages.length === 1 && !loading && <View style={styles.quickGrid}>{QUICK_PROMPTS.map(prompt => (
@@ -80,6 +82,54 @@ export default function Study() {
   );
 }
 
+function AssistantResponse({ text, theme }) {
+  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  return (
+    <View style={styles.responseContent}>
+      {lines.map((rawLine, index) => {
+        const line = rawLine.trim();
+        if (!line || /^([-*_])\1{2,}$/.test(line)) return <View key={index} style={styles.responseSpacer} />;
+
+        const heading = line.match(/^#{1,3}\s+(.+)$/);
+        const numbered = line.match(/^\s*(\d+[.)])\s+(.+)$/);
+        const choice = line.match(/^\s*([A-D][.)])\s+(.+)$/i);
+        const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+        const content = heading?.[1] ?? numbered?.[2] ?? choice?.[2] ?? bullet?.[1] ?? line;
+        const kind = heading ? 'heading' : numbered ? 'numbered' : choice ? 'choice' : bullet ? 'bullet' : 'paragraph';
+        return (
+          <Text key={index} style={[
+            styles.responseLine,
+            kind === 'heading' && styles.responseHeading,
+            kind === 'numbered' && styles.responseQuestion,
+            kind === 'choice' && styles.responseChoice,
+            kind === 'bullet' && styles.responseBullet,
+            { color: theme.text },
+          ]}>
+            {kind === 'choice' ? <Text style={{ color: theme.primary, fontWeight: '800' }}>{choice[1]} </Text> : null}
+            {kind === 'bullet' ? <Text style={{ color: theme.primary, fontWeight: '800' }}>• </Text> : null}
+            {renderInlineMarkdown(content, theme)}
+          </Text>
+        );
+      })}
+    </View>
+  );
+}
+
+function renderInlineMarkdown(value, theme) {
+  const parts = String(value).split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*]+\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    const bold = (part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'));
+    const italic = !bold && part.startsWith('*') && part.endsWith('*');
+    const code = part.startsWith('`') && part.endsWith('`');
+    const content = bold || italic || code ? part.slice(bold ? 2 : 1, -(bold ? 2 : 1)) : part;
+    return <Text key={index} style={[
+      bold && styles.responseStrong,
+      italic && styles.responseItalic,
+      code && { color: theme.primary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+    ]}>{content}</Text>;
+  });
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 }, center: { flex: 1, justifyContent: 'center', alignItems: 'center' }, notAvail: { fontSize: 15 },
   header: { paddingTop: 42, paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -89,6 +139,7 @@ const styles = StyleSheet.create({
   messages: { flex: 1 }, messageContent: { paddingHorizontal: 16, paddingBottom: 14 },
   bubble: { borderRadius: 14, padding: 12, maxWidth: '85%', marginBottom: 10 }, bubbleUser: { alignSelf: 'flex-end', borderBottomRightRadius: 4 }, bubbleAI: { alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: StyleSheet.hairlineWidth }, welcomeBubble: { maxWidth: '84%', marginBottom: 10 },
   aiLabel: { fontSize: 11, fontWeight: '700', marginBottom: 4 }, bubbleText: { fontSize: 12, lineHeight: 18 }, bubbleTextUser: { color: '#fff' },
+  responseContent: { gap: 2 }, responseLine: { fontSize: 13, lineHeight: 20 }, responseSpacer: { height: 7 }, responseHeading: { fontSize: 15, lineHeight: 21, fontWeight: '800', marginTop: 4 }, responseQuestion: { fontWeight: '700', marginTop: 3 }, responseChoice: { paddingLeft: 9 }, responseBullet: { paddingLeft: 4 }, responseStrong: { fontWeight: '800' }, responseItalic: { fontStyle: 'italic' },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 }, quickBtn: { width: '48%', height: 53, borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }, quickIcon: { width: 27, height: 27, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 10 }, quickText: { flex: 1, fontSize: 12, fontWeight: '800' },
   thinking: { flexDirection: 'row', alignItems: 'center', gap: 8 }, thinkingText: { fontSize: 13 },
   inputRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 12, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, paddingLeft: 14, paddingRight: 4, minHeight: 44, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },

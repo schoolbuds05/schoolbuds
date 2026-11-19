@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
@@ -25,6 +25,7 @@ const plainQuizText = (value) => String(value ?? '')
 
 export default function StudentAssignments() {
   const router = useRouter();
+  const { assignmentId } = useLocalSearchParams();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState([]);
@@ -39,6 +40,7 @@ export default function StudentAssignments() {
   const [listFilter, setListFilter] = useState('open');
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
   const timedOutSubmission = useRef(false);
+  const openedNotificationAssignment = useRef(null);
   const submissionFinal = Boolean(selected?.submission?.submitted_at)
     || ['submitted', 'graded'].includes(selected?.submission?.status);
 
@@ -79,6 +81,15 @@ export default function StudentAssignments() {
       Alert.alert('Could not open', e.response?.data?.message || 'Please try again.');
     }
   };
+
+  useEffect(() => {
+    const requestedId = Array.isArray(assignmentId) ? assignmentId[0] : assignmentId;
+    if (!requestedId || !items.length || openedNotificationAssignment.current === String(requestedId)) return;
+    const item = items.find(value => String(value.id) === String(requestedId));
+    if (!item) return;
+    openedNotificationAssignment.current = String(requestedId);
+    open(item);
+  }, [assignmentId, items]);
 
   const submit = useCallback(async (overrideViolations = null, timedOut = false) => {
     if (!selected) return;

@@ -1,8 +1,10 @@
 // @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import api from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 function TabIcon({ name, focused, color }) {
@@ -45,7 +47,25 @@ function TabLabel({ label, color }) {
 export default function TeacherLayout() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const pathname = usePathname();
+  const [unreadChats, setUnreadChats] = useState(0);
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
+
+  useEffect(() => {
+    let active = true;
+    const refreshUnread = async () => {
+      try {
+        const res = await api.get('/teacher-chat/contacts');
+        const count = (res.data ?? []).reduce((total, contact) => total + Number(contact.unread || 0), 0);
+        if (active) setUnreadChats(count);
+      } catch (e) {
+        console.log('Teacher chat badge error:', e.message);
+      }
+    };
+    refreshUnread();
+    const timer = setInterval(refreshUnread, 10000);
+    return () => { active = false; clearInterval(timer); };
+  }, [pathname]);
 
   return (
     <Tabs
@@ -122,6 +142,8 @@ export default function TeacherLayout() {
         name="chat"
         options={{
           title: 'Chat',
+          tabBarBadge: unreadChats > 0 ? (unreadChats > 99 ? '99+' : unreadChats) : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#B5233D', color: '#fff', fontSize: 9, fontWeight: '800' },
           tabBarLabel: ({ color }) => <TabLabel label="Chat" color={color} />,
           tabBarIcon: ({ focused, color }) => (
             <TabIcon name={focused ? 'chatbubble' : 'chatbubble-outline'} focused={focused} color={color} />

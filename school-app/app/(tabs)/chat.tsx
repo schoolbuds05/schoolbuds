@@ -1,16 +1,18 @@
-// @ts-nocheck
-// app/(tabs)/chat.tsx — Student chat with assigned teachers
+﻿// @ts-nocheck
+// app/(tabs)/chat.tsx â€” Student chat with assigned teachers
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView,
+  ActivityIndicator, Alert, Animated, FlatList, Image, KeyboardAvoidingView, Modal, StatusBar,
   Platform, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../src/api';
-import HeaderGradient from '../components/ui/HeaderGradient';
+import * as DocumentPicker from 'expo-document-picker';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import api, { resolveApiAssetUrl } from '../../src/api';
 import { useTheme } from '../../src/theme-context';
 
 const C = {
@@ -59,14 +61,48 @@ export default function Chat() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState('');
+  const [authToken, setAuthToken] = useState(null);
+  const [attachmentOptions, setAttachmentOptions] = useState(null);
+  const [attachment, setAttachment] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
   const listRef = useRef(null);
+  const attachmentSheetY = useRef(new Animated.Value(0)).current;
+  const attachmentSheetStartY = useRef(null);
+
+  const startAttachmentSheetDrag = event => { attachmentSheetStartY.current = event.nativeEvent.pageY; };
+  const moveAttachmentSheetDrag = event => {
+    if (attachmentSheetStartY.current != null) attachmentSheetY.setValue(Math.max(0, event.nativeEvent.pageY - attachmentSheetStartY.current));
+  };
+  const endAttachmentSheetDrag = event => {
+    if (attachmentSheetStartY.current == null) return;
+    const endY = event.nativeEvent.changedTouches?.[0]?.pageY ?? event.nativeEvent.pageY;
+    const distance = Math.max(0, endY - attachmentSheetStartY.current);
+    attachmentSheetStartY.current = null;
+    if (distance > 90) {
+      Animated.timing(attachmentSheetY, { toValue: 500, duration: 150, useNativeDriver: true }).start(() => {
+        setAttachmentOptions(null);
+        attachmentSheetY.setValue(0);
+      });
+    } else {
+      Animated.spring(attachmentSheetY, { toValue: 0, useNativeDriver: true, tension: 90, friction: 12 }).start();
+    }
+  };
 
   const isThread = !!contactId;
   const filteredContacts = useMemo(() => contacts.filter(contact =>
     String(contact.name || '').toLowerCase().includes(search.trim().toLowerCase())
   ), [contacts, search]);
+  const filteredHistory = useMemo(() => {
+    const query = historySearch.trim().toLowerCase();
+    return messages.filter(message => !query
+      || `${message.is_deleted ? 'message deleted' : message.message || ''} ${message.attachment_name || ''} ${message.sender?.name || ''}`.toLowerCase().includes(query)
+    ).slice().reverse();
+  }, [messages, historySearch]);
 
   const loadCurrentUser = useCallback(async () => {
+    const token = await AsyncStorage.getItem('token');
+    setAuthToken(token);
     try {
       const res = await api.get('/me');
       if (res.data?.user?.id) {
@@ -97,7 +133,6 @@ export default function Chat() {
   const loadMessages = useCallback(async () => {
     if (!contactId) return;
     try {
-      setMessages([]);
       const res = await api.get(`/teacher-chat/${contactId}/messages`);
       setMessages(res.data ?? []);
     } catch (e) {
@@ -105,6 +140,11 @@ export default function Chat() {
     } finally {
       setLoading(false);
     }
+  }, [contactId]);
+
+  useEffect(() => {
+    setMessages([]);
+    setLoading(true);
   }, [contactId]);
 
   useFocusEffect(
@@ -125,17 +165,67 @@ export default function Chat() {
 
   const send = async () => {
     const text = input.trim();
-    if (!text || !contactId || sending) return;
+    if ((!text && !attachment) || !contactId || sending) return;
     setSending(true);
     try {
-      await api.post(`/teacher-chat/${contactId}/messages`, { message: text });
+      if (attachment) {
+        const payload = new FormData();
+        if (text) payload.append('message', text);
+        payload.append('attachment', {
+          uri: attachment.uri,
+          name: attachment.name || 'attachment',
+          type: attachment.mimeType || 'application/octet-stream',
+        });
+        await api.post(`/teacher-chat/${contactId}/messages`, payload, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await api.post(`/teacher-chat/${contactId}/messages`, { message: text });
+      }
       setInput('');
+      setAttachment(null);
       await loadMessages();
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e) {
       Alert.alert('Error', e?.response?.data?.message ?? 'Could not send message.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const pickAttachment = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (!result.canceled && result.assets?.[0]) setAttachment(result.assets[0]);
+    } catch (e) {
+      Alert.alert('Could not choose file', e.message || 'Please try again.');
+    }
+  };
+
+  const openAttachment = async message => {
+    if (!message.attachment_download_url) return;
+    try {
+      const token = authToken || await AsyncStorage.getItem('token');
+      const url = resolveApiAssetUrl(message.attachment_download_url);
+      const safeName = String(message.attachment_name || 'chat-attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const file = await File.downloadFileAsync(url, new File(Paths.cache, `student-chat-${message.id}-${safeName}`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        idempotent: true,
+      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: message.attachment_mime || 'application/octet-stream',
+          dialogTitle: message.attachment_name || 'Open attachment',
+        });
+      } else {
+        Alert.alert('File saved', `The attachment was downloaded to ${file.uri}`);
+      }
+    } catch (e) {
+      Alert.alert('Could not open attachment', e?.response?.data?.message || e.message || 'Please try again.');
     }
   };
 
@@ -169,7 +259,7 @@ export default function Chat() {
           <View style={s.center}><ActivityIndicator color={C.blue} /></View>
         ) : contacts.length === 0 ? (
           <View style={s.empty}>
-            <Text style={s.emptyIcon}>💬</Text>
+            <Text style={s.emptyIcon}>ðŸ’¬</Text>
             <Text style={s.emptyTitle}>No teachers available</Text>
             <Text style={s.emptySub}>You need to be assigned to a section with teachers first.</Text>
           </View>
@@ -217,22 +307,77 @@ export default function Chat() {
   return (
     <KeyboardAvoidingView
       style={[s.container, { backgroundColor: theme.bg }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <HeaderGradient
-        title={contactName ?? 'Teacher'}
-        subtitle="Student conversation"
-        initials={(contactName ?? 'T').slice(0, 2).toUpperCase()}
-        stats={[
-          { label: 'Messages', value: messages.length, accent: '#A5F3FC' },
-          { label: 'Unread', value: messages.filter(m => m.sender_id !== myId && !m.is_read).length, accent: '#FDE68A' },
-          { label: 'Status', value: loading ? 'Loading' : 'Open', accent: '#FBCFE8' },
-        ]}
-      >
-        <TouchableOpacity onPress={() => router.push('/(tabs)/chat')} style={s.backBtn}>
-          <Text style={s.backText}>← Teachers</Text>
+      <StatusBar hidden />
+      <View style={s.threadHeader}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/chat')} style={s.backButton} accessibilityRole="button" accessibilityLabel="Back to chats">
+          <Ionicons name="chevron-back" size={24} color="#2A151B" />
         </TouchableOpacity>
-      </HeaderGradient>
+        <View style={s.threadAvatar}><Text style={s.threadAvatarText}>{initialsFor(contactName)}</Text></View>
+        <View style={s.threadTitleWrap}>
+          <Text style={s.threadTitle} numberOfLines={1}>{contactName ?? 'Teacher'}</Text>
+          <View style={s.statusLine}><View style={s.statusDot} /><Text style={s.threadSubtitle}>Open{"\u00B7"} Teacher</Text></View>
+        </View>
+        <TouchableOpacity style={s.moreButton} onPress={() => { setHistorySearch(''); setHistoryOpen(true); }} accessibilityRole="button" accessibilityLabel="Search message history">
+          <Ionicons name="ellipsis-vertical" size={20} color="#2A151B" />
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={historyOpen} animationType="slide" onRequestClose={() => setHistoryOpen(false)}>
+        <View style={s.historyScreen}>
+          <View style={s.historyHeader}>
+            <View style={{ flex: 1 }}><Text style={s.historyEyebrow}>Conversation</Text><Text style={s.historyTitle}>Message history</Text></View>
+            <TouchableOpacity style={s.historyClose} onPress={() => setHistoryOpen(false)} accessibilityLabel="Close message history"><Ionicons name="close" size={22} color="#2A151B" /></TouchableOpacity>
+          </View>
+          <View style={s.historySearchBox}>
+            <Ionicons name="search-outline" size={18} color="#826D72" />
+            <TextInput style={s.historySearchInput} placeholder="Search messages" placeholderTextColor="#9A858A" value={historySearch} onChangeText={setHistorySearch} autoFocus returnKeyType="search" />
+            {!!historySearch && <TouchableOpacity onPress={() => setHistorySearch('')} accessibilityLabel="Clear search"><Ionicons name="close-circle" size={18} color="#9A858A" /></TouchableOpacity>}
+          </View>
+          <FlatList
+            data={filteredHistory}
+            keyExtractor={item => String(item.id)}
+            contentContainerStyle={s.historyList}
+            ListEmptyComponent={<Text style={s.historyEmpty}>{historySearch ? 'No matching messages.' : 'No past messages yet.'}</Text>}
+            renderItem={({ item }) => {
+              const index = messages.findIndex(message => message.id === item.id);
+              const senderName = item.sender_id === myId ? 'You' : item.sender?.name || contactName || 'Teacher';
+              const snippet = item.is_deleted
+                ? (item.deleted_by === myId ? 'You deleted this message' : 'This message was deleted')
+                : item.message || item.attachment_name || 'Attachment';
+              return <TouchableOpacity style={s.historyResult} onPress={() => {
+                setHistoryOpen(false);
+                setTimeout(() => listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 }), 250);
+              }}>
+                <View style={s.historyResultTop}><Text style={s.historySender} numberOfLines={1}>{senderName}</Text><Text style={s.historyTime}>{relativeMessageTime(item.created_at)}</Text></View>
+                <Text style={s.historySnippet} numberOfLines={2}>{snippet}</Text>
+              </TouchableOpacity>;
+            }}
+          />
+        </View>
+      </Modal>
+
+      <Modal visible={!!attachmentOptions} transparent animationType="fade" onRequestClose={() => setAttachmentOptions(null)}>
+        <View style={s.attachmentMenuOverlay}>
+          <TouchableOpacity style={s.attachmentMenuScrim} onPress={() => setAttachmentOptions(null)} activeOpacity={1} />
+          <Animated.View style={[s.attachmentMenuSheet, { transform: [{ translateY: attachmentSheetY }] }]} onTouchStart={startAttachmentSheetDrag} onTouchMove={moveAttachmentSheetDrag} onTouchEnd={endAttachmentSheetDrag} onTouchCancel={endAttachmentSheetDrag}>
+            <View style={s.sheetHandle} />
+            <Text style={s.attachmentMenuTitle}>Attachment</Text>
+            <Text style={s.attachmentMenuName} numberOfLines={2}>{attachmentOptions?.attachment_name}</Text>
+            <TouchableOpacity style={s.attachmentMenuAction} onPress={() => {
+              const selected = attachmentOptions;
+              setAttachmentOptions(null);
+              if (selected) openAttachment(selected);
+            }}>
+              <View style={s.attachmentMenuIcon}><Ionicons name="download-outline" size={20} color="#B5233D" /></View>
+              <View style={{ flex: 1 }}><Text style={s.attachmentMenuActionTitle}>Download or share</Text><Text style={s.attachmentMenuActionSub}>Save or open this attachment</Text></View>
+              <Ionicons name="chevron-forward" size={18} color="#9A858A" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.attachmentMenuCancel} onPress={() => setAttachmentOptions(null)}><Text style={s.attachmentMenuCancelText}>Cancel</Text></TouchableOpacity>
+          </Animated.View>
+        </View>
+      </Modal>
 
       {loading ? (
         <View style={[s.center, { backgroundColor: theme.bg }]}><ActivityIndicator color={theme.primary} /></View>
@@ -241,56 +386,193 @@ export default function Chat() {
           ref={listRef}
           data={messages}
           keyExtractor={(item, i) => String(item.id ?? i)}
-          contentContainerStyle={{ padding: 16, gap: 8 }}
+          contentContainerStyle={s.messageList}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          onScrollToIndexFailed={({ index, averageItemLength }) => listRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: true })}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={s.empty}>
-              <Text style={s.emptyIcon}>💬</Text>
+              <View style={s.emptyIcon}><Ionicons name="chatbubble-ellipses-outline" size={29} color="#B5233D" /></View>
               <Text style={s.emptyTitle}>No messages yet</Text>
-              <Text style={s.emptySub}>Send your teacher a question.</Text>
+              <Text style={s.emptySub}>Start the conversation with your teacher. Write a message below.</Text>
             </View>
           }
           renderItem={({ item }) => {
             const mine = item.sender_id === myId;
+            const deleted = !!item.is_deleted;
             return (
-              <View style={[s.bubble, mine ? s.bubbleMine : s.bubbleTheirs, { backgroundColor: mine ? theme.primaryLight : theme.card }]}> 
-                {!mine && <Text style={[s.sender, { color: theme.textSub }]}>{item.sender?.name?.split(' ')[0]}</Text>}
-                <Text style={[s.bubbleText, mine ? s.bubbleTextMine : s.bubbleTextTheirs, { color: mine ? theme.text : theme.text }]}>
-                  {item.message}
-                </Text>
-                <Text style={[s.time, mine ? s.timeMine : s.timeTheirs]}>
-                  {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
+              <View style={[s.messageRow, mine ? s.messageRowMine : s.messageRowTheirs]}>
+                <View style={[s.bubble, mine ? s.bubbleMine : s.bubbleTheirs, deleted && s.deletedBubble]}>
+                  {deleted ? <Text style={s.deletedMessage}>{mine ? 'You deleted this message' : 'This message was deleted'}</Text> : <>
+                    {!mine && <Text style={s.sender}>{item.sender?.name?.split(' ')[0]}</Text>}
+                    {!!item.message && <Text style={[s.bubbleText, mine ? s.bubbleTextMine : s.bubbleTextTheirs]}>{item.message}</Text>}
+                    {item.attachment_name && String(item.attachment_mime || '').startsWith('image/') && <View style={s.attachmentGroup}>
+                      <StudentImageAttachment message={item} token={authToken} />
+                      <TouchableOpacity style={s.attachmentOptionsButton} onPress={() => setAttachmentOptions(item)} accessibilityRole="button" accessibilityLabel="Image options"><Ionicons name="ellipsis-horizontal" size={18} color={mine ? '#fff' : '#9A858A'} /></TouchableOpacity>
+                    </View>}
+                    {item.attachment_name && !String(item.attachment_mime || '').startsWith('image/') && <View style={s.attachmentGroup}>
+                      <TouchableOpacity style={[s.attachmentMessage, { flex: 1 }]} onPress={() => openAttachment(item)} activeOpacity={0.85}>
+                        <Ionicons name="document-attach-outline" size={19} color={mine ? '#fff' : '#B5233D'} />
+                        <View style={{ flex: 1 }}><Text style={[s.attachmentName, mine && { color: '#fff' }]} numberOfLines={2}>{item.attachment_name}</Text><Text style={[s.attachmentHint, mine && { color: '#F9DDE3' }]}>Tap to open or share</Text></View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.attachmentOptionsButton} onPress={() => setAttachmentOptions(item)} accessibilityRole="button" accessibilityLabel="File options"><Ionicons name="ellipsis-horizontal" size={18} color={mine ? '#fff' : '#9A858A'} /></TouchableOpacity>
+                    </View>}
+                  </>}
+                </View>
+                <Text style={[s.time, mine ? s.timeMine : s.timeTheirs]}>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
               </View>
             );
           }}
         />
       )}
 
+      {attachment && <View style={s.attachmentDraft}>
+        <Ionicons name="document-outline" size={18} color="#B5233D" />
+        <Text style={s.attachmentDraftName} numberOfLines={1}>{attachment.name}</Text>
+        <TouchableOpacity onPress={() => setAttachment(null)} accessibilityLabel="Remove attachment"><Ionicons name="close-circle" size={20} color="#826D72" /></TouchableOpacity>
+      </View>}
+
       <View style={s.inputRow}>
+        <TouchableOpacity style={s.attachButton} onPress={pickAttachment} accessibilityRole="button" accessibilityLabel="Attach a photo or file">
+          <Ionicons name="attach-outline" size={21} color="#7A666B" />
+        </TouchableOpacity>
         <TextInput
           style={[s.input, { backgroundColor: theme.card, borderColor: theme.border, color: theme.text }]}
           placeholder="Type your question..."
           placeholderTextColor={theme.textMuted}
           value={input}
           onChangeText={setInput}
+          onFocus={() => setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150)}
           multiline
           maxLength={1000}
         />
         <TouchableOpacity
-          style={[s.sendBtn, { backgroundColor: theme.primary }, (!input.trim() || sending) && s.sendBtnDisabled]}
+          style={[s.sendBtn, (!input.trim() && !attachment || sending) && s.sendBtnDisabled]}
           onPress={send}
-          disabled={!input.trim() || sending}
+          disabled={(!input.trim() && !attachment) || sending}
         >
-          {sending ? <ActivityIndicator size="small" color={theme.card} /> : <Text style={[s.sendText, { color: theme.card }]}>Send</Text>}
+          {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={17} color="#fff" />}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+function StudentImageAttachment({ message, token }) {
+  const [uri, setUri] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [viewerSize, setViewerSize] = useState({ width: 0, height: 0 });
+  const gestureStart = useRef({ distance: 0, zoom: 1, x: 0, y: 0, panX: 0, panY: 0 });
+
+  const clampOffset = (offset, scale, size) => Math.max(-(size * (scale - 1)) / 2, Math.min((size * (scale - 1)) / 2, offset));
+  const touchDistance = touches => {
+    if (!touches || touches.length < 2) return 0;
+    const dx = touches[0].pageX - touches[1].pageX;
+    const dy = touches[0].pageY - touches[1].pageY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+  const startImageGesture = event => {
+    const touches = event.nativeEvent.touches || [];
+    const point = touches[0];
+    gestureStart.current = {
+      distance: touchDistance(touches), zoom, x: point?.pageX ?? 0, y: point?.pageY ?? 0,
+      panX: pan.x, panY: pan.y,
+    };
+  };
+  const moveImageGesture = event => {
+    const touches = event.nativeEvent.touches || [];
+    if (touches.length >= 2) {
+      const distance = touchDistance(touches);
+      if (!distance || !gestureStart.current.distance) return;
+      const nextZoom = Math.max(1, Math.min(4, gestureStart.current.zoom * distance / gestureStart.current.distance));
+      setZoom(nextZoom);
+      setPan(current => ({
+        x: clampOffset(current.x, nextZoom, viewerSize.width),
+        y: clampOffset(current.y, nextZoom, viewerSize.height),
+      }));
+      return;
+    }
+    const point = touches[0];
+    if (!point || zoom <= 1) return;
+    setPan({
+      x: clampOffset(gestureStart.current.panX + point.pageX - gestureStart.current.x, zoom, viewerSize.width),
+      y: clampOffset(gestureStart.current.panY + point.pageY - gestureStart.current.y, zoom, viewerSize.height),
+    });
+  };
+  const adjustZoom = amount => {
+    const nextZoom = Math.max(1, Math.min(4, zoom + amount));
+    setZoom(nextZoom);
+    setPan(current => nextZoom === 1 ? { x: 0, y: 0 } : ({
+      x: clampOffset(current.x, nextZoom, viewerSize.width),
+      y: clampOffset(current.y, nextZoom, viewerSize.height),
+    }));
+  };
+
+  useEffect(() => {
+    let active = true;
+    if (!token || !message.attachment_download_url) return () => { active = false; };
+    const safeName = String(message.attachment_name || 'image.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+    File.downloadFileAsync(
+      resolveApiAssetUrl(message.attachment_download_url),
+      new File(Paths.cache, `student-chat-preview-${message.id}-${safeName}`),
+      { headers: { Authorization: `Bearer ${token}` }, idempotent: true }
+    ).then(file => {
+      if (active) setUri(file.uri);
+    }).catch(() => {
+      if (active) setFailed(true);
+    });
+    return () => { active = false; };
+  }, [message.id, message.attachment_download_url, message.attachment_name, token]);
+
+  if (!uri) return <View style={s.imageLoading}>
+    {failed ? <Text style={s.attachmentHint}>Image preview unavailable</Text> : <ActivityIndicator size="small" color="#B5233D" />}
+  </View>;
+
+  return <>
+    <TouchableOpacity style={s.imageAttachment} onPress={() => { setZoom(1); setPan({ x: 0, y: 0 }); setViewerOpen(true); }} activeOpacity={0.9} accessibilityLabel="View image">
+      <Image source={{ uri }} style={s.messageImage} resizeMode="cover" accessibilityLabel={message.attachment_name} />
+    </TouchableOpacity>
+    <Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
+      <View style={s.imageViewer}>
+        <TouchableOpacity style={s.imageViewerClose} onPress={() => setViewerOpen(false)} accessibilityLabel="Close image viewer">
+          <Ionicons name="close" size={25} color="#fff" />
+        </TouchableOpacity>
+        <View
+          style={s.imageGestureArea}
+          onLayout={event => setViewerSize(event.nativeEvent.layout)}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={startImageGesture}
+          onResponderMove={moveImageGesture}
+          onTouchStart={startImageGesture}
+          onTouchMove={moveImageGesture}
+          onTouchEnd={event => {
+            const touches = event.nativeEvent.touches || [];
+            const point = touches[0];
+            gestureStart.current = {
+              distance: touchDistance(touches), zoom, x: point?.pageX ?? 0, y: point?.pageY ?? 0,
+              panX: pan.x, panY: pan.y,
+            };
+          }}
+        >
+          <Image source={{ uri }} style={[s.imageViewerPhoto, { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale: zoom }] }]} resizeMode="contain" accessibilityLabel={message.attachment_name} />
+        </View>
+        <View style={s.zoomControls}>
+          <TouchableOpacity style={s.zoomButton} onPress={() => adjustZoom(-0.5)} accessibilityLabel="Zoom out"><Ionicons name="remove" size={23} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity style={s.zoomReset} onPress={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><Text style={s.zoomResetText}>{Math.round(zoom * 100)}%</Text></TouchableOpacity>
+          <TouchableOpacity style={s.zoomButton} onPress={() => adjustZoom(0.5)} accessibilityLabel="Zoom in"><Ionicons name="add" size={23} color="#fff" /></TouchableOpacity>
+        </View>
+        <Text style={s.imageViewerName} numberOfLines={1}>{message.attachment_name}</Text>
+      </View>
+    </Modal>
+  </>;
+}
+
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: '#FFF5F5' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listHeader: { paddingTop: 42, paddingHorizontal: 16, paddingBottom: 12 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
@@ -328,31 +610,93 @@ const s = StyleSheet.create({
   unreadText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   noResults: { height: 80, alignItems: 'center', justifyContent: 'center', backgroundColor: C.card },
   noResultsText: { fontSize: 12, fontWeight: '600' },
-  bubble: { maxWidth: '80%', borderRadius: 16, padding: 10 },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: C.blue, borderBottomRightRadius: 4 },
-  bubbleTheirs: { alignSelf: 'flex-start', backgroundColor: C.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: C.border },
-  sender: { color: C.blue, fontSize: 11, fontWeight: '700', marginBottom: 3 },
+  threadHeader: { minHeight: 76, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#EEDDE0', paddingHorizontal: 17, gap: 11 },
+  backButton: { width: 27, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
+  threadAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FBE3E8', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  threadAvatarText: { color: '#B5233D', fontSize: 12, fontWeight: '900' },
+  threadTitleWrap: { flex: 1, minWidth: 0 },
+  threadTitle: { color: '#2A151B', fontSize: 15, fontWeight: '800' },
+  threadSubtitle: { color: '#7A666B', fontSize: 11, marginLeft: 5 },
+  moreButton: { width: 30, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: 2 },
+  statusLine: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#24A766' },
+  messageList: { flexGrow: 1, paddingHorizontal: 14, paddingVertical: 16, gap: 2, backgroundColor: '#FFF5F5' },
+  messageRow: { maxWidth: '88%', marginBottom: 7 },
+  messageRowMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  messageRowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  bubble: { maxWidth: '100%', borderRadius: 19, paddingHorizontal: 13, paddingVertical: 9 },
+  bubbleMine: { backgroundColor: '#B5233D', borderBottomRightRadius: 5 },
+  bubbleTheirs: { backgroundColor: '#fff', borderBottomLeftRadius: 5, borderWidth: 1, borderColor: '#F0DADD' },
+  deletedBubble: { backgroundColor: '#F3E9EB', borderWidth: 0 },
+  deletedMessage: { color: '#8E7B80', fontSize: 12, fontStyle: 'italic' },
+  sender: { color: '#B5233D', fontSize: 10, fontWeight: '800', marginBottom: 4 },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   bubbleTextMine: { color: '#fff' },
   bubbleTextTheirs: { color: C.text },
-  time: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
-  timeMine: { color: 'rgba(255,255,255,0.65)' },
-  timeTheirs: { color: C.muted },
+  time: { fontSize: 10, marginTop: 3, marginHorizontal: 5 },
+  timeMine: { color: '#9A858A', alignSelf: 'flex-end' },
+  timeTheirs: { color: '#9A858A', alignSelf: 'flex-start' },
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 8,
-    backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border,
-    padding: 12,
+    backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F0DADD',
+    paddingHorizontal: 15, paddingVertical: 9,
   },
+  attachButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFF5F5', alignItems: 'center', justifyContent: 'center' },
   input: {
-    flex: 1, backgroundColor: C.bg, borderRadius: 20,
-    paddingHorizontal: 16, paddingVertical: 10,
-    color: C.text, fontSize: 14, maxHeight: 100,
+    flex: 1, backgroundColor: '#FFF5F5', borderRadius: 24, borderWidth: 0,
+    paddingHorizontal: 16, paddingVertical: 11,
+    color: '#2A151B', fontSize: 13, maxHeight: 100, minHeight: 44,
   },
-  sendBtn: { backgroundColor: C.blue, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 },
+  sendBtn: { backgroundColor: '#B5233D', borderRadius: 22, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { opacity: 0.45 },
   sendText: { color: '#fff', fontWeight: '800' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyIcon: { fontSize: 46, marginBottom: 10 },
-  emptyTitle: { color: C.text, fontSize: 17, fontWeight: '700' },
-  emptySub: { color: C.muted, fontSize: 13, textAlign: 'center', marginTop: 4 },
+  attachmentDraft: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 18, paddingVertical: 7, backgroundColor: '#fff' },
+  attachmentDraftName: { flex: 1, color: '#2A151B', fontSize: 12, fontWeight: '700' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  emptyIcon: { width: 84, height: 84, borderRadius: 42, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: '#4B1822', shadowOpacity: 0.06, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  emptyTitle: { color: '#2A151B', fontSize: 17, fontWeight: '800' },
+  emptySub: { color: '#826D72', fontSize: 12, lineHeight: 19, textAlign: 'center', marginTop: 5 },
+  attachmentMessage: { minWidth: 210, maxWidth: '100%', marginTop: 5, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.14)', flexDirection: 'row', alignItems: 'center', gap: 9 },
+  attachmentGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  attachmentOptionsButton: { width: 32, height: 38, alignItems: 'center', justifyContent: 'center' },
+  attachmentName: { color: '#2A151B', fontSize: 12, fontWeight: '700' },
+  attachmentHint: { color: '#826D72', fontSize: 10, marginTop: 2 },
+  imageAttachment: { marginTop: 5, borderRadius: 14, overflow: 'hidden' },
+  messageImage: { width: 230, height: 190, backgroundColor: '#FBE3E8' },
+  imageLoading: { width: 230, height: 120, marginTop: 5, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FBE3E8' },
+  imageViewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.96)', alignItems: 'center', justifyContent: 'center' },
+  imageViewerClose: { position: 'absolute', top: 44, right: 18, zIndex: 2, width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  imageGestureArea: { width: '100%', height: '82%', alignItems: 'center', justifyContent: 'center' },
+  imageViewerPhoto: { width: '100%', height: '100%' },
+  zoomControls: { position: 'absolute', bottom: 54, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 6, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.16)' },
+  zoomButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  zoomReset: { minWidth: 48, alignItems: 'center' },
+  zoomResetText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  imageViewerName: { position: 'absolute', bottom: 8, color: '#fff', fontSize: 12, opacity: 0.8 },
+  attachmentMenuOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(28,12,17,0.35)' },
+  attachmentMenuScrim: { ...StyleSheet.absoluteFillObject },
+  attachmentMenuSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28 },
+  sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, backgroundColor: '#E7DADD', marginBottom: 16 },
+  attachmentMenuTitle: { color: '#2A151B', fontSize: 18, fontWeight: '900' },
+  attachmentMenuName: { color: '#826D72', fontSize: 12, marginTop: 4, marginBottom: 12, lineHeight: 17 },
+  attachmentMenuAction: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#F0DADD' },
+  attachmentMenuIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#FBE8EC', alignItems: 'center', justifyContent: 'center' },
+  attachmentMenuActionTitle: { color: '#2A151B', fontSize: 13, fontWeight: '800' },
+  attachmentMenuActionSub: { color: '#9A858A', fontSize: 11, marginTop: 2 },
+  attachmentMenuCancel: { height: 44, marginTop: 10, borderRadius: 14, backgroundColor: '#FFF5F5', alignItems: 'center', justifyContent: 'center' },
+  attachmentMenuCancelText: { color: '#6F5B60', fontSize: 13, fontWeight: '800' },
+  historyScreen: { flex: 1, backgroundColor: '#FFF8F8', paddingTop: Platform.OS === 'android' ? 18 : 48 },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16 },
+  historyEyebrow: { color: '#826D72', fontSize: 11, fontWeight: '700' },
+  historyTitle: { color: '#2A151B', fontSize: 22, fontWeight: '900', marginTop: 2 },
+  historyClose: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  historySearchBox: { height: 46, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: '#fff', borderRadius: 15, marginHorizontal: 16, paddingHorizontal: 13, borderWidth: 1, borderColor: '#F0DADD' },
+  historySearchInput: { flex: 1, color: '#2A151B', fontSize: 13, paddingVertical: 0 },
+  historyList: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 },
+  historyResult: { backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
+  historyResultTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  historySender: { flex: 1, color: '#B5233D', fontSize: 11, fontWeight: '800' },
+  historyTime: { color: '#9A858A', fontSize: 10 },
+  historySnippet: { color: '#2A151B', fontSize: 13, marginTop: 5, lineHeight: 18 },
+  historyEmpty: { color: '#826D72', textAlign: 'center', paddingTop: 40, fontSize: 13 },
 });

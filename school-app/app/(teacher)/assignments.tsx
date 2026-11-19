@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -369,7 +370,12 @@ export default function TeacherAssignments() {
               <Text style={s.heroTitle}>Assignments</Text>
             </View>
             <View style={s.heroIcon}>
-              <Ionicons name="leaf" size={25} color="#65BA35" />
+              <Image
+                source={require('../../assets/images/schoolbuds-favicon.png')}
+                style={s.heroLogo}
+                resizeMode="contain"
+                accessibilityLabel="SchoolBuds logo"
+              />
             </View>
           </View>
           <View style={s.heroStats}>
@@ -914,7 +920,8 @@ const s = StyleSheet.create({
   heroCopy: { flex: 1 },
   heroEyebrow: { color: '#765B61', fontSize: 11, fontWeight: '600' },
   heroTitle: { color: '#2A1B1F', fontSize: 20, fontWeight: '900', lineHeight: 24 },
-  heroIcon: { width: 36, height: 36, backgroundColor: '#FFFFFF', borderRadius: 11, justifyContent: 'center', alignItems: 'center', shadowColor: '#8C6570', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  heroIcon: { width: 42, height: 42, backgroundColor: '#FFFFFF', borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginLeft: 10, shadowColor: '#8C6570', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  heroLogo: { width: 30, height: 30 },
   heroStats: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 13, marginTop: 12, minHeight: 56, alignItems: 'center' },
   heroStat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   heroStatDivider: { width: 1, height: 36, backgroundColor: '#ECD6DA' },

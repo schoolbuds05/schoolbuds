@@ -40,27 +40,61 @@ export default function Today() {
   const [refreshing, setRefreshing] = useState(false);
 
   const openNotification = useCallback((notification) => {
+    if (!notification) return;
+
+    if (!notification.read_at) {
+      const readAt = new Date().toISOString();
+      setNotifications(current => {
+        if (!current?.notifications) return current;
+        return {
+          ...current,
+          unread_count: Math.max(0, (current.unread_count ?? 0) - 1),
+          notifications: current.notifications.map(item =>
+            item.id === notification.id ? { ...item, read_at: readAt } : item
+          ),
+        };
+      });
+      api.post(`/notifications/${notification.id}/read`).catch(e => {
+        console.log('Mark notification read error:', e.message);
+      });
+    }
+
+    let payload = notification.data ?? {};
+    if (typeof payload === 'string') {
+      try { payload = JSON.parse(payload); } catch { payload = {}; }
+    }
+
+    const type = String(notification.type ?? '').toLowerCase();
+    const typeDestinations = {
+      assignment_posted: '/student-assignments',
+      new_message: '/(tabs)/chat',
+      enrollment_opened: '/enrollment',
+      enrollment_approved: '/(tabs)/study-load',
+      enrollment_rejected: '/(tabs)/study-load',
+      tuition_payment_pending: '/(tabs)/study-load',
+      tuition_paid: '/(tabs)/study-load',
+      tuition_partial_payment: '/(tabs)/study-load',
+      tuition_payment_rejected: '/(tabs)/study-load',
+      points_earned: '/student-rewards',
+    };
+    const destination = typeDestinations[type]
+      ?? (type.includes('marketplace') || type.includes('order') || type.includes('refund') ? '/student-market' : null);
+
+    if (destination) {
+      setSelectedNotification(null);
+      if (type === 'assignment_posted' && payload.assignment_id) {
+        router.push({ pathname: destination, params: { assignmentId: String(payload.assignment_id) } });
+      } else if (type === 'new_message' && payload.sender_id) {
+        const senderName = String(notification.body ?? '').split(':')[0]?.trim() || 'Teacher';
+        router.push({ pathname: destination, params: { contactId: String(payload.sender_id), contactName: senderName } });
+      } else {
+        router.push(destination);
+      }
+      return;
+    }
+
     setSelectedNotification(notification);
-
-    if (notification?.read_at) return;
-
-    const readAt = new Date().toISOString();
-    setNotifications(current => {
-      if (!current?.notifications) return current;
-
-      return {
-        ...current,
-        unread_count: Math.max(0, (current.unread_count ?? 0) - 1),
-        notifications: current.notifications.map(item =>
-          item.id === notification.id ? { ...item, read_at: readAt } : item
-        ),
-      };
-    });
-
-    api.post(`/notifications/${notification.id}/read`).catch(e => {
-      console.log('Mark notification read error:', e.message);
-    });
-  }, []);
+  }, [router]);
 
   const fetchDashboard = useCallback(async () => {
     try {

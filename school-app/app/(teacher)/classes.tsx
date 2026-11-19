@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet,
+  View, Text, ScrollView, StyleSheet, Image,
   ActivityIndicator, TouchableOpacity, RefreshControl,
   Modal,
 } from 'react-native';
@@ -90,7 +90,14 @@ export default function Classes() {
         <Text style={styles.greeting}>{greeting}</Text>
         <View style={styles.headerTitleRow}>
           <Text style={styles.name}>My Classes</Text>
-          <View style={styles.headerIcon}><Ionicons name="leaf" size={24} color="#65BA35" /></View>
+          <View style={styles.headerIcon}>
+            <Image
+              source={require('../../assets/images/schoolbuds-favicon.png')}
+              style={styles.headerLogo}
+              resizeMode="contain"
+              accessibilityLabel="SchoolBuds logo"
+            />
+          </View>
         </View>
         <Text style={styles.role}>Teacher · S.Y. 2025–2026</Text>
       </View>
@@ -315,7 +322,8 @@ const styles = StyleSheet.create({
   greeting:        { color: '#765B61', fontSize: 10, fontWeight: '600' },
   headerTitleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 1 },
   name:            { color: '#2A1B1F', fontSize: 20, fontWeight: '900' },
-  headerIcon:      { width: 36, height: 36, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#8C6570', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  headerIcon:      { width: 42, height: 42, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginLeft: 10, shadowColor: '#8C6570', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  headerLogo:      { width: 30, height: 30 },
   role:            { display: 'none' },
 
   statsRow:        {
