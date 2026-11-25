@@ -21,19 +21,23 @@
                 </div>
 
                 <div class="guest-brand-main">
-                    <span class="guest-logo-mark">
-                        <img src="{{ asset('images/schoolbuds-login-logo.png') }}" alt="" />
-                    </span>
-                    <h1>
-                        SchoolBuds
-                        <svg class="guest-bud-mark" width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
-                            <path d="M16 28V15" fill="none" stroke="#187a45" stroke-linecap="round" stroke-width="2.4" />
-                            <path d="M15.5 19C7.8 18.6 4.7 12.5 6.5 5.2c7.5-.3 12.2 4.2 11.7 10.4" fill="#187a45" />
-                            <path d="M16 15C15.3 7.5 20 3.3 27.5 3c2.2 7.1-1.4 12.5-10.4 14.6" fill="#35a852" />
-                            <path d="M9 8.2c3.8 1.4 5.8 4.3 6.7 8.2M24.4 6.1c-3.3 2-5.6 4.7-7 8.1" fill="none" stroke="#b9e4c0" stroke-linecap="round" stroke-width="1.1" />
-                        </svg>
-                    </h1>
-                    <p class="guest-brand-tagline">All Things School. One Bud Away.</p>
+                    <div class="guest-brand-lockup">
+                        <span class="guest-logo-mark">
+                            <img src="{{ asset('images/schoolbuds-login-logo.png') }}" alt="" />
+                        </span>
+                        <div class="guest-brand-name">
+                            <h1>
+                                SchoolBuds
+                                <svg class="guest-bud-mark" width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
+                                    <path d="M16 28V15" fill="none" stroke="#187a45" stroke-linecap="round" stroke-width="2.4" />
+                                    <path d="M15.5 19C7.8 18.6 4.7 12.5 6.5 5.2c7.5-.3 12.2 4.2 11.7 10.4" fill="#187a45" />
+                                    <path d="M16 15C15.3 7.5 20 3.3 27.5 3c2.2 7.1-1.4 12.5-10.4 14.6" fill="#35a852" />
+                                    <path d="M9 8.2c3.8 1.4 5.8 4.3 6.7 8.2M24.4 6.1c-3.3 2-5.6 4.7-7 8.1" fill="none" stroke="#b9e4c0" stroke-linecap="round" stroke-width="1.1" />
+                                </svg>
+                            </h1>
+                            <p class="guest-brand-tagline">All Things School. One Bud Away.</p>
+                        </div>
+                    </div>
                     <p class="guest-brand-description">Enrollment, grades, attendance and more for students, parents, faculty and staff.</p>
                 </div>
 

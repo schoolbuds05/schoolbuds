@@ -9,7 +9,7 @@ type Requirement = { subject_id: number; meetings: string; minutes: string };
 type Meeting = { day: string; time_start: string; time_end: string; room: string };
 type Preview = { batch_id: string; plan: { sections: { name: string; expected_students: number; assignments: { subject_id: number; subject_code: string; teacher_name: string; meetings: Meeting[] }[] }[] } };
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const INITIAL = { course_id: '', year_level: '1', semester: '1st', school_year: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`, expected_students: '100', max_students: '40', time_start: '08:00', time_end: '17:00', rooms: 'Room 101', max_teacher_minutes: '1080' };
+const INITIAL = { course_id: '', year_level: '1', semester: '1st', school_year: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`, expected_students: '100', max_students: '40', time_start: '08:00', time_end: '17:00', rooms: 'Room 101', max_teacher_hours: '40' };
 
 export default function SectionGeneration({ onSaved }: { onSaved: () => void }) {
   const { theme } = useTheme();
@@ -81,7 +81,7 @@ export default function SectionGeneration({ onSaved }: { onSaved: () => void }) 
           {input('Students per section', form.max_students, value => set('max_students', value), true)}
           {input('Daily start (HH:MM)', form.time_start, value => set('time_start', value))}
           {input('Daily end (HH:MM)', form.time_end, value => set('time_end', value))}
-          {input('Teacher weekly minute limit', form.max_teacher_minutes, value => set('max_teacher_minutes', value), true)}
+          {input('Teacher weekly limit (hours, max 40)', form.max_teacher_hours, value => set('max_teacher_hours', value), true)}
           {input('Available rooms (one per line, suitable capacity)', form.rooms, value => set('rooms', value), false, true)}
           <Text style={{ color: theme.text }}>Available days</Text>
           {DAYS.map(day => button(day, () => setDays(current => current.includes(day) ? current.filter(item => item !== day) : [...current, day]), days.includes(day)))}

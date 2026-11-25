@@ -6,9 +6,9 @@ In the web or mobile **Sections** screen choose **Generate sections, schedules &
 
 1. Select an active course owned by an active course department, year level and semester. Chairs can select only their department's courses.
 2. Enter school year, expected students and capacity per section. The count is `ceil(expected students / capacity)`: 100 students with capacity 40 creates 3 sections, with expected groups of 40, 40 and 20. Capacity remains 40 for each section.
-3. Choose available days, daily start/end, suitable rooms and a teacher weekly minute limit (default 1,080 minutes / 18 hours).
+3. Choose available days, daily start/end, suitable rooms and a teacher weekly teaching limit in hours. The default and maximum are 40 hours per teacher per week. The web and mobile forms convert this value to minutes for scheduling.
 4. Choose matching course subjects and general subjects. Review their weekly meeting counts and minutes per meeting. The editable suggestion is 3 × 60 minutes; lecture/lab units are shown for reference. The application does not infer institutional lab contact-hour rules from credits.
-5. Preview. The system automatically picks current approved teachers and creates meeting times and room allocations. The preview creates no sections, student enrollments or notifications. It expires in 30 minutes.
+5. Preview. The system automatically picks current approved teachers and creates meeting times and room allocations. If the requested batch does not fit, the validation suggests the largest smaller batch it can schedule with the selected settings and the corresponding expected-student count. The preview creates no sections, student enrollments or notifications. It expires in 30 minutes.
 6. Save drafts. Availability and eligibility are checked again. A changed plan requires a fresh preview. Saving all sections, subjects and meetings is transactional; retrying the same confirmation returns the original section IDs.
 7. Review/edit the drafts using existing section controls, submit them, then let the registrar approve them. A course department chair submits the drafts, including drafts created for the department by a registrar or administrator. Drafts are inactive and unavailable for enrollment. Registrar review checks all weekly meetings for teacher, section and room conflicts within the same term, and rechecks teacher eligibility for generated sections.
 
@@ -51,10 +51,12 @@ Preview input:
   "time_start": "08:00",
   "time_end": "17:00",
   "rooms": ["Room 101", "Room 102"],
-  "max_teacher_minutes": 1080,
+  "max_teacher_minutes": 2400,
   "subjects": [{ "subject_id": 1, "meetings": 3, "minutes": 60 }]
 }
 ```
+
+The API accepts the limit as `max_teacher_minutes`; `2400` minutes is 40 hours. The forms display and submit `max_teacher_hours` and the request converts it to minutes.
 
 Expired preview records are retained for audit/history; expiry prevents new saves. Successful records retain the original input, proposal and created section IDs.
 

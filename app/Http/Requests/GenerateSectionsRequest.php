@@ -8,6 +8,14 @@ use Illuminate\Validation\Rule;
 
 class GenerateSectionsRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $hours = $this->input('max_teacher_hours');
+        if ($hours !== null && filter_var($hours, FILTER_VALIDATE_INT) !== false) {
+            $this->merge(['max_teacher_minutes' => (int) $hours * 60]);
+        }
+    }
+
     public function authorize(): bool
     {
         if (! $this->user()) {
@@ -33,7 +41,8 @@ class GenerateSectionsRequest extends FormRequest
             'time_end' => ['required', 'date_format:H:i', 'after:time_start'],
             'room_ids' => ['required', 'array', 'min:1', 'max:50'],
             'room_ids.*' => ['required', 'integer', 'distinct', 'exists:rooms,id'],
-            'max_teacher_minutes' => ['required', 'integer', 'min:15', 'max:3600'],
+            'max_teacher_hours' => ['required_without:max_teacher_minutes', 'integer', 'min:1', 'max:40'],
+            'max_teacher_minutes' => ['required_without:max_teacher_hours', 'integer', 'min:15', 'max:3600'],
             'subjects' => ['required', 'array', 'min:1', 'max:40'],
             'subjects.*.subject_id' => ['required', 'integer', 'distinct', 'exists:subjects,id'],
             'subjects.*.meetings' => ['required', 'integer', 'min:1', 'max:7'],

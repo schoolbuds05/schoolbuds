@@ -81,6 +81,7 @@ class SectionGenerationTest extends TestCase
             foreach ($section['assignments'] as $assignment) {
                 foreach ($assignment['meetings'] as $meeting) {
                     $this->assertFalse($meeting['time_start'] < '13:00' && $meeting['time_end'] > '12:00');
+                    $this->assertSame($roomTypes[$meeting['room']], $meeting['room_type']);
                     $this->assertContains($roomTypes[$meeting['room']], [strtolower($meeting['type']), Room::TYPE_FLEXIBLE]);
                     $subjectRoomsByType[$assignment['subject_id']][$meeting['type']][] = $meeting['room'];
                 }
@@ -360,6 +361,23 @@ class SectionGenerationTest extends TestCase
         $this->post('/department-chair/sections/generate/preview', $this->input)
             ->assertOk()
             ->assertSee('Generation preview')
+            ->assertSee('<details', false)
+            ->assertSee('<summary', false)
+            ->assertDontSee('<details open', false)
+            ->assertSee('schedule-timetable', false)
+            ->assertSee('Lecture room')
+            ->assertSee('background-color: #ed7d31', false)
+            ->assertSee('background-color: hsl(0, 55%, 82%)', false)
+            ->assertSee('background-color: hsl(138, 55%, 82%)', false)
+            ->assertSee('schedule-teacher-name', false)
+            ->assertSee($this->teacher->name)
+            ->assertSee('Monday')
+            ->assertSee('Tuesday')
+            ->assertSee('Wednesday')
+            ->assertSee('Thursday')
+            ->assertSee('Friday')
+            ->assertSee('Saturday')
+            ->assertSee('Lunch Break')
             ->assertSee('Save section drafts')
             ->assertSee('Monday 8:00 AM')
             ->assertSee('Lecture · Monday 8:00 AM')
@@ -368,6 +386,77 @@ class SectionGenerationTest extends TestCase
         $batch = DB::table('section_generation_batches')->first();
         $this->post('/department-chair/sections/generate', ['batch_id' => $batch->id])->assertRedirect('/department-chair/sections')->assertSessionHasNoErrors();
         $this->assertDatabaseCount('sections', 3);
+    }
+
+    public function test_web_generation_accepts_a_teacher_weekly_limit_in_hours(): void
+    {
+        $this->withoutVite()->get('/department-chair/sections/generate?course_id='.$this->course->id)
+            ->assertOk()
+            ->assertSee('Teacher weekly limit (hours)')
+            ->assertSee('name="max_teacher_hours"', false)
+            ->assertSee('value="40"', false);
+
+        $input = $this->input;
+        unset($input['max_teacher_minutes']);
+        $input['expected_students'] = 1;
+        $input['max_teacher_hours'] = 6;
+        $this->post('/department-chair/sections/generate/preview', $input)->assertOk();
+
+        $input['max_teacher_hours'] = 5;
+        $this->post('/department-chair/sections/generate/preview', $input)
+            ->assertRedirect('/department-chair/sections/generate?course_id='.$this->course->id)
+            ->assertSessionHasErrors('schedule');
+    }
+
+    public function test_schedule_error_suggests_a_feasible_section_and_student_count(): void
+    {
+        $input = $this->input;
+        unset($input['max_teacher_minutes']);
+        $input['expected_students'] = 400;
+        $input['max_teacher_hours'] = 40;
+        $input['time_end'] = '21:00';
+
+        $this->get('/department-chair/sections/generate?course_id='.$this->course->id)->assertOk();
+        $response = $this->post('/department-chair/sections/generate/preview', $input);
+        $response->assertRedirect('/department-chair/sections/generate?course_id='.$this->course->id)
+            ->assertSessionHasErrors('schedule');
+
+        $this->get($response->headers->get('Location'))
+            ->assertOk()
+            ->assertSee('6 sections')
+            ->assertSee('240 students');
+    }
+
+    public function test_web_generation_preview_uses_distinct_colors_for_more_than_six_subjects(): void
+    {
+        $subjects = [$this->subject, $this->general];
+        for ($index = 1; $index <= 6; $index++) {
+            $subject = Subject::create([
+                'code' => 'EXTRA'.$index,
+                'name' => 'Extra subject '.$index,
+                'program_type' => 'college',
+                'course' => $this->course->name,
+                'year_level' => '1',
+                'semester' => '1st',
+                'department_id' => $this->course->department_id,
+                'is_active' => true,
+            ]);
+            $this->approve($this->teacher, $subject);
+            $subjects[] = $subject;
+        }
+
+        $input = array_replace($this->input, [
+            'expected_students' => 1,
+            'subjects' => array_map(fn ($subject) => [
+                'subject_id' => $subject->id,
+                'meetings' => 1,
+                'minutes' => 15,
+            ], $subjects),
+        ]);
+        $response = $this->post('/department-chair/sections/generate/preview', $input)->assertOk();
+
+        preg_match_all('/data-subject-color="([^"]+)"/', $response->getContent(), $matches);
+        $this->assertCount(count($subjects), array_unique($matches[1]));
     }
 
     public function test_web_generation_preview_compares_existing_schedules_without_printing_them(): void

@@ -3,9 +3,9 @@
 @php($prefix = request()->routeIs('department-chair.*') ? 'department-chair.sections' : 'registrar.sections')
 <h1 class="text-2xl font-black text-slate-900">Generate sections</h1>
 <p class="mt-2 text-sm text-slate-600">Select a college course and its subjects. Preview sections, weekly schedules and assigned teachers before saving drafts.</p>
-@if($errors->any())
+@if($errors->count() > 1)
     <div role="alert" class="my-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
-        <ul class="list-inside list-disc">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+        <ul class="list-inside list-disc">@foreach($errors->all() as $index => $error)@if($index > 0)<li>{{ $error }}</li>@endif @endforeach</ul>
     </div>
 @endif
 <form method="GET" class="my-5 grid gap-3 rounded-xl bg-white p-5 md:grid-cols-4">
@@ -32,7 +32,10 @@
     <label>Students per section<input type="number" name="max_students" required min="1" max="200" value="{{ old('max_students', 40) }}" class="mt-1 w-full rounded-lg border-slate-300"></label>
     <label>Daily start<input type="time" name="time_start" required value="{{ old('time_start', '08:00') }}" class="mt-1 w-full rounded-lg border-slate-300"></label>
     <label>Daily end<input type="time" name="time_end" required value="{{ old('time_end', '17:00') }}" class="mt-1 w-full rounded-lg border-slate-300"></label>
-    <label>Teacher weekly minute limit<input type="number" name="max_teacher_minutes" required min="15" max="3600" value="{{ old('max_teacher_minutes', 1080) }}" class="mt-1 w-full rounded-lg border-slate-300"></label>
+    <label>Teacher weekly limit (hours)
+        <input type="number" name="max_teacher_hours" required min="1" max="40" step="1" value="{{ old('max_teacher_hours', 40) }}" class="mt-1 w-full rounded-lg border-slate-300">
+        <span class="mt-1 block text-xs text-slate-500">Maximum scheduled teaching load per teacher; capped at 40 hours per week.</span>
+    </label>
     <fieldset class="md:col-span-3"><legend class="font-bold">Available days</legend><div class="mt-2 flex flex-wrap gap-4">@foreach(\App\Services\SectionScheduleService::DAYS as $day)<label><input type="checkbox" name="days[]" value="{{ $day }}" @checked(in_array($day, old('days', ['Monday','Tuesday','Wednesday','Thursday','Friday'])))> {{ $day }}</label>@endforeach</div></fieldset>
     <fieldset class="md:col-span-3 rounded-lg border border-slate-200 p-3">
         <legend class="px-1 font-bold">Available rooms</legend>

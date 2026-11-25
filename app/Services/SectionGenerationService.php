@@ -189,7 +189,7 @@ class SectionGenerationService
                                 }
                                 if (! $conflict) {
                                     $candidateSectionRooms[$roomKey] = $room->id;
-                                    $placements[] = $slot + ['display_room' => $room->name, 'type' => $meetingType];
+                                    $placements[] = $slot + ['display_room' => $room->name, 'room_type' => $room->room_type, 'type' => $meetingType];
                                     break 2;
                                 }
                             }
@@ -222,6 +222,7 @@ class SectionGenerationService
                             'time_start' => sprintf('%02d:%02d', intdiv($placement['start'], 60), $placement['start'] % 60),
                             'time_end' => sprintf('%02d:%02d', intdiv($placement['end'], 60), $placement['end'] % 60),
                             'room' => $placement['display_room'],
+                            'room_type' => $placement['room_type'],
                         ],
                         $placements,
                     ),
@@ -316,11 +317,53 @@ class SectionGenerationService
     public function preview(User $user, array $input): array
     {
         $input['_room_seed'] = bin2hex(random_bytes(16));
-        $plan = $this->plan($user, $input);
+        try {
+            $plan = $this->plan($user, $input);
+        } catch (ValidationException $exception) {
+            $errors = $exception->errors();
+            if (! isset($errors['schedule'])) {
+                throw $exception;
+            }
+
+            $feasibleSections = $this->maximumFeasibleSectionCount($user, $input);
+            if ($feasibleSections === null) {
+                throw $exception;
+            }
+            if ($feasibleSections === 0) {
+                $suggestion = ' No complete section fits the current settings. Reduce students per section or increase teacher hours, eligible teachers, available days, or rooms.';
+            } else {
+                $students = $feasibleSections * $input['max_students'];
+                $suggestion = " The largest complete batch the scheduler found with these settings is {$feasibleSections} sections ({$students} students at {$input['max_students']} per section). Reduce Expected students to {$students} or less, or increase teacher hours, eligible teachers, available days, or rooms.";
+            }
+            $errors['schedule'][0] .= $suggestion;
+
+            throw ValidationException::withMessages($errors);
+        }
         $id = (string) Str::uuid();
         DB::table('section_generation_batches')->insert(['id' => $id, 'created_by' => $user->id, 'input' => json_encode($input), 'plan' => json_encode($plan), 'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now()]);
 
         return ['batch_id' => $id, 'plan' => $plan];
+    }
+
+    private function maximumFeasibleSectionCount(User $user, array $input): ?int
+    {
+        $requestedSections = (int) ceil($input['expected_students'] / $input['max_students']);
+        for ($count = $requestedSections - 1; $count >= 1; $count--) {
+            $candidate = $input;
+            $candidate['expected_students'] = $count * $input['max_students'];
+
+            try {
+                $this->plan($user, $candidate);
+
+                return $count;
+            } catch (ValidationException $exception) {
+                if (! isset($exception->errors()['schedule'])) {
+                    return null;
+                }
+            }
+        }
+
+        return 0;
     }
 
     public function commit(User $user, string $id): array
